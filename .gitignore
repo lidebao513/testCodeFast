@@ -1,0 +1,39 @@
+# ========== 虚拟环境 / 依赖 ==========
+venv/
+.venv/
+env/
+**/venv/
+node_modules/
+
+# ========== Python 缓存 ==========
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# ========== 敏感配置（含明文密码、密钥、token）==========
+.env
+.env.*
+!.env.example
+*.env
+*.pem
+*.key
+
+# ========== 运行时数据（数据库 / 日志 / 报告产物）==========
+*.db
+*.sqlite
+*.sqlite3
+data/logs/
+data/reports/
+logs/
+
+# ========== 第三方仓库：从 codeup 拉取的被测目标，非本项目代码 ==========
+# research-agent 自带 .git，含他人代码与大量明文凭据，不入库
+work/targets/research-agent/
+
+# ========== WorkBuddy 工作区数据（含会话记忆与凭据记录）==========
+.workbuddy/
+
+# ========== 系统文件 ==========
+.DS_Store
+Thumbs.db

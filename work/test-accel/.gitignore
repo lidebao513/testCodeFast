@@ -1,0 +1,24 @@
+# 密钥（含 LLM Key，绝不进 git）
+.env
+
+# 虚拟环境
+venv/
+.venv/
+
+# Python 缓存
+__pycache__/
+*.pyc
+
+# 数据库
+*.db
+*.sqlite
+*.sqlite3
+
+# 运行产物（保留目录结构，忽略内容）
+data/logs/*
+data/screenshots/*
+data/reports/*
+data/skills/*/helpers/__pycache__/
+
+# 克隆的被测目标（只读，按需在本地生成）
+# targets/
