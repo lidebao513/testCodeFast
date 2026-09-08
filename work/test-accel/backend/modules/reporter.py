@@ -81,4 +81,29 @@ th,td{{text-align:left;padding:8px 10px;border-bottom:1px solid #eee;font-size:1
 </body></html>"""
 
 
+    def build_rich(self, pid, context, meta=None):
+        """富版报告：用 test_report.html 模板渲染一份结构化 HTML 报告并落盘。
+
+        context: 模板 {{token}} 占位符覆盖字典（缺省回退到示例数据）。
+        meta: 写入 reports 表的摘要 JSON（可选）。
+        与 build() 并存，不改动既有简版 HTML 生成逻辑。
+        """
+        from backend.modules.html_report import render_report
+        ts = time.strftime("%Y%m%d_%H%M%S")
+        out_dir = settings.REPORTS_DIR
+        out_dir.mkdir(parents=True, exist_ok=True)
+        html_path = out_dir / f"rich_{pid}_{ts}.html"
+        html_path.write_text(render_report(context), encoding="utf-8")
+        conn = get_conn()
+        cur = conn.cursor()
+        cur.execute(
+            """INSERT INTO reports (project_id, batch_id, summary, html_path)
+               VALUES (?,?,?,?)""",
+            (pid, f"rich_{pid}_{ts}", json.dumps(meta or {}, ensure_ascii=False), str(html_path)))
+        rid = cur.lastrowid
+        conn.commit()
+        conn.close()
+        return {"id": rid, "html_path": str(html_path)}
+
+
 reporter = Reporter()

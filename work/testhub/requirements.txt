@@ -1,0 +1,19 @@
+# === testhub 基础栈（合并前已具备，按需对齐版本）===
+Django==4.2.*
+djangorestframework==3.15.*
+django-cors-headers==4.4.*
+channels==4.1.*
+celery==5.4.*
+redis==5.0.*
+mysqlclient==2.2.*
+# 前端依赖见 frontend/package.json（独立 npm 安装）
+
+# === 合并"测试加速平台"复用的依赖（§12.3：无版本冲突）===
+openai==2.14.*          # requirement_analysis.AIModelService 已用
+playwright==1.57.*       # ui_automation.playwright_engine 已用
+requests
+httpx
+python-dotenv
+
+# === 测试加速平台纯逻辑模块平移所需（421 行，零框架依赖）===
+# code_analyzer / smoke / config / llm_client：仅用标准库 + 上述第三方

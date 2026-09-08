@@ -1,0 +1,246 @@
+<!doctype html>
+<!--
+============================================================================
+  test-accel · HTML 测试报告模板（test_report.html）
+  用途：将程序生成的测试/验证文档（JSON / dict / Markdown 摘要）渲染为
+        一份完整、可分享、可打印的 HTML 报告。
+  用法：由 backend/modules/html_report.py 读取本文件，按 [token] 占位符
+        注入数据后写出。未注入时 [token] 原样保留，即“占位内容”。
+
+  ---------------------------------------------------------------------------
+  测试类型与执行时机定义（本模板内置，渲染后作为“报告说明”章节可见）
+  ---------------------------------------------------------------------------
+  1) 版本对比测试（Version Comparison Test）
+     执行时机：多版本差异比对时（如分支 A 与分支 B 的 git diff 之后）。
+     说明：针对 diff 命中的变更点（新增/修改/删除文件、路由、工具、接口）
+           派生测试点，验证变更未引入回归、且变更行为符合预期。
+     典型触发：需要对比两个版本/分支/提交之间的差异并评估影响面时；
+               CI 中的“变更影响面测试”阶段。
+
+  2) 全量测试（Full Regression Test）
+     执行时机：发布前 或 重大变更后。
+     说明：对全量用例做回归执行，确保整体无回归，作为上线门禁（release gate）。
+     典型触发：版本发布评审、大规模重构 / 底层依赖升级、生产环境上线前。
+
+  3) 新增功能覆盖测试（New Feature Coverage Test）
+     执行时机：迭代新增功能时。
+     说明：针对本次增量提交中新增/修改的模块、API、页面、组件做定向覆盖，
+           确保新功能被正确验证、边界与异常被覆盖。
+     典型触发：每个功能分支合入、需求迭代交付、新增路由/工具/接口上线前。
+
+  三者关系：版本对比测试用于“定位影响面”，新增功能覆盖测试用于“验证新东西”，
+            全量测试用于“守住整体”——通常组合使用（先对比定位，再覆盖新增，
+            重大节点再全量回归）。
+============================================================================
+-->
+<html lang="zh-CN" data-page-node-id="QnUA2jouAo5jaP2xmjfi3U">
+<head data-page-node-id="9RYywzCmEtpd4zHk89L7Yc">
+<meta charset="utf-8" data-page-node-id="MlmcVTjDEy7RdtkbqnvDsT">
+<meta name="viewport" content="width=device-width, initial-scale=1" data-page-node-id="fyv7UTYgZXEFWZAIIWAWN1">
+<title>验证报告 · 示例（占位）</title>
+<style>
+  :root{
+    --bg:#f5f7fa; --panel:#ffffff; --ink:#1f2933; --muted:#6b7785;
+    --line:#e3e8ef; --brand:#2563eb; --brand-soft:#eef3ff;
+    --pass:#1D9E75; --fail:#E24B4A; --skip:#BA7517; --warn:#E08A1E;
+    --radius:12px; --shadow:0 1px 3px rgba(16,24,40,.06);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",Roboto,Helvetica,Arial,sans-serif;
+    line-height:1.65;font-size:14px;}
+  .wrap{max-width:980px;margin:0 auto;padding:28px 22px 48px;}
+  header.top{background:linear-gradient(135deg,#2563eb,#1e40af);color:#fff;
+    border-radius:var(--radius);padding:22px 26px;box-shadow:var(--shadow);}
+  header.top h1{margin:0 0 4px;font-size:22px;font-weight:700;letter-spacing:.3px;}
+  header.top .sub{opacity:.9;font-size:13px;}
+  .meta{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px 18px;
+    margin-top:16px;background:rgba(255,255,255,.12);border-radius:10px;padding:12px 16px;}
+  .meta div span{display:block;font-size:11px;opacity:.8;text-transform:uppercase;letter-spacing:.5px;}
+  .meta div b{font-weight:600;font-size:13.5px;}
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:18px 0;}
+  .kpi{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    padding:14px;text-align:center;box-shadow:var(--shadow);}
+  .kpi .n{font-size:28px;font-weight:700;line-height:1.1;}
+  .kpi .l{font-size:12px;color:var(--muted);margin-top:2px;}
+  .kpi.pass .n{color:var(--pass)} .kpi.fail .n{color:var(--fail)}
+  .kpi.rate .n{color:var(--brand)}
+  section.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    padding:18px 20px;margin:16px 0;box-shadow:var(--shadow);}
+  section.card h2{margin:0 0 12px;font-size:16px;display:flex;align-items:center;gap:8px;}
+  section.card h2 .idx{background:var(--brand-soft);color:var(--brand);border-radius:6px;
+    font-size:12px;padding:2px 8px;font-weight:700;}
+  .note{font-size:12px;color:var(--muted);background:var(--brand-soft);
+    border-left:3px solid var(--brand);padding:8px 12px;border-radius:6px;margin:0 0 12px;}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin-top:4px;}
+  th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top;}
+  th{background:#f0f3f8;color:#374151;font-weight:600;font-size:12.5px;}
+  tbody tr:hover{background:#fafbfc;}
+  .badge{display:inline-block;min-width:54px;text-align:center;padding:2px 10px;border-radius:999px;
+    font-size:12px;font-weight:700;color:#fff;}
+  .badge.pass{background:var(--pass)} .badge.fail{background:var(--fail)}
+  .badge.skip{background:var(--skip)} .badge.warn{background:var(--warn)}
+  ul.clean{margin:6px 0;padding-left:20px;} ul.clean li{margin:5px 0;}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+  .ratio-bar{height:14px;border-radius:999px;background:var(--line);overflow:hidden;margin:8px 0 4px;}
+  .ratio-bar i{display:block;height:100%;background:var(--brand);}
+  .ratio-legend{font-size:12px;color:var(--muted);}
+  .tt-spec table th:first-child{width:160px;}
+  footer{margin-top:26px;text-align:center;color:var(--muted);font-size:12px;}
+  @media (max-width:680px){.kpis{grid-template-columns:repeat(2,1fr)}.grid2{grid-template-columns:1fr}}
+  @media print{body{background:#fff}.wrap{max-width:none;padding:0}
+    section.card,header.top,.kpi{box-shadow:none;break-inside:avoid}
+    header.top{background:#1e40af !important;-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+</style>
+</head>
+<body data-page-node-id="Xw3LwROs8VxBbfy4TbO89I">
+<div class="wrap" data-page-node-id="ZXlH921bJ2AAT1dMaGuzW2">
+
+  <!-- ===================== 报告头 ===================== -->
+  <header class="top" data-page-node-id="qVePsXukTH52AeouSn4KCp">
+    <h1 data-page-node-id="yi9PUiwB491BbHDGlujgwC">验证报告 · 示例（占位）</h1>
+    <div class="sub" data-page-node-id="b1wKMhXpajOdVFMno6WCx6">本报告由 test-accel 自动生成 · 以下为占位示例内容</div>
+    <div class="meta" data-page-node-id="ZfKS8N0bkQKR3Eqg916cUF">
+      <div data-page-node-id="Y4ftz86SQ6foJZTV92mzsb"><span data-page-node-id="mvneTD7Ys9PpkWgje3B0Qj">项目</span><b data-page-node-id="ZPNncnIE8NY4iFQWACaBxg">示例项目（请替换为实际项目名）</b></div>
+      <div data-page-node-id="7JRxywHUS5yId8jHqHU2RR"><span data-page-node-id="c9FmrUqKmP7FZrQukGf8dT">对比基准 → 目标</span><b data-page-node-id="zRfP45OhwFwotXvYL1gmPR">test-20260906 → test-20260907</b></div>
+      <div data-page-node-id="sfUdR23Hcm6IqXdq2DjD4x"><span data-page-node-id="FKi6djxHyENgtKnctdRu0m">测试环境</span><b data-page-node-id="ZoQCNFp9olj9EmhCJqVHx3">http://47.97.154.50:8090/chat</b></div>
+      <div data-page-node-id="2SEfzqDYcnA4Pief7TpSCd"><span data-page-node-id="SfcEPV5jIHmoMdFwLypiVA">测试账号</span><b data-page-node-id="gHcB69Ig35FFOpJyTHFYuF">test_ft001@ft.cntaiping.com</b></div>
+      <div data-page-node-id="qyOATdg1BcWqHNSqKWzpRI"><span data-page-node-id="Xl7A2RfCDDFCo2dUL2gv5S">生成时间</span><b data-page-node-id="S1GKuuIPPe4aeMBvZoqaQU">2026-09-07 18:00:00</b></div>
+      <div data-page-node-id="RwfvIQ8sZaxOH8RIRRXEw7"><span data-page-node-id="BB9llOcTPFWFSMXVnHo5cF">生成人 / 工具</span><b data-page-node-id="1FEYgMwjQqi1GOTJRJJWGa">test-accel / WorkBuddy</b></div>
+    </div>
+  </header>
+
+  <!-- ===================== KPI ===================== -->
+  <div class="kpis" data-page-node-id="6isCqABWzzt559dvcpwudC">
+    <div class="kpi" data-page-node-id="3kQSCzLslWp8OeQxxqJyFV"><div class="n" data-page-node-id="MmK5g2Iu1YH3lGje0td3kf">6</div><div class="l" data-page-node-id="AtusENQa0o1uGZuBLE2He4">总用例</div></div>
+    <div class="kpi pass" data-page-node-id="mWhhMQ0pe1LNI3etRSuqqe"><div class="n" data-page-node-id="zauqSCfO5yGJ8140wRQ7TJ">5</div><div class="l" data-page-node-id="ON2sexAqv1OYbuAF7NSghL">通过</div></div>
+    <div class="kpi fail" data-page-node-id="3uakDzZvvjzWU2RoNr9e9e"><div class="n" data-page-node-id="hwPufn6F9uq4Uu9wECNGFI">1</div><div class="l" data-page-node-id="ZGsUaxmrhdMBXlFvYgZ3DL">失败</div></div>
+    <div class="kpi rate" data-page-node-id="YZVH5WbZACCiOVfrJfUB3u"><div class="n" data-page-node-id="8Pdo7GMF28EQhh4yK4VAAa">83.3%</div><div class="l" data-page-node-id="tbnarFkwkJufVqwnk0S4NV">通过率</div></div>
+  </div>
+
+  <!-- ===================== 报告说明：测试类型与执行时机 ===================== -->
+  <section class="card" data-page-node-id="CXXqcMPM6AYFTkDH7Y7fbF">
+    <h2 data-page-node-id="TrGrpEsne60LNP8HCMAbzS"><span class="idx" data-page-node-id="R9YpAHP8vjAyLyCX31nAiL">说明</span>测试类型与执行时机</h2>
+    <div class="note" data-page-node-id="5o6kXpAIYAQ9pDEYc4Xoku">本章节为报告内置定义，说明本报告覆盖的测试类型及其执行时机；可随报告一起交付，也可在定稿时删除。</div>
+    <div class="tt-spec" data-page-node-id="rkQHmntO2v6VEOCZ0GvPVE">
+      <table data-page-node-id="lSDS31zVsvN6MX16iANNdF">
+        <thead data-page-node-id="OMtGGZcUk6ScSnTPflaEht"><tr data-page-node-id="dEhYCqVLqolehZzFioE1iV"><th data-page-node-id="iqeGdIwhR3Qx6hIsDJnTiT">测试类型</th><th data-page-node-id="08jjaZ39VmsQD9B8DSkXgs">执行时机</th><th data-page-node-id="Z13cTFD3nIljkUmcbN0vbE">触发条件 / 说明</th></tr></thead>
+        <tbody data-page-node-id="ltRPF2LpNfBZQIjNobAf2H">
+          <tr data-page-node-id="4PVQtPdPb6Ic94Cemn9dFA">
+            <td data-page-node-id="0ImFiAEDsTiXZTCCMRno39"><b data-page-node-id="gfAosVbtpzLhYlh1NmeuGk">版本对比测试</b><br data-page-node-id="aDlSoME2JcVofQUVwcDpDj"><span style="color:var(--muted);font-size:12px" data-page-node-id="7HyprpGO1YIMBlaUaY8OP4">Version Comparison</span></td>
+            <td data-page-node-id="yiHNuj9EgOg32vLSMgmtAY">多版本差异比对时</td>
+            <td data-page-node-id="QYxD8AjuUCM77mHRbDmJdF">针对 git diff 命中的变更点（新增/修改/删除文件、路由、工具、接口）派生测试点，验证变更未引入回归、行为符合预期。典型触发：对比两个版本/分支/提交差异并评估影响面；CI“变更影响面测试”阶段。</td>
+          </tr>
+          <tr data-page-node-id="KKYv8yFfsMEm25U9EFtlRT">
+            <td data-page-node-id="j7XSEEdGvR6BLyQR5PQOmo"><b data-page-node-id="B0BbfhDHXz53tNdzBxEO1a">全量测试</b><br data-page-node-id="Pe3N7yPT1Lu2S33tljBAFV"><span style="color:var(--muted);font-size:12px" data-page-node-id="WeIOo0F2Ltt8a1jMxtdUwN">Full Regression</span></td>
+            <td data-page-node-id="231HEBQGFyXtMuwO30oCfD">发布前 / 重大变更后</td>
+            <td data-page-node-id="gWdxxI9ad3uMFF02YgdzHU">对全量用例做回归执行，确保整体无回归，作为上线门禁（release gate）。典型触发：版本发布评审、大规模重构 / 底层依赖升级、生产环境上线前。</td>
+          </tr>
+          <tr data-page-node-id="csaRnUE35LofUu0HRbMqf0">
+            <td data-page-node-id="tV2lzVK0T6GzRfWGrePyz7"><b data-page-node-id="oJEAIHWVhEdDTengTWZfNI">新增功能覆盖测试</b><br data-page-node-id="SpPJ24Yj0le63yK3EJ4q22"><span style="color:var(--muted);font-size:12px" data-page-node-id="Nv70kXMJf2GCWjaAuhaDiG">New Feature Coverage</span></td>
+            <td data-page-node-id="pKnfpjMBZ5YjCUF2fsgIIf">迭代新增功能时</td>
+            <td data-page-node-id="uXQuzHkvGnOLzwDFCQdZVs">针对本次增量提交中新增/修改的模块、API、页面、组件做定向覆盖，确保新功能被验证、边界与异常被覆盖。典型触发：功能分支合入、需求迭代交付、新增路由/工具/接口上线前。</td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="ratio-legend" data-page-node-id="dsSYzOu2ot05GEdgDTuAdZ">三者关系：版本对比测试“定位影响面” → 新增功能覆盖测试“验证新东西” → 全量测试“守住整体”；通常组合使用。</p>
+    </div>
+  </section>
+
+  <!-- ===================== 一、变更摘要 ===================== -->
+  <section class="card" data-page-node-id="FNgIDixu45EvDkufocKJs9">
+    <h2 data-page-node-id="18JTi8qButQjV8hCsCwT4e"><span class="idx" data-page-node-id="O8Bs5FvWzp5Nm6ZerduE41">一</span>变更摘要（代码扫描结果）</h2>
+    <div class="note" data-page-node-id="kmi0AlAE5jaFnSlu9dtdHG">占位内容：由版本对比测试（diff）产出。替换 对比基准 → 目标：64 个文件变更 / 54 提交 / +2896 -723（占位示例）。 与下表行。</div>
+    <p data-page-node-id="FydEbK8j3Pxjctk3sl1m6C">对比基准 → 目标：64 个文件变更 / 54 提交 / +2896 -723（占位示例）。</p>
+    <table data-page-node-id="hG4cDHFTIz4Yx7Iu8OYmX9">
+      <thead data-page-node-id="B0tbdKKpaOU772P6Mme73I"><tr data-page-node-id="hulMV1x4uXccANrnrrpJBX"><th data-page-node-id="KQeq6XyA9E2A2jYaCobBWG">文件 / 模块</th><th data-page-node-id="5SrrUfhgImXDsUKTQTt4YK">变更性质</th><th data-page-node-id="AqGjH8X7c4q4WMgSiHCy5M">增 / 删</th><th data-page-node-id="3sHzHK3nYAcSzJKUp214Gh">风险关注</th></tr></thead>
+      <tbody data-page-node-id="8o1JOgnWM29MmBqSlMjNeQ">
+        
+      <tr data-page-node-id="CSTwY6gSF7Ga4OyBYV12JY"><td data-page-node-id="Al8ALcIkHuqw0PfCuosFQJ">backend/.../tools/router.py</td><td data-page-node-id="iGGl1pQT95SbB303tpnnFy">新增 195 行</td><td data-page-node-id="sz38pMgK8qZrhM5Eu4snNk">+195 / -0</td><td data-page-node-id="dnyN69OVjCP2iFK8ZBCvj9">@mention 路由、未知体熔断</td></tr>
+      <tr data-page-node-id="NErE3r8EflFVFmZcrKsA99"><td data-page-node-id="SmLUIR0i6uUo0b1uVV96j3">backend/.../tools/toolcall_sanitize.py</td><td data-page-node-id="lcbKz6OAAVbSkC1HLvLeIh">增强 +228 行</td><td data-page-node-id="CBxlePbMRCeaJcQ4qKsB3j">+228 / -12</td><td data-page-node-id="lzPlsevqzTjrLdbEuBt5Ew">参数清洗、超长/特殊字符边界</td></tr>
+      <tr data-page-node-id="EEt7tkMJ6Cy1diInOg7Xgj"><td data-page-node-id="WF5Qsnh8conZ7BesvEWEhe">backend/.../tests/test_fm007.py</td><td data-page-node-id="gjbGzkmTP2FmAJ86t12J0c">新增 157 行</td><td data-page-node-id="MrLhFCSjyzE7yZ48dumewH">+157 / -0</td><td data-page-node-id="TJrNZDuuwsjnL3Ym0azotP">FM-007 历史消息重建</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ===================== 二、测试点设计 ===================== -->
+  <section class="card" data-page-node-id="k5fvrqH4hHqet0To3DNZWz">
+    <h2 data-page-node-id="t3O2Z8GjWLPpVc7Po0UIXp"><span class="idx" data-page-node-id="qBqRJRKrptOVI6VxfyDfDO">二</span>测试点设计（由变更点派生）</h2>
+    <div class="note" data-page-node-id="Svqvp91o4PrHAhrLKyj3cn">占位内容：正常 / 边界 / 异常测试点。替换下表行。</div>
+    <table data-page-node-id="7Uar2E3RrBeKEIwdOyGhBe">
+      <thead data-page-node-id="5Dtolill4nii0dEGQ81833"><tr data-page-node-id="rMT9zKch0SceSiFVRprF5N"><th data-page-node-id="u6FkJFWIDQQPlMhZKS2euk">编号</th><th data-page-node-id="Yc5MClDTwys0ac7mIPyMOE">测试点</th><th data-page-node-id="SQvv8HdoEAnSQH4HiCV2dp">类型</th><th data-page-node-id="hpKG5IP7gqJUILkIvbCW1w">来源变更</th><th data-page-node-id="Ay6XxNBXt5Uwvx8f5UOmgM">验证方式</th></tr></thead>
+      <tbody data-page-node-id="TJPHxQQNWnkSFh0AkWdf73">
+        
+      <tr data-page-node-id="GH6EIWxHp5S6EUysUM3hPP"><td data-page-node-id="563TltseK7KUktHU5zktPZ">TP-1</td><td data-page-node-id="vXCLXFBsbeU4KrxqVoPiG4">引用不存在的智能体 → 优雅熔断，不挂起</td><td data-page-node-id="na6GbZL0BIvE1ZbmryQ31r">异常/熔断</td><td data-page-node-id="Fyq7oSqlB2RH8ZNtG1C8Jo">router.py</td><td data-page-node-id="tPXlFpBGfgoC4TzYtawUb7">线上 T-B</td></tr>
+      <tr data-page-node-id="qu4MLZlt28MuAoeW5TQo1n"><td data-page-node-id="cwnUngjFZY7eQ0wKc9IDYh">TP-2</td><td data-page-node-id="uxPlMJlfxO1ZjsYYQBt8aH">高频重复工具调用 → 正常终止，不挂起</td><td data-page-node-id="RXHODQraFAg6c5lMiaVGc8">正常/长任务</td><td data-page-node-id="Bf3ORVyirZeXsCLyOh0fHa">toolcall_sanitize.py</td><td data-page-node-id="rjMam3TVeLXldU8As7HMqC">线上 T-C</td></tr>
+      <tr data-page-node-id="p2fxO7i2wBYHuBpxxtWOAe"><td data-page-node-id="gXaU47pj6JG32BM9oRwlyg">TP-3</td><td data-page-node-id="nfquWA7NoU5s4eCrK6u2Vn">超长文报告 → 不被截断、完整产出</td><td data-page-node-id="9QiqMLT1zmPiuwsVhzprWj">边界/输出质量</td><td data-page-node-id="Y6w3YrYm9BlvVgtByV9IEG">toolcall_sanitize.py</td><td data-page-node-id="u2ZOVcA1oGfJKbsSaWIaFM">线上 T-D</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ===================== 三、用例明细与执行结果 ===================== -->
+  <section class="card" data-page-node-id="mgiN7XDAxfCGKQktMGLqsH">
+    <h2 data-page-node-id="dydTqxPjtIDvB7l431tWcO"><span class="idx" data-page-node-id="YVr1H8WmV7u3rCtFuEfzAx">三</span>用例明细与执行结果</h2>
+    <div class="note" data-page-node-id="rbwgC22OtDAqDq5UxErSqY">占位内容：来自新增功能覆盖测试 / 版本对比测试的执行明细。替换下表行。</div>
+    <table data-page-node-id="raFJCXxVUoAnybCP9vW4ie">
+      <thead data-page-node-id="tAL94GBO7wGpRKd69HdqLD"><tr data-page-node-id="ryFhb8G9Oatf7VAiX3Spoi"><th data-page-node-id="BavaTzxvrKZGcRXfLpKnxf">用例</th><th data-page-node-id="N2YjqgjZ95U9k7vf1C2e0S">测试点</th><th data-page-node-id="tLMo9x1ibhs4a8bYnUYqXH">耗时</th><th data-page-node-id="8wMqizPdGk7cDdCGcNPstm">长度</th><th data-page-node-id="1Dm0ItE07YnWVWL3UIauRb">状态</th><th data-page-node-id="3j0kYyh0ZxKAmFkJ0GtVrg">关键证据</th></tr></thead>
+      <tbody data-page-node-id="6HOVGoQ1HzLEtSmMBVPE6B">
+        
+      <tr data-page-node-id="vBxBNAPEIF34CLwHZLePC8"><td data-page-node-id="NdHPftikzI3A6eRBa7169H">T-B</td><td data-page-node-id="F7T7fbsFsjHlLCuqp5MXP1">@mention 熔断</td><td data-page-node-id="wXPkmGhH6vmtO4zTtiLIpQ">90.2s</td><td data-page-node-id="VGCwHqP6R3QMWHI1KcED9s">599</td><td data-page-node-id="JN7UVfQEBlyr5aPwoxqMti"><span class="badge pass" data-page-node-id="U2dnxO7jY65y4WQz4BAp2B">PASS</span></td><td data-page-node-id="kFFxKzptCPm73553o0CgNw">优雅熔断“不存在该智能体”</td></tr>
+      <tr data-page-node-id="QtliGl4MK9O5PDsq2xZ2Fd"><td data-page-node-id="UjH3ZvYJVhYlPr2T33nTGy">T-C</td><td data-page-node-id="YoAWdmHgwPU27z3u9oWUyX">工具调用终止</td><td data-page-node-id="2jhPFX0q7bhXZUhxB8QbWS">90.2s</td><td data-page-node-id="Nu5fIfJVesWLsjjid1MV3C">309</td><td data-page-node-id="actlZC7yME6ShBXL1GtIuN"><span class="badge pass" data-page-node-id="8GQ2CHtHoM5VRpiSWwjX6B">PASS</span></td><td data-page-node-id="FwLwum4fNEhEfIDWwA1nob">5 次抽样完成并收尾</td></tr>
+      <tr data-page-node-id="S0VQCX4y7jDHngNU6DZHdd"><td data-page-node-id="mTSBv7DjioRVyqemQtGDWe">T-D</td><td data-page-node-id="cBmbqT9HJQdplpcwXedYAB">长文报告不截断</td><td data-page-node-id="Gbv9rdeGgl2cNEx7xCrue6">280.6s</td><td data-page-node-id="VU4QtBNaoHJCWGYPk1BC3G">683</td><td data-page-node-id="ixoKzhqFWbkEKB6ATlwdiD"><span class="badge fail" data-page-node-id="56wGbaDSdHYKB1uVVnC1Fy">FAIL</span></td><td data-page-node-id="Quqhs2U1PpwdYgAHyfpjFV">超 280s 仍在流式生成</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ===================== 四、通过 / 失败统计 ===================== -->
+  <section class="card" data-page-node-id="RJKBxmOC70BUMDARSqK4Hv">
+    <h2 data-page-node-id="dDxohCAV7xZe8zGOGYsB5Z"><span class="idx" data-page-node-id="HaHsKDeug7XQrMHsqnNeJ6">四</span>通过 / 失败统计</h2>
+    <div class="note" data-page-node-id="UR1OA1SS8Lq22DbRgBoam0">占位内容：按测试类型聚合。替换下表行。</div>
+    <table data-page-node-id="EoBKWOf8pn0LLfwh4u2fZJ">
+      <thead data-page-node-id="gfBaAbUSmnDzrAF9BCfvLH"><tr data-page-node-id="A9QAJ6doP5y2S1SsNIlQvj"><th data-page-node-id="FoeqL7YVI01FiqpHuILAZ8">维度</th><th data-page-node-id="9uVTmMrXFKHCvR9w7Idviv">通过</th><th data-page-node-id="ePA1rt1z3WEGlCYJpflUff">失败</th><th data-page-node-id="yoXHqmlPMMBMCrZZd0zha8">通过率</th><th data-page-node-id="y8wSXDzT0rmCdmz5JgP5Cf">备注</th></tr></thead>
+      <tbody data-page-node-id="fRZREBJ35BTyiuudbwkVoM">
+        
+      <tr data-page-node-id="Qu9B8MsyDYQQ27iLEENjV4"><td data-page-node-id="2pAUBm7uvvua3BLt3SxB1h">后端单元测试</td><td data-page-node-id="8trGtiZmIamL7idE3QP2YO">84</td><td data-page-node-id="IFbvBjAAU5c8TEF5nukRNn">6</td><td data-page-node-id="OMsoBu0D1HCAHlI6RBjkWj">93.3%</td><td data-page-node-id="wkdd7KEtapvsrZfcp6ePjo">6 项缺运行时数据</td></tr>
+      <tr data-page-node-id="d37Yh40DKTHozWDMHFRICw"><td data-page-node-id="6DSCaQTDDHQcJH7PYjR9KW">线上场景验证</td><td data-page-node-id="Au0TWXO6QlqpECWEaDa3T7">5</td><td data-page-node-id="WS8hHJaKOlDM2d4eZiTscc">1</td><td data-page-node-id="80G1wWxYtPQ6ho4Db9teAz">83.3%</td><td data-page-node-id="1llsokhDvgb67JRPXR9m66">T-D 未通过</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ===================== 五、结论与风险 ===================== -->
+  <section class="card" data-page-node-id="77X0qkSlBM6MNupSqY5agS">
+    <h2 data-page-node-id="3kE1qKy6dH0FDIsvGXaCJE"><span class="idx" data-page-node-id="UOVu2bZSXhqtge4483ZOVc">五</span>结论与风险</h2>
+    <div class="grid2" data-page-node-id="2XcygFEh1YNjNIeKNALfKj">
+      <div data-page-node-id="UOjsSd6FYAB3OujdhWgbcm">
+        <h3 style="font-size:14px;margin:4px 0 6px;color:var(--pass)" data-page-node-id="Y6FOw6QZcn1TpZvyO6EuxI">结论</h3>
+        <ul class="clean" data-page-node-id="AgED6y7hu25qRxq1OKUNTR">
+      <li data-page-node-id="wSXMbGjk0mqfScpgcSYxd5">代码变更未引入回归，后端断言级用例全通过。</li>
+      <li data-page-node-id="8ZEsddpXQmuC3sxMmMe9Xt">熔断 / 护栏 / 历史重建 / 长输入健壮性均符合预期。</li>
+      <li data-page-node-id="zbTxFyZVre6pm28mwPaTdg">唯一未通过项缺乏“产品缺陷”证据，判定为测试观测超时。</li></ul>
+      </div>
+      <div data-page-node-id="d7ocRJZlEVsMvxijyGxA1C">
+        <h3 style="font-size:14px;margin:4px 0 6px;color:var(--warn)" data-page-node-id="ctM3GBRRWemik6LfGsvfQx">风险与待办</h3>
+        <ul class="clean" data-page-node-id="GhD4xJqKsNHMF76BayulLP">
+      <li data-page-node-id="s83JQv2C0ltEjsXcgepyKO">T-D 超长报告未被完整验证（中）。</li>
+      <li data-page-node-id="6aCouIDfygLJKJSA9CRCTU">6 项单测因缺运行时数据失败（低，CI 注入数据后可转绿）。</li>
+      <li data-page-node-id="WrC3MoADsb0fpD6HZlsDTC">移动端大改未覆盖（中，建议补 UI 回归）。</li></ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== 六、复用 vs 新建 占比 ===================== -->
+  <section class="card" data-page-node-id="wd6QdYWAunDiljPh5EAhxA">
+    <h2 data-page-node-id="b8gD4xKUPGdQYZp6aNHxa6"><span class="idx" data-page-node-id="a3GwBGQND30Is4tR1wilDo">六</span>复用 vs 新建 占比</h2>
+    <div class="note" data-page-node-id="qwHyV3Iuj14amAA20MUfIr">占位内容：验证类任务用于量化“复用既有能力 vs 新建/修正”的投入。可删除（非验证任务不需要）。</div>
+    <p data-page-node-id="OAHBeFfYMgFDutmq60wcDx">本次验证中，复用既有能力约占 <b data-page-node-id="SoTzkRxOrDsoR6XRq0fJAx">82%</b>，新建 / 修正约占 <b data-page-node-id="Cv239H7mw0BweEkxRd6v1Y">18%</b>。</p>
+    <div class="ratio-bar" data-page-node-id="lez7jlJWi7HCDehapWXzdD"><i style="width:82%" data-page-node-id="bSZdkKC5yMLGXGJKlT7sTs"></i></div>
+    <p class="ratio-legend" data-page-node-id="G8N8b3PeKwXPC1oCo5QDuH">按生效代码量估算：复用约 80–85%，新建/修正约 15–20%（4 处 harness 修正 + 1 诊断脚本，无重写）。</p>
+  </section>
+
+  <footer data-page-node-id="Pdo2wJFATKagNBuKGFJl1K">
+    由 test-accel 报告功能生成 · 模板 test_report.html · 2026-09-07 18:00:00
+  </footer>
+
+</div>
+</body>
+</html>

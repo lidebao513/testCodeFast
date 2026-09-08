@@ -36,6 +36,48 @@ class CaseGenerator:
         conn.close()
         return count
 
+    def generate_for_fp_ids(self, pid: int, fp_ids) -> dict:
+        """只为指定功能点生成用例（增量追加）。
+
+        与 generate_for_project 的区别：不 DELETE 既有用例，只补新增的。
+        幂等：已存在同 (project_id, fp_id, title) 的用例直接复用，不重复插入。
+        返回 {"created": 新建数量, "reused": 复用数量, "case_ids": [全部关联用例 id]}
+        """
+        conn = get_conn()
+        cur = conn.cursor()
+        created, reused, case_ids = 0, 0, []
+        for fid in fp_ids:
+            cur.execute("SELECT * FROM functional_points WHERE id=? AND project_id=?",
+                        (fid, pid))
+            row = cur.fetchone()
+            if not row:
+                continue
+            fp = dict(row)
+            case = self._build(fp)
+            cur.execute(
+                "SELECT id FROM cases WHERE project_id=? AND fp_id=? AND title=?",
+                (pid, fid, case["title"]))
+            exist = cur.fetchone()
+            if exist:
+                reused += 1
+                case_ids.append(exist["id"])
+                continue
+            cur.execute(
+                """INSERT INTO cases
+                   (project_id, fp_id, title, steps, ctype, review_status, status)
+                   VALUES (?,?,?,?,?,?,?)""",
+                (pid, fid, case["title"],
+                 json.dumps(case["steps"], ensure_ascii=False),
+                 case["ctype"],
+                 "approved" if not settings.REVIEW_GATE else "pending",
+                 "generated"),
+            )
+            created += 1
+            case_ids.append(cur.lastrowid)
+        conn.commit()
+        conn.close()
+        return {"created": created, "reused": reused, "case_ids": case_ids}
+
     def _build(self, fp):
         ftype = fp["ftype"]
         name = fp["name"]

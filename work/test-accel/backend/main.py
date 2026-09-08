@@ -16,6 +16,7 @@ from backend.db import init_db, get_conn
 from backend.modules.project_manager import pm
 from backend.modules.code_analyzer import code_analyzer
 from backend.modules.case_generator import case_generator
+from backend.modules.diff_analyzer import diff_analyzer
 from backend.modules.executor import executor
 from backend.modules.reporter import reporter
 from backend.modules import smoke as smoke_module
@@ -121,6 +122,101 @@ def analyze(pid: int):
         "by_type": summary,
         "sample": fps[:20],
     }
+
+
+@app.post("/api/projects/{pid}/diff_analyze")
+def diff_analyze(pid: int, base: str = "master", head: str = "HEAD",
+                 gen_cases: bool = True, include_files: bool = False,
+                 sample: int = 50):
+    """增量对比：对比 base..head 两个 ref，产出功能点差异（new/updated/removed），
+    只针对 new + updated 生成用例（removed 的不生成，应废弃），结果写入 change_log。
+
+    - base / head：分支名、tag 或 commit sha，例：base=master head=test-20260906
+    - gen_cases：是否为新增/变更功能点生成用例
+    - include_files：是否在返回中带上变更文件明细
+    """
+    proj = pm.get(pid)
+    if not proj:
+        return {"ok": False, "error": "project not found"}
+    local_path = proj.get("local_path")
+    if not local_path:
+        return {"ok": False, "error": "project has no local_path"}
+
+    res = diff_analyzer.analyze_diff(local_path, base, head,
+                                     project_type=proj.get("type", "pc"),
+                                     include_files=include_files)
+    if not res.get("ok"):
+        return res
+
+    conn = get_conn()
+    cur = conn.cursor()
+    new_ids, upd_ids = [], []
+    # 新增/变更的功能点落库（已存在则复用，保证幂等）
+    for tag, fps in (("new", res["new_fps"]), ("updated", res["updated_fps"])):
+        for fp in fps:
+            cur.execute(
+                """SELECT id FROM functional_points
+                   WHERE project_id=? AND file_path=? AND name=? AND ftype=?""",
+                (pid, fp["file_path"], fp["name"], fp["ftype"]))
+            row = cur.fetchone()
+            if row:
+                fid = row["id"]
+            else:
+                cur.execute(
+                    """INSERT INTO functional_points
+                       (project_id, commit_ref, file_path, name, description, ftype, review_status)
+                       VALUES (?,?,?,?,?,?,?)""",
+                    (pid, res["head_commit"], fp["file_path"], fp["name"],
+                     fp["description"], fp["ftype"],
+                     "approved" if not settings.REVIEW_GATE else "pending"))
+                fid = cur.lastrowid
+            (new_ids if tag == "new" else upd_ids).append(fid)
+
+    cases_info = {"created": 0, "reused": 0, "case_ids": []}
+    if gen_cases and (new_ids or upd_ids):
+        cases_info = case_generator.generate_for_fp_ids(pid, new_ids + upd_ids)
+
+    # 落 change_log（该表建表时就已预留，此前从未被写入）
+    removed_keys = [f"{fp['ftype']}|{fp['file_path']}|{fp['name']}"
+                    for fp in res["removed_fps"]]
+    cur.execute(
+        """INSERT INTO change_log
+           (project_id, commit_from, commit_to, new_fp_ids, updated_fp_ids, removed_fp_ids)
+           VALUES (?,?,?,?,?,?)""",
+        (pid, res["base_commit"], res["head_commit"],
+         json.dumps(new_ids), json.dumps(upd_ids), json.dumps(removed_keys)))
+    change_log_id = cur.lastrowid
+    conn.commit()
+    conn.close()
+
+    return {
+        "ok": True,
+        "project": proj["name"],
+        "base": res["base"],
+        "head": res["head"],
+        "base_commit": res["base_commit"],
+        "head_commit": res["head_commit"],
+        "changed_files": res["changed_files"],
+        "fp_diff": res["fp_diff"],
+        "new_fps": res["new_fps"][:sample],
+        "updated_fps": res["updated_fps"][:sample],
+        "removed_fps": res["removed_fps"][:sample],
+        "cases": cases_info,
+        "change_log_id": change_log_id,
+        "stats": res["stats"],
+        "changed_file_list": res.get("changed_file_list"),
+    }
+
+
+@app.get("/api/projects/{pid}/change_logs")
+def change_logs(pid: int):
+    """查看该项目的历次增量对比记录。"""
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM change_log WHERE project_id=? ORDER BY id DESC", (pid,))
+    rows = cur.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
 
 
 @app.get("/api/projects/{pid}/functional_points")
