@@ -92,7 +92,9 @@ def _scan(root):
         name, desc = _parse_frontmatter(skill)
         contents = sorted(
             f for f in os.listdir(full)
-            if f != "SKILL.md" and not f.startswith(".")
+            if f != "SKILL.md"
+            and not f.startswith(".")
+            and f != "__pycache__"  # 运行时缓存，非技能内容
         )
         out.append((name or d, d, full, desc, contents))
     return out
