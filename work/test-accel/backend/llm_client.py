@@ -1,7 +1,9 @@
 """统一 LLM 客户端：默认 Qwen（读 .env），预留 DeepSeek。
 功能点提取以读代码结构(AST)为主；本客户端仅用于可选的 LLM 增强（可在 .env 关闭 LLM_ENHANCE）。
 """
+
 from openai import OpenAI
+
 from backend.config import settings
 
 

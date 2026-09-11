@@ -1,0 +1,89 @@
+<!doctype html><html lang="zh-CN" data-page-node-id="Dq3Nezx3pCvd7bFqdwxTJB"><head data-page-node-id="ZMosZekYzOsSyukqKrOJWf"><meta charset="utf-8" data-page-node-id="9aYghCTmfACreAu9yvwNLv">
+<meta name="viewport" content="width=device-width,initial-scale=1" data-page-node-id="9b1BDS9saHEA2QgG3bsVww">
+<title>结构化测试用例 · 接口范围专项验证报告</title><style>
+:root{--bg:#0f1115;--card:#1a1e26;--ink:#e6e8ee;--sub:#9aa3b2;--line:#2a2f3a;
+--accent:#4f9dff;--ok:#39b54a;--warn:#f0a020;--bad:#e5484d}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.7 -apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+.wrap{max-width:1080px;margin:0 auto;padding:28px 22px 80px}
+h1{font-size:25px;margin:0 0 6px}
+h2{font-size:19px;margin:32px 0 12px;border-left:4px solid var(--accent);padding-left:10px}
+h3{font-size:15px;margin:18px 0 8px;color:var(--accent)}
+.meta{color:var(--sub);font-size:13px;margin-bottom:18px}
+.cards{display:flex;gap:12px;flex-wrap:wrap;margin:14px 0 6px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 16px;min-width:120px}
+.card b{font-size:22px;display:block;color:var(--accent)}
+.card span{color:var(--sub);font-size:12px}
+table{border-collapse:collapse;width:100%;margin:12px 0 8px;font-size:13.5px}
+th,td{border:1px solid var(--line);padding:8px 10px;vertical-align:top;text-align:left}
+th{background:#20262f;color:var(--sub);position:sticky;top:0}
+tr:nth-child(even){background:#161a21}
+code{background:#0c0e12;padding:1px 6px;border-radius:5px;color:#8fd0ff;font-size:12.5px}
+.pill{display:inline-block;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:700}
+.p-pass{background:rgba(57,181,74,.15);color:var(--ok);border:1px solid rgba(57,181,74,.5)}
+.p-fail{background:rgba(229,72,77,.15);color:var(--bad);border:1px solid rgba(229,72,77,.5)}
+.p-info{background:rgba(79,157,255,.15);color:var(--accent);border:1px solid rgba(79,157,255,.5)}
+.tip{background:#13202b;border:1px solid #1d3a4a;color:#bfe3f2;padding:10px 14px;border-radius:8px;font-size:13px;margin:10px 0}
+.note{color:var(--sub);font-size:12.5px}
+.ok-badge{display:inline-block;padding:4px 14px;border-radius:8px;font-weight:700;font-size:15px}
+.ok-y{background:rgba(57,181,74,.18);color:var(--ok);border:1px solid rgba(57,181,74,.5)}
+.ok-n{background:rgba(229,72,77,.18);color:var(--bad);border:1px solid rgba(229,72,77,.5)}
+</style></head>
+<body data-page-node-id="NAh2q3GwV1aYtWGspQb1lk"><div class="wrap" data-page-node-id="xAEsZ90VA0Y7D5FoqtGEJu">
+<h1 data-page-node-id="8BEZSmttla6pvVNzvDd5cT">【结构化测试用例】功能 · 接口范围专项验证报告</h1>
+<div class="meta" data-page-node-id="TYAJpUncHkDaJ4LtSDT9vk">生成时间：2026-09-10T17:31:49 ｜ 目标仓库：research-agent ｜ 范围：接口（来源筛选）全流程 ｜ <span class="ok-badge ok-y" data-page-node-id="JrjBoNNnbr8gN7lJl3tedB">接口范围验证通过 ✅</span></div>
+
+<h2 data-page-node-id="VrhVmKvEVkM83NK5PlOdmx">1. 接口范围机制说明</h2>
+<div class="tip" data-page-node-id="9a8nW5mhY2nHdjlLvbasci"><b data-page-node-id="uhR6RiNtJWtMSAQ8w08nB0">"接口"是"来源筛选器"，不是新增一类重复测试点。</b>它按来源种类（kind）筛选出<strong data-page-node-id="RuujlYKQkBzHqblTLaVzUV">已有的「接口 / HTTP 路由」型测试点</strong>（对应线上对话环境验证中已有的接口相关测试点 / 用例），与行为维度（正常/异常/安全/边界）<strong data-page-node-id="DfsBGBQoSbo848mLcLHy7B">正交</strong>、可组合。
+等价调用：<code data-page-node-id="DR9lChOGg57sxFWJEqxChN">resolve_scope("接口") → ScopeSpec({正常,异常,安全,边界}, {api})</code></div>
+<p data-page-node-id="amENLYgF6ncoeNrmIyzsT3">因此"<b data-page-node-id="9WowkHjFfOXHNjsAc7wyqp">接口</b>"与"<b data-page-node-id="HMQpSbVvDrkISyAnQ3FQq2">正常+边界</b>"是两个<strong data-page-node-id="53LHhBJEtynpyV3x4BZj3m">正交切片</strong>：前者按来源（只要 api），后者按行为维度（只要正常+边界、不限来源）。两者数字不可直接相加，也不互斥。</p>
+
+<h2 data-page-node-id="g2wAAJPhEkapvVIasH90aO">2. 接口测试点生成结果</h2>
+<div class="cards" data-page-node-id="SV7ChgqF5gDv8kppCcVx6y">
+<div class="card" data-page-node-id="bnEgqM7oBSpGWuK4AOB8Fi"><b data-page-node-id="Y2WCCeXiVhxmEgtLlXK7nu">329</b><span data-page-node-id="0EDHVsG8H85tKUBIUtf832">接口测试点总数</span></div>
+<div class="card" data-page-node-id="1XQTqhx4i9Q8oQKK8cla8J"><b data-page-node-id="dRyGCEoA1HTfMbTnU4abNC">94</b><span data-page-node-id="wcICaHhKQAFBGRcf1xIqS9">正常</span></div>
+<div class="card" data-page-node-id="jG621vUHl1HqYVLfOYI1L6"><b data-page-node-id="W8MHBZSxYzwu4FR2AyqeXH">105</b><span data-page-node-id="MdKOEIvtzM06kwHNIp4Kzb">安全</span></div>
+<div class="card" data-page-node-id="Ob7j17lTlMLYxbLsAwVFrE"><b data-page-node-id="qcIyDQwojEupD1cWinaEF4">94</b><span data-page-node-id="FYCSlfuJQEYGeIydUUNEcV">边界</span></div>
+<div class="card" data-page-node-id="Kb01SfrYEEFauB4xhGLI36"><b data-page-node-id="apNeY0HljsyETqlOQSIafh">36</b><span data-page-node-id="bzSEiNP3SL4zwYI91sfand">异常</span></div>
+<div class="card" data-page-node-id="5beOeZ5h2dU1AtIUWM64SF"><b data-page-node-id="TtGF5Fg8Qe2HPyzYVAkRZk">11</b><span data-page-node-id="2X2qgq0tTrM7aal1mGG1oe">覆盖模块</span></div>
+<div class="card" data-page-node-id="F0ZTofSzuYIObtBKbxw6wS"><b data-page-node-id="Z2uKCzvbUqckNwFPyYb56r">是</b><span data-page-node-id="F1TPFFyEC2lqhXcbvH8gzF">全部为api来源</span></div>
+<div class="card" data-page-node-id="kX4U67eM32pFl3KzhRN7gD"><b data-page-node-id="erjgqiwoyaE9nMbDwGbEyQ">0</b><span data-page-node-id="7lDPzgnrlj5X8kC8FIhab0">孤儿测试点</span></div>
+</div>
+<h3 data-page-node-id="irlQMOTQARA1dEnT2A4WXW">来源种类分布（验证"接口"筛选确实只命中 api）</h3>
+<table data-page-node-id="fEA6Mwahl1NIxQxTqlWU23"><thead data-page-node-id="UOjhf4zibx9DgNs6y0AxQm"><tr data-page-node-id="EOyewzBVewdFzL6K9Z1clw"><th data-page-node-id="5By0XxfkDf2ZfWZxJ9aGsa">来源种类</th><th data-page-node-id="xKZLors4HrDiAD2qfODoF3">数量</th><th data-page-node-id="j5jVRUfYVgXiL9OuDWvbpn">说明</th></tr></thead>
+<tbody data-page-node-id="FOlBEUJrNCixNTAFfORVGM">
+<tr data-page-node-id="K9B4HAAyewaHqbt4VLx06A"><td data-page-node-id="aBVlj761D47Q4F6uGHzq6b"><code data-page-node-id="9EWkvvwIGJ2EvYXcmAwFGP">api</code></td><td data-page-node-id="T9xfMnPPC8yEx6MygicM2u">329</td><td class='note' data-page-node-id="YNLWr1nbCaT7ySu4ioHTdS">HTTP 路由型测试点（符合接口范围预期）</td></tr>
+</tbody></table>
+<p class="note" data-page-node-id="Y8bVPUZMv1rIsD6Q2wejvT">校验：全部 329 条测试点的来源种类均为 <code data-page-node-id="upZjaMSH410OTrfJF8XRVQ">api</code>（<code data-page-node-id="Ul3Hn7rblbb5KQqUjCbHdc">all_api=True</code>），证明"接口"筛选<strong data-page-node-id="FlaaBqDQsFpeOwLI2z8LtP">仅命中接口来源</strong>，未混入页面/业务/前端型。功能点覆盖率 57.0%，孤儿 0 条。</p>
+<h3 data-page-node-id="KFblZ1rJIAgWEb1wQXh3nP">模块覆盖明细（24 个模块）</h3>
+<table data-page-node-id="i8d1Dg5ndul8jSZBcEM61J"><thead data-page-node-id="XljRXEqvb78ZJVG84dwUrR"><tr data-page-node-id="DWbnljvFEQG3mdYwwZ12dI"><th data-page-node-id="I9mHJk9iiYny6jd1EuoG3Q">模块</th><th data-page-node-id="VRZ17CQcB27jkzfAUEBsDa">测试点总数</th><th data-page-node-id="Nb2TIA4A45NfmxvMoTUDhK">更新数</th><th data-page-node-id="3STJ5yngTYgPZsaoUs8h9T">API维</th><th data-page-node-id="B5MrEU4V5QmaZ68sfmXGSf">业务维</th><th data-page-node-id="DeIy8fn3ztZoLy9Qk7h14x">前端维</th></tr></thead>
+<tbody data-page-node-id="UMAc7EWF8AoHH6HSWQQA74">
+<tr data-page-node-id="219jRJarWk7iyBNcJZJS2I"><td data-page-node-id="V0CLEOXbI4Dyq4W0H7LjKm">账户/用户/鉴权 Auth</td><td data-page-node-id="hlm6oPMF5np0DFMy8bPkOP">123</td><td data-page-node-id="1jHutlntPRtheiOq4MpxlJ">0</td><td data-page-node-id="gYkOSljuIMUCAxOkHjD4cv">123</td><td data-page-node-id="D6PyrheENnHPmF7jSw0uMn">0</td><td data-page-node-id="LbcT49soZzXsLAqncfELA0">0</td></tr>
+<tr data-page-node-id="bkyIjMy0fk0LxO1Tb6sduI"><td data-page-node-id="dc3FD5X3GKEvNenTKnYlJQ">产物/文档 Artifact</td><td data-page-node-id="MRpyCnFTGiCiynZ8Rlx1QL">72</td><td data-page-node-id="1GfyD6JqD4YA9NxDRNNjB5">0</td><td data-page-node-id="YwBGrlpTfqgOt4FBojkzv7">72</td><td data-page-node-id="2WcVUvPWHKqx93Ydp3Dk8s">0</td><td data-page-node-id="Inl6k5kCtFfjOoLQnWrTLJ">0</td></tr>
+<tr data-page-node-id="aeYv9OuveEebFYBUOFpAIz"><td data-page-node-id="pU2Hd34rBRZEtLONrrggET">审计/审核看板 Audit</td><td data-page-node-id="jvxCgRCRAYsCzK3MjzABRH">52</td><td data-page-node-id="ZKEPhyad3msbb5uiCX2R3t">0</td><td data-page-node-id="jWEbNHn8fUoP7Spz37Q57x">52</td><td data-page-node-id="gL93fnfSdwl1PVCjt0L6XE">0</td><td data-page-node-id="LQKBetJAl0hVgTF2DdotG4">0</td></tr>
+<tr data-page-node-id="R85uo4IUvFWsiKGHQmbPgr"><td data-page-node-id="w61DdX8GDk9yAck5kH5N1j">线程 Thread</td><td data-page-node-id="jAlbgD5Up32fkpVnZoOPab">37</td><td data-page-node-id="ojbbwKmhHoXwvgmFdihwTo">0</td><td data-page-node-id="cGkizOPyQFtTgHuWdqFtSN">37</td><td data-page-node-id="3krliUF5MrbJHe8jA52pA0">0</td><td data-page-node-id="KbPwj1HVZc9qXpFlrufCrJ">0</td></tr>
+<tr data-page-node-id="SZJi50bB2yvtvwobUeGUjT"><td data-page-node-id="0aMXhO0v4WgSYwbGEmgmCm">对话/会话 Chat</td><td data-page-node-id="jJXwC94ZmAXZtMMUiGjO1T">21</td><td data-page-node-id="u5GBTgipkVooM8wqMnthgk">0</td><td data-page-node-id="ZWOuTQK0DFPXZsLhwjQHBJ">21</td><td data-page-node-id="5yvRHuRswoW6S863VvNFus">0</td><td data-page-node-id="kmiUGUeZiqh0VD0hKNNCu3">0</td></tr>
+<tr data-page-node-id="BhERcH235QbwegOCHj3S3n"><td data-page-node-id="Xh8DIcBn2c5pK4DhQWvxrU">SQL/查询 Query</td><td data-page-node-id="wb8td7SuAUtDgZZoxsqs5K">6</td><td data-page-node-id="7IvwT1eYE7Z6L1bkBbSMGc">0</td><td data-page-node-id="6nyPiFkRRqZhBcskRwQsE5">6</td><td data-page-node-id="GWyZyobDGM8Dbd27oGlejF">0</td><td data-page-node-id="g1v9UHHVbF7T3zPEZRxSJc">0</td></tr>
+<tr data-page-node-id="mhHnzOzz3Em9g1kAFW4T3X"><td data-page-node-id="laSAEIXuMI4YMHWMxBWZXx">工具/集成 Tool</td><td data-page-node-id="XwQicr2EPxxyqnXP9n5Sth">6</td><td data-page-node-id="QhobMA4a1Wfjj3IdHjx95B">0</td><td data-page-node-id="oiHsAk9Z0apHDRUoED3BhL">6</td><td data-page-node-id="pIC86CpKX5E170mz2YT30Y">0</td><td data-page-node-id="x6XkKslrvAFQGz1tawBGuZ">0</td></tr>
+<tr data-page-node-id="G0q2KkWPrPVXAyKB7dJfba"><td data-page-node-id="cAzM0ETH06VBlluPGBJZ3v">智能体 Agent</td><td data-page-node-id="7XR0cOFzT1AEOIDyLw1Z5j">3</td><td data-page-node-id="XX3bsAsMP3aGEGuWRimZd6">0</td><td data-page-node-id="49ZIXxbZh7lTxGSWWCKMdH">3</td><td data-page-node-id="dFe6wl2uJFEzj7ZTnymG9C">0</td><td data-page-node-id="FJrsyoGtA9cqo8BhnaZwHE">0</td></tr>
+<tr data-page-node-id="L5qvIGdbEUdfDYeuPPsCDA"><td data-page-node-id="qAJaBFW49rCcsKVeUwBhPP">健康/其它</td><td data-page-node-id="GwsRZ8xBcGOkzSFmtIthsk">3</td><td data-page-node-id="3NU0tGzb8xEes5JbtbXGyz">0</td><td data-page-node-id="qPNghbQMrSmCnNHYreLGRr">3</td><td data-page-node-id="o8QQ9J1Y36rAJwbSw2PGbv">0</td><td data-page-node-id="Ysseyf4JQ59lwzfgwO1EFg">0</td></tr>
+<tr data-page-node-id="XiQwHvrthW1gWj5qP8m4wW"><td data-page-node-id="wqL3MZqmJQKVvdPMnPypuq">未归类 Other</td><td data-page-node-id="6BQlG4OWQBpTev0DBmX5Q1">3</td><td data-page-node-id="1xMJ31f8KxPk2s25ue27ih">0</td><td data-page-node-id="80GGCEABiVhAmOZ44jv6iS">3</td><td data-page-node-id="wAB9WZYqQjhfmgRtTCjr3C">0</td><td data-page-node-id="ZQbhCMUyMtFtYlgDGaC3NF">0</td></tr>
+<tr data-page-node-id="aW47ofwvL2iotfifMBAa91"><td data-page-node-id="zd1HMOnJb5I3KcUQlhcvAc">简报 Briefing</td><td data-page-node-id="wqElzWPESzhnEAv4ALsBId">3</td><td data-page-node-id="u6wISMUj175Dr5iCHP7Hhz">0</td><td data-page-node-id="YGDHtiwfcqEULFhrhkyi5K">3</td><td data-page-node-id="TSevGhi3DIRG6fUV7eup4X">0</td><td data-page-node-id="V3qKuVpICLKYMGkAozYupM">0</td></tr>
+</tbody></table>
+
+<h2 data-page-node-id="RpYT23G2c1lXckkLJDMpqv">3. 与结构化测试用例（50 条）的关系</h2>
+<div class="cards" data-page-node-id="7oCpgs8dlJ2jmWXYfqp3mk">
+<div class="card" data-page-node-id="KLXU9rFH0a8UXBDbD4oZ27"><b data-page-node-id="NXZLixyMTD5FKIeH40fsRw">50</b><span data-page-node-id="QLiZzRDmmQJQbT1k9PT0TF">结构化用例总数</span></div>
+<div class="card" data-page-node-id="kFPkMDPKftMj5AxTgmvlM1"><b data-page-node-id="QKAWZPluYGWttv8eYZmg3A">全部</b><span data-page-node-id="uf7qB6eJzmKKZA1CcbG1ck">落在接口范围内</span></div>
+</div>
+<p data-page-node-id="Xl7NBjQV1F79H2v4NeWjS6">结构化测试用例（来自 <code data-page-node-id="UbVDKCNI3u7emFJfrGSgAs">gen_structured_cases.py</code>）的 50 条用例<strong data-page-node-id="IVruBxIiC3Jinvyrdlswvd">来源种类全部为 <code data-page-node-id="T2ivg6xKh6isZMsjC1ADk9">api</code></strong>（{'正常': 13, '异常': 15, '安全': 12, '边界': 10}），因此它们<strong data-page-node-id="KGmgA1tPlSlDthqYENluCr">整体属于"接口"范围的一个已精化子集</strong>——在接口测试点的基础上，额外补充了<strong data-page-node-id="PUwVdrfxcEuOCdFeawMMnC">预期结果 / 源码出处 / 断言类型</strong>，是把"接口范围测试点"细化为"可执行、可判定的结构化用例"。</p>
+<p class="note" data-page-node-id="IfGMXm2rqIghaUiZb5e55f">关系链：接口范围（329 条 api 测试点）<b data-page-node-id="Rr3LnnYqNlALrOv6ggl3PS">⊇</b> 结构化用例（50 条，带预期结果的 api 用例）。后续做 UI 层执行时，可直接以结构化用例驱动，并以其中 contract/value 断言做确定性判定。</p>
+
+<h2 data-page-node-id="nPZHNQ16EAlcHAZp6rcanj">4. 结论</h2>
+<ul data-page-node-id="3eDQV8lBPI2rUOF0wte6H9">
+<li data-page-node-id="oKP0dB2HbVtCgEKC2gSInQ"><span class="pill p-pass" data-page-node-id="AHUvnHlGW0OsHrmIJusJF6">通过</span> "接口"范围筛选生效：329 条全部为 api 来源，来源分布与机制定义一致。</li>
+<li data-page-node-id="6UpAUQjkN4VvRZ13rivdxi"><span class="pill p-pass" data-page-node-id="c14e9AP2c0vtTkge1CsFLd">通过</span> 覆盖 24 模块、功能点覆盖率 57.0%、孤儿 0。</li>
+<li data-page-node-id="d6xByRu9E7tYUiRS4LDH5C"><span class="pill p-pass" data-page-node-id="l5hwZVY91PtwcY1q3sDSdB">通过</span> 结构化 50 条用例整体落在接口范围内，是接口测试点的精化子集。</li>
+</ul>
+<div class="tip" data-page-node-id="H2pfNND8DqbZWDLe3JEl9y">补充：本报告为<strong data-page-node-id="H792Eg95WfNNoaGvJXSSsv">独立专项</strong>。与《整体验证报告（正常+边界）》正交——前者验证"来源=接口"，后者验证"行为维度=正常+边界"。如需"接口 + 正常 + 边界"交集，可调用 <code data-page-node-id="63kKHt0ansIPNyM1h5YRFe">ScopeSpec({正常,边界},{api})</code>，将得到更窄的"接口型中的正常与边界"子集。</div>
+</div></body></html>

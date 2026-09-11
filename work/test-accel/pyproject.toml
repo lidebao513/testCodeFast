@@ -1,0 +1,143 @@
+# ============================================================================
+# test-accel 工程配置（单一事实来源）
+# - 替代裸 requirements.txt，提供依赖、构建、lint/format 统一入口
+# - 本文件是被 pre-commit / CI 强制读取的「硬性约束」，不是文档
+# ============================================================================
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "test-accel"
+version = "0.4.0"
+description = "Web 测试加速平台：代码分析 → 测试点 → 用例 → 执行 → 报告"
+readme = "ARCHITECTURE.md"
+requires-python = ">=3.11"
+# 依赖版本在此集中声明；生产部署请用 pip-compile / uv 生成 lock 文件锁定
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "python-dotenv",
+    "openai",
+    "httpx",
+    "requests",
+    "playwright",
+]
+
+[project.optional-dependencies]
+dev = ["ruff", "pytest"]
+
+# ---------------------------------------------------------------------------
+# Ruff：统一的 lint + format 规则（pre-commit 与 CI 共用，保证不跑偏）
+# 基础:E/F/I/W；防坑:B/C4/UP；质量:SIM(简化)/RUF(ruff)/PLR(重构)/BLE(盲异常)/C90(复杂度)
+# ---------------------------------------------------------------------------
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+# 这些目录/脚本不参与 lint（第三方/产物/数据 + 一次性开发脚本）
+# 生产代码为 backend/、门禁脚本为 scripts/、测试为 tests/，三者均在门禁覆盖内
+exclude = ["venv", ".venv", "__pycache__", "data", "report_templates", ".git", "gen_*", "selftest*", "run_*", "verify_*", "validate_*"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "B", "C4", "UP", "SIM", "RUF", "PLR", "BLE", "C90"]
+ignore = ["E501", "B008", "C401", "C408", "PLR2004", "SIM105", "RUF001", "RUF002", "RUF003"]
+# 圈复杂度上限：新代码单函数不得超过 10，从源头杜绝上帝函数
+mccabe.max-complexity = 10
+
+[tool.ruff.lint.isort]
+known-first-party = ["backend"]
+lines-after-imports = 2
+
+[tool.ruff.lint.per-file-ignores]
+# 测试层：需在导入前自举 sys.path（把 scripts/、项目根加入 path），故放行 E402；
+# 其余规则（含 I/W/F/B/C4/UP/SIM/RUF/PLR）一律强制，测试代码不得例外。
+"tests/*" = ["E402"]
+# 遗留脚本/脚手架：仅基础规则(E/F/I/W/B/C4/UP/SIM/RUF)，噪音规则留待重构时清理
+# （登记为技术债务，见 ARCHITECTURE §5）；backend/ 新代码不受这些豁免影响
+"scripts/*" = ["PLR", "BLE", "C90", "E402", "E702", "F841"]
+"selftest*" = ["PLR", "BLE", "C90", "E402", "E702", "F841"]
+"gen_*" = ["PLR", "BLE", "C90", "E402", "E702", "F841"]
+"validate_*" = ["PLR", "BLE", "C90", "E402", "E702", "F841"]
+"run_*" = ["PLR", "BLE", "C90", "E402", "E702", "F841"]
+"verify_*" = ["PLR", "BLE", "C90", "E402", "E702", "F841"]
+# 已知上帝模块：复杂度/重构/盲异常登记为技术债务，拆分时一并清除
+"backend/modules/code_analyzer.py" = ["C90", "PLR", "BLE001"]
+"backend/main.py" = ["C90", "PLR", "BLE001"]
+"backend/modules/case_generator.py" = ["C90", "PLR", "BLE001"]
+"backend/modules/full_report.py" = ["C90", "PLR", "BLE001"]
+# 存量模块债务（全面重写阶段逐文件清除，见未完成任务清单）：
+# 盲异常(BLE001)/复杂度(PLR,C90)/导入顺序(E402)/可变类默认(RUF012)/未用循环变量(B007)
+# —— 仅对「当前已存在的文件」豁免；新增 backend 模块不受豁免，强制走严格规则
+"backend/modules/executor.py" = ["C90", "PLR", "BLE001", "E402", "RUF012"]
+"backend/modules/batch_store.py" = ["BLE001", "PLR", "C90"]
+"backend/modules/exporters.py" = ["BLE001"]
+"backend/modules/auth.py" = ["BLE001"]
+"backend/modules/smoke.py" = ["BLE001"]
+"backend/modules/reporter.py" = ["BLE001", "PLR", "C90", "RUF012", "B007"]
+"backend/modules/browser.py" = ["BLE001", "PLR", "C90"]
+"backend/modules/project_manager.py" = ["PLR", "C90"]
+"backend/modules/diff_analyzer.py" = ["BLE001", "PLR", "C90"]
+"backend/modules/analytics.py" = ["BLE001", "C90"]
+"backend/llm_client.py" = ["BLE001"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+# ---------------------------------------------------------------------------
+# Mypy：basic 级别（只查明显类型错误，不要求全量注解；strict 留待拆分时）
+# ---------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+warn_unused_ignores = false
+warn_redundant_casts = true
+disallow_untyped_defs = false
+# 说明：scripts/ 亦纳入 mypy（原排除已移除），与 ruff 覆盖面对齐；
+# tests/ 不纳入（测试以 pytest 运行为准，且需自举 sys.path）。
+exclude = ["venv", "tests", "selftest.*", "gen_.*", "validate_.*", "run_.*", "verify_.*"]
+
+# 上帝模块：存量类型债务（裸 None 返回值 / 变量注解缺失等），全面重写阶段清除。
+# 其余 backend 模块强制 basic 检查，新增代码不得豁免。
+[[tool.mypy.overrides]]
+module = [
+    "backend.modules.code_analyzer",
+    "backend.main",
+    "backend.modules.executor",
+    "backend.modules.case_generator",
+    "backend.modules.full_report",
+]
+ignore_errors = true
+
+# ---------------------------------------------------------------------------
+# Bandit：安全扫描（backend 生产代码 + scripts 门禁/工具脚本；跳过测试/数据）
+# ---------------------------------------------------------------------------
+[tool.bandit]
+exclude_dirs = ["venv", "tests", "data", ".git"]
+# 本仓库上下文下的误报规则（技术债务登记见 ARCHITECTURE §5）：
+# B105 硬编码口令——口令走 .env+.gitignore，命中项均为状态键(pass/fail)/十六进制颜色/数字，非口令
+# B603 subprocess 未用 shell=True——内部受控调用(git/diff)，输入可信，无注入风险
+# B607 部分路径启动进程——内部工具调用，可执行路径受控
+# B608 硬编码 SQL——命中处为 diff 解析字符串；真实 DB 写入统一走 db.py 参数化查询
+skips = ["B101", "B311", "B105", "B603", "B607", "B608"]
+
+# ---------------------------------------------------------------------------
+# Coverage：覆盖率门禁（基线阈值，随重构推进逐步抬高；见 ADR/CONTRIBUTING）
+# ---------------------------------------------------------------------------
+[tool.coverage.run]
+source = ["backend"]
+omit = ["*/venv/*", "*/tests/*", "backend/modules/selftest*"]
+[tool.coverage.report]
+# 基线阈值（当前 ~5%，仅覆盖核心纯函数）。全面重写后须逐步抬高（目标 ≥60%，见 CONTRIBUTING）。
+# 设为当前地基，用于「防覆盖率回退」，而非对存量债务卡红线。
+fail_under = 5
+show_missing = true
+
+# ---------------------------------------------------------------------------
+# pytest：让 tests/ 成为真实存在的测试层
+# ---------------------------------------------------------------------------
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q"

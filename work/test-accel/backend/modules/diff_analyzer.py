@@ -14,9 +14,12 @@
 
 只读：本模块对目标仓库只执行 git diff / show / rev-parse，绝不写仓库。
 """
+
 import subprocess
 import time
+
 from backend.modules.code_analyzer import code_analyzer
+
 
 # 只分析代码文件，过滤 md/json/yaml/png 等，显著减少 git show 调用
 _CODE_EXTS = (".py", ".ts", ".tsx", ".js", ".jsx", ".vue")
@@ -38,8 +41,10 @@ class DiffAnalyzer:
     def _git(local_path, args, timeout=60):
         try:
             out = subprocess.run(
-                ["git", "-C", local_path] + args,
-                capture_output=True, text=True, timeout=timeout,
+                ["git", "-C", local_path, *args],
+                capture_output=True,
+                text=True,
+                timeout=timeout,
                 errors="ignore",
             )
             if out.returncode != 0:
@@ -55,8 +60,7 @@ class DiffAnalyzer:
 
     def changed_files(self, local_path: str, base: str, head: str):
         """返回 [(status, path), ...]，status 为首字母 A/M/D/R/T/C。"""
-        out = self._git(local_path, ["diff", "--name-status", f"{base}..{head}"],
-                        timeout=120)
+        out = self._git(local_path, ["diff", "--name-status", f"{base}..{head}"], timeout=120)
         if not out:
             return []
         items = []
@@ -67,7 +71,7 @@ class DiffAnalyzer:
             parts = line.split("\t")
             if len(parts) >= 2:
                 st = parts[0].strip()[:1]
-                path = parts[-1].strip()   # 重命名 R 时取新路径
+                path = parts[-1].strip()  # 重命名 R 时取新路径
             else:
                 seg = line.split(None, 1)
                 if len(seg) != 2:
@@ -83,19 +87,27 @@ class DiffAnalyzer:
 
     # ---------- 主流程 ----------
 
-    def analyze_diff(self, local_path: str, base: str, head: str,
-                     project_type: str = "pc", max_files: int = 3000,
-                     include_files: bool = False):
+    def analyze_diff(
+        self,
+        local_path: str,
+        base: str,
+        head: str,
+        project_type: str = "pc",
+        max_files: int = 3000,
+        include_files: bool = False,
+    ):
         t0 = time.time()
         base_commit = self.resolve(local_path, base)
         head_commit = self.resolve(local_path, head)
         if not base_commit or not head_commit:
-            return {"ok": False,
-                    "error": f"ref 无法解析（base={base} head={head}），"
-                             f"请确认分支/commit 存在于 {local_path}"}
+            return {
+                "ok": False,
+                "error": f"ref 无法解析（base={base} head={head}），"
+                f"请确认分支/commit 存在于 {local_path}",
+            }
 
         raw = self.changed_files(local_path, base, head)
-        by_status = {}
+        by_status: dict[str, int] = {}
         for st, _p in raw:
             by_status[st] = by_status.get(st, 0) + 1
 
@@ -147,9 +159,10 @@ class DiffAnalyzer:
             "changed_files": {
                 "total": len(raw),
                 "code_files": len(code_pairs),
-                "by_status": {k: v for k, v in sorted(by_status.items())},
-                "by_status_label": {_STATUS_LABEL.get(k, k): v
-                                    for k, v in sorted(by_status.items())},
+                "by_status": dict(sorted(by_status.items())),
+                "by_status_label": {
+                    _STATUS_LABEL.get(k, k): v for k, v in sorted(by_status.items())
+                },
             },
             "fp_diff": {
                 "new": len(new_list),

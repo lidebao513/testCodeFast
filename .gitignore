@@ -31,6 +31,17 @@ logs/
 # research-agent 自带 .git，含他人代码与大量明文凭据，不入库
 work/targets/research-agent/
 
+# ========== 临时/中间产物（不进基线，仅留本机）==========
+work/targets/*.log
+work/targets/_fx_test_bak/
+work/selftest_*/
+work/research-agent-test/**/*.png
+work/research-agent-test/**/*.log
+
+# ========== 本机备份区（含 DB 快照，体积大且可重建）==========
+backup/*.db
+backup/*.tar.gz
+
 # ========== WorkBuddy 工作区数据（含会话记忆与凭据记录）==========
 .workbuddy/
 

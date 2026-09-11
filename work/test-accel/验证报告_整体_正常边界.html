@@ -1,0 +1,114 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>结构化测试用例 · 整体验证报告（正常+边界）</title><style>
+:root{--bg:#0f1115;--card:#1a1e26;--ink:#e6e8ee;--sub:#9aa3b2;--line:#2a2f3a;
+--accent:#4f9dff;--ok:#39b54a;--warn:#f0a020;--bad:#e5484d}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.7 -apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+.wrap{max-width:1080px;margin:0 auto;padding:28px 22px 80px}
+h1{font-size:25px;margin:0 0 6px}
+h2{font-size:19px;margin:32px 0 12px;border-left:4px solid var(--accent);padding-left:10px}
+h3{font-size:15px;margin:18px 0 8px;color:var(--accent)}
+.meta{color:var(--sub);font-size:13px;margin-bottom:18px}
+.cards{display:flex;gap:12px;flex-wrap:wrap;margin:14px 0 6px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 16px;min-width:120px}
+.card b{font-size:22px;display:block;color:var(--accent)}
+.card span{color:var(--sub);font-size:12px}
+table{border-collapse:collapse;width:100%;margin:12px 0 8px;font-size:13.5px}
+th,td{border:1px solid var(--line);padding:8px 10px;vertical-align:top;text-align:left}
+th{background:#20262f;color:var(--sub);position:sticky;top:0}
+tr:nth-child(even){background:#161a21}
+code{background:#0c0e12;padding:1px 6px;border-radius:5px;color:#8fd0ff;font-size:12.5px}
+.pill{display:inline-block;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:700}
+.p-pass{background:rgba(57,181,74,.15);color:var(--ok);border:1px solid rgba(57,181,74,.5)}
+.p-fail{background:rgba(229,72,77,.15);color:var(--bad);border:1px solid rgba(229,72,77,.5)}
+.p-info{background:rgba(79,157,255,.15);color:var(--accent);border:1px solid rgba(79,157,255,.5)}
+.tip{background:#13202b;border:1px solid #1d3a4a;color:#bfe3f2;padding:10px 14px;border-radius:8px;font-size:13px;margin:10px 0}
+.note{color:var(--sub);font-size:12.5px}
+.ok-badge{display:inline-block;padding:4px 14px;border-radius:8px;font-weight:700;font-size:15px}
+.ok-y{background:rgba(57,181,74,.18);color:var(--ok);border:1px solid rgba(57,181,74,.5)}
+.ok-n{background:rgba(229,72,77,.18);color:var(--bad);border:1px solid rgba(229,72,77,.5)}
+</style></head>
+<body><div class="wrap">
+<h1>【结构化测试用例】功能 · 整体验证报告</h1>
+<div class="meta">生成时间：2026-09-10T17:31:49 ｜ 目标仓库：research-agent ｜ 范围：正常 + 边界 全流程 + 权限全链路 ｜ <span class="ok-badge ok-y">整体验证通过 ✅</span></div>
+
+<h2>0. 验证目标与方法</h2>
+<p>本次对【结构化测试用例】功能做<strong>整体全流程验证</strong>，覆盖三个环节：</p>
+<ul>
+<li><b>① 文件读写权限全链路</b>：拉取代码前 / 拉取期间 / 拉取后，每个阶段均执行<strong>真实写入探针</strong>（对已有代码文件申请写权限，并在读写阶段实际写入并清理临时文件），验证只读管控确实生效。</li>
+<li><b>② 正常+边界 测试点生成</b>：真实调用平台核心入口 <code>generate_comprehensive_test_points(ScopeSpec({正常,边界}, None))</code>。</li>
+<li><b>③ 结构化测试用例</b>：运行真实生成器 <code>gen_structured_cases.py</code> 并校验 50 条用例的完整性。</li>
+</ul>
+<div class="tip">权限探针说明：在 Windows 下，"目录只读位"并不阻止在其内<strong>新建</strong>文件，但"已有文件只读位"会阻止以读写方式打开该文件。因此探针统一对<strong>已有代码文件（README.md）</strong>申请 <code>O_RDWR</code> 写权限来实测"可否写入"，该操作<strong>不修改文件内容</strong>；仅在"读写阶段"额外做真实临时文件写入以证明写入能力。</div>
+
+<h2>1. 文件读写权限全链路验证（含真实写入测试）</h2>
+<p>基线状态：<span class="pill p-info">readonly</span>（验证开始时仓库恰好为可写，功能随即正确重新施加只读）。</p>
+<table><thead><tr><th>阶段</th><th>预期</th><th>实测写入能力</th><th>结论</th><th>探针详情</th></tr></thead>
+<tbody>
+<tr><td>拉取前（置只读）</td><td>预期：拒绝写入</td><td>被拒 ✅</td><td><span class="pill p-pass">通过</span></td><td class='note'>写入被拒绝: PermissionError: [Errno 13] Permission denied: 'C:/Users/EDY/WorkBuddy/testCodeFast/work/targets/research-agent\\README.md' → 当前只读生效</td></tr>
+<tr><td>拉取期间（临时读写）</td><td>预期：允许写入</td><td>可写 ✅</td><td><span class="pill p-pass">通过</span></td><td class='note'>以读写方式打开已有代码文件成功（未修改内容）→ 当前可写 ｜ 新建并写入临时文件成功（已清理）→ 真实写入成功</td></tr>
+<tr><td>真实 pull() 执行</td><td class='note'>功能约定：执行 pull() 内部完成「前只读→中读写→后只读」生命周期</td><td>—</td><td><span class="pill p-pass">通过</span></td><td class='note'>pull status=ok；changed_count=573；perm.readonly_before_pull=True；perm.restored_after_pull=True</td></tr>
+<tr><td>拉取后（恢复只读）</td><td>预期：拒绝写入</td><td>被拒 ✅</td><td><span class="pill p-pass">通过</span></td><td class='note'>写入被拒绝: PermissionError: [Errno 13] Permission denied: 'C:/Users/EDY/WorkBuddy/testCodeFast/work/targets/research-agent\\README.md' → 当前只读生效</td></tr>
+</tbody></table>
+<p class="note">结论：拉取前与拉取后均<strong>拒绝写入</strong>（PermissionError 实测触发），拉取期间<strong>允许写入</strong>（含真实临时文件写→清理），真实 <code>pull()</code> 执行后 <code>perm.restored_after_pull=True</code>。文件读写权限管控<strong>按设计生效</strong>。</p>
+
+<h2>2. 正常 + 边界 测试点生成验证</h2>
+<div class="cards">
+<div class="card"><b>259</b><span>测试点总数</span></div>
+<div class="card"><b>165</b><span>正常</span></div>
+<div class="card"><b>94</b><span>边界</span></div>
+<div class="card"><b>24</b><span>覆盖模块</span></div>
+<div class="card"><b>100.0%</b><span>功能点覆盖率</span></div>
+<div class="card"><b>0</b><span>孤儿测试点</span></div>
+</div>
+<div class="tip">范围语义：<b>正常+边界</b> 是平台<strong>默认范围</strong>，按<strong>行为维度</strong>（tp_type）过滤，<strong>不限来源</strong>（含 API / 业务函数 / 前端）。本验证未提供 diff 变更集，故所有点标「全量」（"更新"标签为 0，符合预期）。</div>
+<h3>模块覆盖明细（24 个模块）</h3>
+<table><thead><tr><th>模块</th><th>测试点总数</th><th>更新数</th><th>API维</th><th>业务维</th><th>前端维</th></tr></thead>
+<tbody>
+<tr><td>账户/用户/鉴权 Auth</td><td>68</td><td>0</td><td>68</td><td>0</td><td>0</td></tr>
+<tr><td>产物/文档 Artifact</td><td>40</td><td>0</td><td>40</td><td>0</td><td>0</td></tr>
+<tr><td>审计/审核看板 Audit</td><td>32</td><td>0</td><td>32</td><td>0</td><td>0</td></tr>
+<tr><td>线程 Thread</td><td>18</td><td>0</td><td>18</td><td>0</td><td>0</td></tr>
+<tr><td>对话/会话 Chat</td><td>14</td><td>0</td><td>14</td><td>0</td><td>0</td></tr>
+<tr><td>业务函数·主服务编排</td><td>12</td><td>0</td><td>0</td><td>12</td><td>0</td></tr>
+<tr><td>业务函数·流水线接口</td><td>10</td><td>0</td><td>0</td><td>10</td><td>0</td></tr>
+<tr><td>业务函数·邮件实时处理</td><td>9</td><td>0</td><td>0</td><td>9</td><td>0</td></tr>
+<tr><td>业务函数·网关加解密</td><td>8</td><td>0</td><td>0</td><td>8</td><td>0</td></tr>
+<tr><td>业务函数·统一身份鉴权</td><td>8</td><td>0</td><td>0</td><td>8</td><td>0</td></tr>
+<tr><td>业务函数·通知推送</td><td>7</td><td>0</td><td>0</td><td>7</td><td>0</td></tr>
+<tr><td>业务函数·内容总结</td><td>5</td><td>0</td><td>0</td><td>5</td><td>0</td></tr>
+<tr><td>SQL/查询 Query</td><td>4</td><td>0</td><td>4</td><td>0</td><td>0</td></tr>
+<tr><td>工具/集成 Tool</td><td>4</td><td>0</td><td>4</td><td>0</td><td>0</td></tr>
+<tr><td>业务函数·晨会简报</td><td>3</td><td>0</td><td>0</td><td>3</td><td>0</td></tr>
+<tr><td>业务函数·执行大厅指标</td><td>3</td><td>0</td><td>0</td><td>3</td><td>0</td></tr>
+<tr><td>智能体 Agent</td><td>2</td><td>0</td><td>2</td><td>0</td><td>0</td></tr>
+<tr><td>健康/其它</td><td>2</td><td>0</td><td>2</td><td>0</td><td>0</td></tr>
+<tr><td>未归类 Other</td><td>2</td><td>0</td><td>2</td><td>0</td><td>0</td></tr>
+<tr><td>简报 Briefing</td><td>2</td><td>0</td><td>2</td><td>0</td><td>0</td></tr>
+<tr><td>业务函数·晨报生成</td><td>2</td><td>0</td><td>0</td><td>2</td><td>0</td></tr>
+<tr><td>前端 Frontend</td><td>2</td><td>0</td><td>0</td><td>0</td><td>2</td></tr>
+<tr><td>业务函数·执行大厅性能</td><td>1</td><td>0</td><td>0</td><td>1</td><td>0</td></tr>
+<tr><td>业务函数·网关中间件</td><td>1</td><td>0</td><td>0</td><td>1</td><td>0</td></tr>
+</tbody></table>
+<p class="note">双向追溯：功能点 165 个，覆盖率 100.0%，孤儿测试点 0 条（应为 0，已验证）。</p>
+
+<h2>3. 结构化测试用例校验（gen_structured_cases.py，50 条）</h2>
+<div class="cards">
+<div class="card"><b>50</b><span>结构化用例</span></div>
+<div class="card"><b>8</b><span>覆盖模块</span></div>
+<div class="card"><b>是</b><span>全部为接口(api)来源</span></div>
+<div class="card"><b>通过</b><span>完整性校验</span></div>
+</div>
+<p>校验项：预期结果非空、源码出处(source_ref)非空、断言类型(assertion_type)非空、全部为 api 来源。</p>
+<p class="note">各范围分布：正常 13，异常 15，安全 12，边界 10。
+缺失项：预期结果 无 ｜ 源码出处 无 ｜ 断言类型 无 ｜ 非api用例 无。</p>
+
+<h2>4. 总体结论与发现</h2>
+<ul>
+<li><span class="pill p-pass">通过</span> 文件读写权限管控全链路生效，且每个阶段均经真实写入测试验证。</li>
+<li><span class="pill p-pass">通过</span> 正常+边界 范围生成 259 条，覆盖 24 模块、功能点覆盖率 100%、孤儿 0。</li>
+<li><span class="pill p-pass">通过</span> 结构化测试用例 50 条，预期结果/源码出处/断言类型完整，全部为接口来源。</li>
+</ul>
+<div class="tip">注意点（如实记录）：① Windows 下"目录只读位"不阻止在其内新建文件，故只读保护主要针对<strong>已有代码文件防误改</strong>（已用已有文件写探针验证）；新建文件虽不受阻，但属未跟踪杂质而非代码改动，风险可控。② 本验证未接入 diff 变更集，"更新"标签为 0；接入真实 base..target 后即可产出增量「更新」测试点。③ 结构化用例为白盒契约级预期（状态码/返回结构/关键值），业务数值正确性仍依赖后续 AI 验证服务或需求基线。</div>
+</div></body></html>

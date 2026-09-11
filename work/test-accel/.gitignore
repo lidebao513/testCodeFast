@@ -1,24 +1,49 @@
-# 密钥（含 LLM Key，绝不进 git）
-.env
+# ============================================================================
+# test-accel .gitignore —— 明确「什么绝不进 git」
+# 原则：密钥、第三方被测代码、环境、缓存、运行产物 一律不入库
+# ============================================================================
 
-# 虚拟环境
+# ---- 密钥（含 LLM Key、账号凭据，绝不进 git）----
+.env
+*.env
+.env.*
+
+# ---- 第三方被测目标（research-agent 等，含他人代码/明文凭据，绝不入库）----
+# 路径相对仓库根；已跟踪的历史需执行：git rm --cached -r work/targets
+work/targets/
+targets/
+
+# ---- 虚拟环境 ----
 venv/
 .venv/
 
-# Python 缓存
+# ---- Python 缓存 / 编译产物 ----
 __pycache__/
 *.pyc
+*.pyo
 
-# 数据库
+# ---- 数据库（运行态数据）----
 *.db
 *.sqlite
 *.sqlite3
 
-# 运行产物（保留目录结构，忽略内容）
+# ---- 运行产物（保留目录结构，忽略内容）----
 data/logs/*
 data/screenshots/*
 data/reports/*
 data/skills/*/helpers/__pycache__/
 
-# 克隆的被测目标（只读，按需在本地生成）
-# targets/
+# ---- 打包 / 测试 / lint 缓存 ----
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+
+# ---- 编辑器 / 系统 ----
+.idea/
+.vscode/
+.DS_Store

@@ -1,0 +1,931 @@
+{
+  "traceability": {
+    "fp_total": 237,
+    "tp_total": 263,
+    "fp_with_tp": 237,
+    "fp_without_tp": 0,
+    "tp_with_fp": 263,
+    "tp_without_fp(orphan)": 0,
+    "coverage": "100.0%",
+    "max_tp_per_fp": 2,
+    "note": "fp_without_tp>0 通常为 Scope 过滤导致（如本轮只要正常+异常，安全/边界维度的派生测试点被过滤），非追溯断链；tp_without_fp 应恒为 0，非 0 即契约缺陷。"
+  },
+  "scan_stats": {
+    "files_read": 263,
+    "ast_parses": 97,
+    "text_requests": 360,
+    "text_cache_hits": 97,
+    "sym_cache_hits": 399,
+    "git_show_calls": 0,
+    "git_show_hits": 0,
+    "worktree_reads": 263
+  },
+  "functional_points": [
+    {
+      "file_path": "backend/research-agent-source/tools/wechat_channel/admin_api.py",
+      "name": "DELETE /accounts/{account_id}",
+      "description": "账户/用户/鉴权 · 删除：接口 DELETE /accounts/{account_id}；实现参考 remove_account：删除账号（先 stop monitor，再删除凭据）。",
+      "ftype": "api",
+      "method": "DELETE",
+      "path": "/accounts/{account_id}",
+      "loc": {
+        "start": 278,
+        "end": 313
+      },
+      "module": "账户/用户/鉴权",
+      "action": "删除",
+      "semantic": "账户/用户/鉴权 · 删除",
+      "impl": "remove_account：删除账号（先 stop monitor，再删除凭据）。",
+      "title": "账户/用户/鉴权 · 删除（DELETE /accounts/{account_id}）",
+      "fp_id": "FP-3e755d06",
+      "test_points": [
+        "TP-083",
+        "TP-084"
+      ],
+      "tp_count": 2
+    },
+    {
+      "file_path": "backend/research-agent-source/tools/wechat_channel/admin_api.py",
+      "name": "DELETE /accounts/{account_id}/whitelist/{user_id}",
+      "description": "账户/用户/鉴权 · 删除：接口 DELETE /accounts/{account_id}/whitelist/{user_id}；实现参考 remove_from_whitelist：从某账号白名单移除 user_id。",
+      "ftype": "api",
+      "method": "DELETE",
+      "path": "/accounts/{account_id}/whitelist/{user_id}",
+      "loc": {
+        "start": 390,
+        "end": 404
+      },
+      "module": "账户/用户/鉴权",
+      "action": "删除",
+      "semantic": "账户/用户/鉴权 · 删除",
+      "impl": "remove_from_whitelist：从某账号白名单移除 user_id。",
+      "title": "账户/用户/鉴权 · 删除（DELETE /accounts/{account_id}/whitelist/{user_id}）",
+      "fp_id": "FP-ac92ea8d",
+      "test_points": [
+        "TP-094",
+        "TP-095"
+      ],
+      "tp_count": 2
+    },
+    {
+      "file_path": "backend/research-agent-source/tools/wechat_channel/admin_api.py",
+      "name": "DELETE /login/{session_key}",
+      "description": "账户/用户/鉴权 · 登录鉴权：接口 DELETE /login/{session_key}；实现参考 login_cancel：主动取消扫码会话。",
+      "ftype": "api",
+      "method": "DELETE",
+      "path": "/login/{session_key}",
+      "loc": {
+        "start": 236,
+        "end": 239
+      },
+      "module": "账户/用户/鉴权",
+      "action": "登录鉴权",
+      "semantic": "账户/用户/鉴权 · 登录鉴权",
+      "impl": "login_cancel：主动取消扫码会话。",
+      "title": "账户/用户/鉴权 · 登录鉴权（DELETE /login/{session_key}）",
+      "fp_id": "FP-5bc8f455",
+      "test_points": [
+        "TP-080",
+        "TP-081"
+      ],
+      "tp_count": 2
+    },
+    {
+      "file_path": "backend/research-agent-source/tools/auth/rbac.py",
+      "name": "DELETE /roles/{role_id}",
+      "description": "账户/用户/鉴权 · 删除：接口 DELETE /roles/{role_id}；实现参考 delete_role：仅允许删除自定义角色；两个系统角色始终保留。",
+      "ftype": "api",
+      "method": "DELETE",
+      "path": "/roles/{role_id}",
+      "loc": {
+        "start": 236,
+        "end": 249
+      },
+      "module": "账户/用户/鉴权",
+      "action": "删除",
+      "semantic": "账户/用户/鉴权 · 删除",
+      "impl": "delete_role：仅允许删除自定义角色；两个系统角色始终保留。",
+      "title": "账户/用户/鉴权 · 删除（DELETE /roles/{role_id}）",
+      "fp_id": "FP-2eaeabc3",
+      "test_points": [
+        "TP-048",
+        "TP-049"
+      ],
+      "tp_count": 2
+    },
+    {
+      "file_path": "backend/research-agent-source/tools/auth/admin_routes.py",
+      "name": "DELETE /users/{user_id}",
+      "description": "账户/用户/鉴权 · 删除：接口 DELETE /users/{user_id}；实现参考 delete_user：删除 user。admin 不能删自己。",
+      "ftype": "api",
+      "method": "DELETE",
+      "path": "/users/{user_id}",
+      "loc": {
+        "start": 182,
+        "end": 200
+      },
+      "module": "账户/用户/鉴权",
+      "action": "删除",
+      "semantic": "账户/用户/鉴权 · 删除",
+      "impl": "delete_user：删除 user。admin 不能删自己。",
+      "title": "账户/用户/鉴权 · 删除（DELETE /users/{user_id}）",
+      "fp_id": "FP-49b47738",
+      "test_points": [
+        "TP-040",
+        "TP-041"
+      ],
+      "tp_count": 2
+    },
+    {
+      "file_path": "backend/research-agent-source/tools/scheduler/api.py",
+      "name": "DELETE /{schedule_id}",
+      "description": "线程 · 调度同步：接口 DELETE /{schedule_id}；实现参考 delete_schedule：删除一条 schedule(仅 owner)。",
+      "ftype": "api",
+      "method": "DELETE",
+      "path": "/{schedule_id}",
+      "loc": {
+        "start": 129,
+        "end": 143
+      },
+      "module": "线程",
+      "action": "调度同步",
+      "semantic": "线程 · 调度同步",
+      "impl": "delete_schedule：删除一条 schedule(仅 owner)。",
+      "title": "线程 · 调度同步（DELETE /{schedule_id}）",
+      "fp_id": "FP-5e173d23",
+      "test_points": [
+        "TP-071",
+        "TP-072"
+      ],
+      "tp_count": 2
+    },
+    {
+      "file_path": "backend/research-agent-source/tools/wechat_channel/admin_api.py",
+      "name": "GET /accounts/{account_id}/whitelist",
+      "description": "账户/用户/鉴权 · 查询：接口 GET /accounts/{account_id}/whitelist；实现参考 get_whitelist：列出某账号的白名单。",
+      "ftype": "api",
+      "method": "GET",
+      "path": "/accounts/{account_id}/whitelist",
+      "loc": {
+        "start": 359,
+        "end": 366
+      },
+      "module": "账户/用户/鉴权",
+      "action": "查询",
+      "semantic": "账户/用户/鉴权 · 查询",
+      "impl": "get_whitelist：列出某账号的白名单。",
+      "title": "账户/用户/鉴权 · 查询（GET /accounts/{account_id}/whitelist）",
+      "fp_id": "FP-d8ab6080",
+      "test_points": [
+        "TP-090",
+        "TP-091"
+      ],
+      "tp_count": 2
+    },
+    {
+      "file_path": "frontend/mock-server/server.py",
+      "name": "GET /api/v1/threads/{tid}",
+      "description": "线程 · 会话线程：接口 GET /api/v1/threads/{tid}；实现参考 get_thread",
+      "ftype": "api",
+      "method": "GET",
+      "path": "/api/v1/threads/{tid}",
+      "loc": {
+        "start": 204,
+        "end": 211
+      },
+      "module": "线程",
+      "action": "会话线程",
+      "semantic": "线程 · 会话线程",
+      "impl": "get_thread",
+      "title": "线程 · 会话线程（GET /api/v1/threads/{tid}）",
+      "fp_id": "FP-d08046c2",
+      "test_points": [
+        "TP-007",
+        "TP-008"
+      ],
+      "tp_count": 2
+    },
+    {
+      "file_path": "frontend/mock-server/server.py",
+      "name": "GET /api/v1/threads/{tid}/artifact/preview",
+      "description": "线程 · 审批审核：接口 GET /api/v1/threads/{tid}/artifact/preview；实现参考 artifact_preview",
+      "ftype": "api",
+      "method": "GET",
+      "path": "/api/v1/threads/{tid}/artifact/preview",
+      "loc": {
+        "start": 337,
+        "end": 353
+      },
+      "module": "线程",
+      "action": "审批审核",
+      "semantic": "线程 · 审批审核",
+      "impl": "artifact_preview",
+      "title": "线程 · 审批审核（GET /api/v1/threads/{tid}/artifact/preview）",
+      "fp_id": "FP-b65000bd",
+      "test_points": [
+        "TP-013",
+        "TP-014"
+      ],
+      "tp_count": 2
+    },
+    {
+      "file_path": "frontend/mock-server/server.py",
+      "name": "GET /api/v1/threads/{tid}/result/{name}",
+      "description": "线程 · 会话线程：接口 GET /api/v1/threads/{tid}/result/{name}；实现参考 get_result",
+      "ftype": "api",
+      "method": "GET",
+      "path": "/api/v1/threads/{tid}/result/{name}",
+      "loc": {
+        "start": 230,
+        "end": 238
+      },
+      "module": "线程",
+      "action": "会话线程",
+      "semantic": "线程 · 会话线程",
+      "impl": "get_result",
+      "title": "线程 · 会话线程（GET /api/v1/threads/{tid}/result/{name}）",
+      "fp_id": "FP-4f4c303d",
+      "test_points": [
+        "TP-011",
+        "TP-012"
+      ],
+      "tp_count": 2
+    },
+    {
+      "file_path": "backend/research-agent-source/tools/wechat_channel/admin_api.py",
+      "name": "GET /dl/{short_id}",
+      "description": "产物/文档 · 导出下载：接口 GET /dl/{short_id}；实现参考 download_artifact：短链 → 产物下载。强制 ``Content-Disposition: attachment``，避免 inline 打开。",
+      "ftype": "api",
+      "method": "GET",
+      "path": "/dl/{short_id}",
+      "loc": {
+        "start": 411,
+        "end": 481
+      },
+      "module": "产物/文档",
+      "action": "导出下载",
+      "semantic": "产物/文档 · 导出下载",
+      "impl": "download_artifact：短链 → 产物下载。强制 ``Content-Disposition: attachment``，避免 inline 打开。",
+      "title": "产物/文档 · 导出下载（GET /dl/{short_id}）",
+      "fp_id": "FP-942506ae",
+      "test_points": [
+        "TP-096",
+        "TP-097"
+      ],
+      "tp_count": 2
+    },
+    {
+      "file_path": "backend/research-agent-source/tools/audit_kb_admin/admin_api.py",
+      "name": "GET /documents/{src_id}/content",
+      "description": "产物/文档 · 产物文档：接口 GET /documents/{src_id}/content；实现参考 document_content：直接读取知识库数据库中的文档内容（用于无物理文件的案例预览）。",
+      "ftype": "api",
+      "method": "GET",
+      "path": "/documents/{src_id}/content",
+      "loc": {
+        "start": 261,
+        "end": 303
+      },
+      "module": "产物/文档",
+      "action": "产物文档",
+      "semantic": "产物/文档 · 产物文档",
+      "impl": "document_content：直接读取知识库数据库中的文档内容（用于无物理文件的案例预览）。",
+      "title": "产物/文档 · 产物文档（GET /documents/{src_id}/content）",
+      "fp_id": "FP-e245cd13",
+      "test_points": [
+        "TP-031",
+        "TP-032"
+      ],
+      "tp_count": 2
+    },
+    {
+      "file_path": "backend/research-agent-source/tools/audit_kb_admin/admin_api.py",
+      "name": "GET /documents/{src_id}/diff",
+      "description": "产物/文档 · 产物文档：接口 GET /documents/{src_id}/diff；实现参考 document_diff：版本比对：返回段落级 diff（当前实现返回全文，前端做段落比对）。",
+      "ftype": "api",
+      "method": "GET",
+      "path": "/documents/{src_id}/diff",
+      "loc": {
+        "start": 307,
+        "end": 363
+      },
+      "module": "产物/文档",
+      "action": "产物文档",
+      "semantic": "产物/文档 · 产物文档",
+      "impl": "document_diff：版本比对：返回段落级 diff（当前实现返回全文，前端做段落比对）。",
+      "title": "产物/文档 · 产物文档（GET /documents/{src_id}/diff）",
+      "fp_id": "FP-326f35f8",
+      "test_points": [
+        "TP-033",
+        "TP-034"
+      ],
+      "tp_count": 2
+    },
+    {
+      "file_path": "backend/research-agent-source/tools/wechat_channel/admin_api.py",
+      "name": "GET /login/{session_key}",
+      "description": "账户/用户/鉴权 · 登录鉴权：接口 GET /login/{session_key}；实现参考 login_status：轮询扫码状态（一次 poll_qr_status 调用即返回）。",
+      "ftype": "api",
+      "method": "GET",
+      "path": "/login/{session_key}",
+      "loc": {
+        "start": 123,
+        "end": 232
+      },
+      "module": "账户/用户/鉴权",
+      "action": "登录鉴权",
+      "semantic": "账户/用户/鉴权 · 登录鉴权",
+      "impl": "login_status：轮询扫码状态（一次 poll_qr_status 调用即返回）。",
+      "title": "账户/用户/鉴权 · 登录鉴权（GET /login/{session_key}）",
+      "fp_id": "FP-e14195fe",
+      "test_points": [
+        "TP-078",
+        "TP-079"
+      ],
+      "tp_count": 2
+    },
+    {
+      "file_path": "backend/research-agent-source/tools/auth/admin_routes.py",
+      "name": "PATCH /users/{user_id}",
+      "description": "账户/用户/鉴权 · 部分更新：接口 PATCH /users/{user_id}；实现参考 patch_user：改 is_admin / status / password。",
+      "ftype": "api",
+      "method": "PATCH",
+      "path": "/users/{user_id}",
+      "loc": {
+        "start": 136,
+        "end": 178
+      },
+      "module": "账户/用户/鉴权",
+      "action": "部分更新",
+      "semantic": "账户/用户/鉴权 · 部分更新",
+      "impl": "patch_user：改 is_admin / status / password。",
+      "title": "账户/用户/鉴权 · 部分更新（PATCH /users/{user_id}）",
+      "fp_id": "FP-78327682",
+      "test_points": [
+        "TP-038",
+        "TP-039"
+      ],
+      "tp_count": 2
+    },
+    {
+      "file_path": "backend/research-agent-source/tools/wechat_channel/admin_api.py",
+      "name": "POST /accounts/{account_id}/start",
+      "description": "账户/用户/鉴权 · 提交/创建：接口 POST /accounts/{account_id}/start；实现参考 start_account_monitor：启动指定账号的 monitor（加入 MonitorPool）。",
+      "ftype": "api",
+      "method": "POST",
+      "path": "/accounts/{account_id}/start",
+      "loc": {
+        "start": 317,
+        "end": 326
+      },
+      "module": "账户/用户/鉴权",
+      "action": "提交/创建",
+      "semantic": "账户/用户/鉴权 · 提交/创建",
+      "impl": "start_account_monitor：启动指定账号的 monitor（加入 MonitorPool）。",
+      "title": "账户/用户/鉴权 · 提交/创建（POST /accounts/{account_id}/start）",
+      "fp_id": "FP-df4e1244",
+      "test_points": [
+        "TP-085",
+        "TP-086"
+      ],
+      "tp_count": 2
+    },
+    {
+      "file_path": "backend/research-agent-source/tools/wechat_channel/admin_api.py",
+      "name": "POST /accounts/{account_id}/stop",
+      "description": "账户/用户/鉴权 · 取消中止：接口 POST /accounts/{account_id}/stop；实现参考 stop_account_monitor：停止指定账号的 monitor（保留凭据）。",
+      "ftype": "api",
+      "method": "POST",
+      "path": "/accounts/{account_id}/stop",
+      "loc": {
+        "start": 330,
+        "end": 336
+      },
+      "module": "账户/用户/鉴权",
+      "action": "取消中止",
+      "semantic": "账户/用户/鉴权 · 取消中止",
+      "impl": "stop_account_monitor：停止指定账号的 monitor（保留凭据）。",
+      "title": "账户/用户/鉴权 · 取消中止（POST /accounts/{account_id}/stop）",
+      "fp_id": "FP-6b3b1099",
+      "test_points": [
+        "TP-087",
+        "TP-088"
+      ],
+      "tp_count": 2
+    },
+    {
+      "file_path": "backend/research-agent-source/tools/wechat_channel/admin_api.py",
+      "name": "POST /accounts/{account_id}/whitelist",
+      "description": "账户/用户/鉴权 · 提交/创建：接口 POST /accounts/{account_id}/whitelist；实现参考 add_to_whitelist：把 user_id 加入某账号白名单。",
+      "ftype": "api",
+      "method": "POST",
+      "path": "/accounts/{account_id}/whitelist",
+      "loc": {
+        "start": 370,
+        "end": 386
+      },
+      "module": "账户/用户/鉴权",
+      "action": "提交/创建",
+      "semantic": "账户/用户/鉴权 · 提交/创建",
+      "impl": "add_to_whitelist：把 user_id 加入某账号白名单。",
+      "title": "账户/用户/鉴权 · 提交/创建（POST /accounts/{account_id}/whitelist）",
+      "fp_id": "FP-3ce048fe",
+      "test_points": [
+        "TP-092",
+        "TP-093"
+      ],
+      "tp_count": 2
+    },
+    {
+      "file_path": "frontend/mock-server/server.py",
+      "name": "POST /api/v1/threads/{tid}/abort",
+      "description": "线程 · 取消中止：接口 POST /api/v1/threads/{tid}/abort；实现参考 abort_thread：中断运行中任务（对齐真后端 POST /threads/{tid}/abort）：",
+      "ftype": "api",
+      "method": "POST",
+      "path": "/api/v1/threads/{tid}/abort",
+      "loc": {
+        "start": 215,
+        "end": 226
+      },
+      "module": "线程",
+      "action": "取消中止",
+      "semantic": "线程 · 取消中止",
+      "impl": "abort_thread：中断运行中任务（对齐真后端 POST /threads/{tid}/abort）：",
+      "title": "线程 · 取消中止（POST /api/v1/threads/{tid}/abort）",
+      "fp_id": "FP-f6cd93f4",
+      "test_points": [
+        "TP-009",
+        "TP-010"
+      ],
+      "tp_count": 2
+    },
+    {
+      "file_path": "backend/research-agent-source/tools/audit_kb_admin/admin_api.py",
+      "name": "POST /pending/{task_id}/confirm",
+      "description": "审计/审核看板 · 审批审核：接口 POST /pending/{task_id}/confirm；实现参考 confirm_pending：审计老师确认任务（废止核验 / 政策查阅）。",
+      "ftype": "api",
+      "method": "POST",
+      "path": "/pending/{task_id}/confirm",
+      "loc": {
+        "start": 180,
+        "end": 215
+      },
+      "module": "审计/审核看板",
+      "action": "审批审核",
+      "semantic": "审计/审核看板 · 审批审核",
+      "impl": "confirm_pending：审计老师确认任务（废止核验 / 政策查阅）。",
+      "title": "审计/审核看板 · 审批审核（POST /pending/{task_id}/confirm）",
+      "fp_id": "FP-13621e82",
+      "test_points": [
+        "TP-026",
+        "TP-027"
+      ],
+      "tp_count": 2
+    },
+    {
+      "file_path": "backend/research-agent-source/tools/audit_kb_admin/admin_api.py",
+      "name": "POST /pending/{task_id}/dismiss",
+      "description": "审计/审核看板 · 审批审核：接口 POST /pending/{task_id}/dismiss；实现参考 dismiss_pending：审计老师驳回/忽略任务。",
+      "ftype": "api",
+      "method": "POST",
+      "path": "/pending/{task_id}/dismiss",
+      "loc": {
+        "start": 219,
+        "end": 227
+      },
+      "module": "审计/审核看板",
+      "action": "审批审核",
+      "semantic": "审计/审核看板 · 审批审核",
+      "impl": "dismiss_pending：审计老师驳回/忽略任务。",
+      "title": "审计/审核看板 · 审批审核（POST /pending/{task_id}/dismiss）",
+      "fp_id": "FP-a63a8123",
+      "test_points": [
+        "TP-028",
+        "TP-029"
+      ],
+      "tp_count": 2
+    },
+    {
+      "file_path": "backend/research-agent-source/tools/scheduler/api.py",
+      "name": "POST /{schedule_id}/run",
+      "description": "线程 · 调度同步：接口 POST /{schedule_id}/run；实现参考 run_schedule：立即触发一次该 schedule（不修改 schedule 配置；后台跑，不阻塞返回）。",
+      "ftype": "api",
+      "method": "POST",
+      "path": "/{schedule_id}/run",
+      "loc": {
+        "start": 148,
+        "end": 171
+      },
+      "module": "线程",
+      "action": "调度同步",
+      "semantic": "线程 · 调度同步",
+      "impl": "run_schedule：立即触发一次该 schedule（不修改 schedule 配置；后台跑，不阻塞返回）。",
+      "title": "线程 · 调度同步（POST /{schedule_id}/run）",
+      "fp_id": "FP-59d19239",
+      "test_points": [
+        "TP-073",
+        "TP-074"
+      ],
+      "tp_count": 2
+    },
+    {
+      "file_path": "backend/research-agent-source/tools/scheduler/api.py",
+      "name": "POST /{schedule_id}/toggle",
+      "description": "线程 · 调度同步：接口 POST /{schedule_id}/toggle；实现参考 toggle_schedule：切换 enabled 状态(仅 owner)。",
+      "ftype": "api",
+      "method": "POST",
+      "path": "/{schedule_id}/toggle",
+      "loc": {
+        "start": 176,
+        "end": 199
+      },
+      "module": "线程",
+      "action": "调度同步",
+      "semantic": "线程 · 调度同步",
+      "impl": "toggle_schedule：切换 enabled 状态(仅 owner)。",
+      "title": "线程 · 调度同步（POST /{schedule_id}/toggle）",
+      "fp_id": "FP-2405813e",
+      "test_points": [
+        "TP-075",
+        "TP-076"
+      ],
+      "tp_count": 2
+    },
+    {
+      "file_path": "backend/research-agent-source/tools/auth/rbac.py",
+      "name": "PUT /roles/{role_id}",
+      "description": "账户/用户/鉴权 · 更新：接口 PUT /roles/{role_id}；实现参考 update_role",
+      "ftype": "api",
+      "method": "PUT",
+      "path": "/roles/{role_id}",
+      "loc": {
+        "start": 227,
+        "end": 233
+      },
+      "module": "账户/用户/鉴权",
+      "action": "更新",
+      "semantic": "账户/用户/鉴权 · 更新",
+      "impl": "update_role",
+      "title": "账户/用户/鉴权 · 更新（PUT /roles/{role_id}）",
+      "fp_id": "FP-194b0998",
+      "test_points": [
+        "TP-046",
+        "TP-047"
+      ],
+      "tp_count": 2
+    },
+    {
+      "file_path": "backend/research-agent-source/tools/auth/rbac.py",
+      "name": "PUT /users/{user_id}/role",
+      "description": "账户/用户/鉴权 · 更新：接口 PUT /users/{user_id}/role；实现参考 assign_role",
+      "ftype": "api",
+      "method": "PUT",
+      "path": "/users/{user_id}/role",
+      "loc": {
+        "start": 284,
+        "end": 295
+      },
+      "module": "账户/用户/鉴权",
+      "action": "更新",
+      "semantic": "账户/用户/鉴权 · 更新",
+      "impl": "assign_role",
+      "title": "账户/用户/鉴权 · 更新（PUT /users/{user_id}/role）",
+      "fp_id": "FP-d38ecd31",
+      "test_points": [
+        "TP-051",
+        "TP-052"
+      ],
+      "tp_count": 2
+    },
+    {
+      "file_path": "backend/research-agent-source/tools/scheduler/api.py",
+      "name": "PUT /{schedule_id}",
+      "description": "线程 · 调度同步：接口 PUT /{schedule_id}；实现参考 update_schedule：部分更新一条 schedule(仅 owner);不传 schedule 不更新。",
+      "ftype": "api",
+      "method": "PUT",
+      "path": "/{schedule_id}",
+      "loc": {
+        "start": 98,
+        "end": 125
+      },
+      "module": "线程",
+      "action": "调度同步",
+      "semantic": "线程 · 调度同步",
+      "impl": "update_schedule：部分更新一条 schedule(仅 owner);不传 schedule 不更新。",
+      "title": "线程 · 调度同步（PUT /{schedule_id}）",
+      "fp_id": "FP-6ba2cb9b",
+      "test_points": [
+        "TP-069",
+        "TP-070"
+      ],
+      "tp_count": 2
+    },
+    {
+      "file_path": "backend/research-agent-source/tools/wechat_channel/admin_api.py",
+      "name": "GET /accounts",
+      "description": "账户/用户/鉴权 · 查询：接口 GET /accounts；实现参考 list_accounts：列出所有已登录账号 + 每个账号的 monitor 状态。",
+      "ftype": "api",
+      "method": "GET",
+      "path": "/accounts",
+      "loc": {
+        "start": 256,
+        "end": 274
+      },
+      "module": "账户/用户/鉴权",
+      "action": "查询",
+      "semantic": "账户/用户/鉴权 · 查询",
+      "impl": "list_accounts：列出所有已登录账号 + 每个账号的 monitor 状态。",
+      "title": "账户/用户/鉴权 · 查询（GET /accounts）",
+      "fp_id": "FP-e7472679",
+      "test_points": [
+        "TP-082"
+      ],
+      "tp_count": 1
+    },
+    {
+      "file_path": "frontend/mock-server/server.py",
+      "name": "GET /api/v1/agents",
+      "description": "智能体 · 智能体编排：接口 GET /api/v1/agents；实现参考 list_agents",
+      "ftype": "api",
+      "method": "GET",
+      "path": "/api/v1/agents",
+      "loc": {
+        "start": 196,
+        "end": 200
+      },
+      "module": "智能体",
+      "action": "智能体编排",
+      "semantic": "智能体 · 智能体编排",
+      "impl": "list_agents",
+      "title": "智能体 · 智能体编排（GET /api/v1/agents）",
+      "fp_id": "FP-c79dd3d3",
+      "test_points": [
+        "TP-006"
+      ],
+      "tp_count": 1
+    },
+    {
+      "file_path": "backend/research-agent-source/tools/onlyoffice_bridge/routes.py",
+      "name": "GET /api/v1/artifact/office-onlyoffice-config",
+      "description": "产物/文档 · 产物文档：接口 GET /api/v1/artifact/office-onlyoffice-config；实现参考 office_onlyoffice_config：构造 OnlyOffice 编辑器配置(含 JWT),支持 docx / xlsx / pptx。",
+      "ftype": "api",
+      "method": "GET",
+      "path": "/api/v1/artifact/office-onlyoffice-config",
+      "loc": {
+        "start": 346,
+        "end": 407
+      },
+      "module": "产物/文档",
+      "action": "产物文档",
+      "semantic": "产物/文档 · 产物文档",
+      "impl": "office_onlyoffice_config：构造 OnlyOffice 编辑器配置(含 JWT),支持 docx / xlsx / pptx。",
+      "title": "产物/文档 · 产物文档（GET /api/v1/artifact/office-onlyoffice-config）",
+      "fp_id": "FP-d0186c09",
+      "test_points": [
+        "TP-067"
+      ],
+      "tp_count": 1
+    },
+    {
+      "file_path": "frontend/mock-server/server.py",
+      "name": "GET /api/v1/auth/me",
+      "description": "账户/用户/鉴权 · 登录鉴权：接口 GET /api/v1/auth/me；实现参考 me",
+      "ftype": "api",
+      "method": "GET",
+      "path": "/api/v1/auth/me",
+      "loc": {
+        "start": 170,
+        "end": 182
+      },
+      "module": "账户/用户/鉴权",
+      "action": "登录鉴权",
+      "semantic": "账户/用户/鉴权 · 登录鉴权",
+      "impl": "me",
+      "title": "账户/用户/鉴权 · 登录鉴权（GET /api/v1/auth/me）",
+      "fp_id": "FP-0cab29dd",
+      "test_points": [
+        "TP-004"
+      ],
+      "tp_count": 1
+    },
+    {
+      "file_path": "frontend/mock-server/server.py",
+      "name": "GET /api/v1/health",
+      "description": "健康/其它 · 健康检查：接口 GET /api/v1/health；实现参考 health",
+      "ftype": "api",
+      "method": "GET",
+      "path": "/api/v1/health",
+      "loc": {
+        "start": 529,
+        "end": 530
+      },
+      "module": "健康/其它",
+      "action": "健康检查",
+      "semantic": "健康/其它 · 健康检查",
+      "impl": "health",
+      "title": "健康/其它 · 健康检查（GET /api/v1/health）",
+      "fp_id": "FP-85b27ee2",
+      "test_points": [
+        "TP-020"
+      ],
+      "tp_count": 1
+    },
+    {
+      "file_path": "backend/research-agent-source/tools/onlyoffice_bridge/routes.py",
+      "name": "GET /api/v1/onlyoffice-status",
+      "description": "产物/文档 · 健康检查：接口 GET /api/v1/onlyoffice-status；实现参考 onlyoffice_status：返回 DS 是否可达 + URL,供前端探测后决定走 DS 编辑器还是 PDF 回退。",
+      "ftype": "api",
+      "method": "GET",
+      "path": "/api/v1/onlyoffice-status",
+      "loc": {
+        "start": 283,
+        "end": 337
+      },
+      "module": "产物/文档",
+      "action": "健康检查",
+      "semantic": "产物/文档 · 健康检查",
+      "impl": "onlyoffice_status：返回 DS 是否可达 + URL,供前端探测后决定走 DS 编辑器还是 PDF 回退。",
+      "title": "产物/文档 · 健康检查（GET /api/v1/onlyoffice-status）",
+      "fp_id": "FP-179adbe5",
+      "test_points": [
+        "TP-066"
+      ],
+      "tp_count": 1
+    },
+    {
+      "file_path": "frontend/mock-server/server.py",
+      "name": "GET /api/v1/threads",
+      "description": "线程 · 会话线程：接口 GET /api/v1/threads；实现参考 list_threads",
+      "ftype": "api",
+      "method": "GET",
+      "path": "/api/v1/threads",
+      "loc": {
+        "start": 187,
+        "end": 192
+      },
+      "module": "线程",
+      "action": "会话线程",
+      "semantic": "线程 · 会话线程",
+      "impl": "list_threads",
+      "title": "线程 · 会话线程（GET /api/v1/threads）",
+      "fp_id": "FP-b7cd0f90",
+      "test_points": [
+        "TP-005"
+      ],
+      "tp_count": 1
+    },
+    {
+      "file_path": "backend/research-agent-source/tools/email_list/routes.py",
+      "name": "GET /ask-quota",
+      "description": "对话/会话 · 对话交互：接口 GET /ask-quota；实现参考 ask_quota：「问福享」今日剩余次数（每人每天 1 次）。",
+      "ftype": "api",
+      "method": "GET",
+      "path": "/ask-quota",
+      "loc": {
+        "start": 314,
+        "end": 317
+      },
+      "module": "对话/会话",
+      "action": "对话交互",
+      "semantic": "对话/会话 · 对话交互",
+      "impl": "ask_quota：「问福享」今日剩余次数（每人每天 1 次）。",
+      "title": "对话/会话 · 对话交互（GET /ask-quota）",
+      "fp_id": "FP-bd8f759f",
+      "test_points": [
+        "TP-064"
+      ],
+      "tp_count": 1
+    },
+    {
+      "file_path": "backend/research-agent-source/tools/auth/rbac.py",
+      "name": "GET /catalog",
+      "description": "审计/审核看板 · 查询：接口 GET /catalog；实现参考 catalog",
+      "ftype": "api",
+      "method": "GET",
+      "path": "/catalog",
+      "loc": {
+        "start": 206,
+        "end": 212
+      },
+      "module": "审计/审核看板",
+      "action": "查询",
+      "semantic": "审计/审核看板 · 查询",
+      "impl": "catalog",
+      "title": "审计/审核看板 · 查询（GET /catalog）",
+      "fp_id": "FP-3d7331e6",
+      "test_points": [
+        "TP-043"
+      ],
+      "tp_count": 1
+    },
+    {
+      "file_path": "frontend/mock-server/server.py",
+      "name": "GET /diag-log",
+      "description": "对话/会话 · 查询：接口 GET /diag-log；实现参考 diag_log_read",
+      "ftype": "api",
+      "method": "GET",
+      "path": "/diag-log",
+      "loc": {
+        "start": 524,
+        "end": 525
+      },
+      "module": "对话/会话",
+      "action": "查询",
+      "semantic": "对话/会话 · 查询",
+      "impl": "diag_log_read",
+      "title": "对话/会话 · 查询（GET /diag-log）",
+      "fp_id": "FP-d9dc1169",
+      "test_points": [
+        "TP-019"
+      ],
+      "tp_count": 1
+    },
+    {
+      "file_path": "backend/research-agent-source/tools/audit_kb/api.py",
+      "name": "GET /document",
+      "description": "产物/文档 · 产物文档：接口 GET /document；实现参考 get_audit_kb_document",
+      "ftype": "api",
+      "method": "GET",
+      "path": "/document",
+      "loc": {
+        "start": 250,
+        "end": 295
+      },
+      "module": "产物/文档",
+      "action": "产物文档",
+      "semantic": "产物/文档 · 产物文档",
+      "impl": "get_audit_kb_document",
+      "title": "产物/文档 · 产物文档（GET /document）",
+      "fp_id": "FP-c0ed59cb",
+      "test_points": [
+        "TP-021"
+      ],
+      "tp_count": 1
+    },
+    {
+      "file_path": "backend/research-agent-source/tools/audit_kb/api.py",
+      "name": "GET /document_info",
+      "description": "产物/文档 · 产物文档：接口 GET /document_info；实现参考 get_audit_kb_document_info：返回文件元信息（类型、总页数）。轻量、不渲染大内容。",
+      "ftype": "api",
+      "method": "GET",
+      "path": "/document_info",
+      "loc": {
+        "start": 299,
+        "end": 345
+      },
+      "module": "产物/文档",
+      "action": "产物文档",
+      "semantic": "产物/文档 · 产物文档",
+      "impl": "get_audit_kb_document_info：返回文件元信息（类型、总页数）。轻量、不渲染大内容。",
+      "title": "产物/文档 · 产物文档（GET /document_info）",
+      "fp_id": "FP-720a39fc",
+      "test_points": [
+        "TP-022"
+      ],
+      "tp_count": 1
+    },
+    {
+      "file_path": "backend/research-agent-source/tools/audit_kb_admin/admin_api.py",
+      "name": "GET /documents",
+      "description": "产物/文档 · 产物文档：接口 GET /documents；实现参考 list_documents：列出知识库文件清单（读现有 audit_kb sqlite）。",
+      "ftype": "api",
+      "method": "GET",
+      "path": "/documents",
+      "loc": {
+        "start": 231,
+        "end": 257
+      },
+      "module": "产物/文档",
+      "action": "产物文档",
+      "semantic": "产物/文档 · 产物文档",
+      "impl": "list_documents：列出知识库文件清单（读现有 audit_kb sqlite）。",
+      "title": "产物/文档 · 产物文档（GET /documents）",
+      "fp_id": "FP-695b8ad8",
+      "test_points": [
+        "TP-030"
+      ],
+      "tp_count": 1
+    },
+    {
+      "file_path": "backend/research-agent-source/tools/audit_kb_admin/admin_api.py",
+      "name": "GET /logs",
+      "description": "审计/审核看板 · 查询：接口 GET /logs；实现参考 list_logs：审计日志查询。",
+      "ftype": "api",
+      "method": "GET",
+      "path": "/logs",
+      "loc": {
+        "start": 367,
+        "end": 387
+      },
+      "module": "审计/审核看板",
+      "action": "查询",
+      "semantic": "审计/审核看板 · 查询",
+      "impl": "list_logs：审计日志查询。",
+      "title": "审计/审核看板 · 查询（GET /logs）",
+      "fp_id": "FP-ad480b34",
+      "test_points": [
+        "TP-035"
+      ],
+      "tp_count": 1
+    }
+  ]
+}

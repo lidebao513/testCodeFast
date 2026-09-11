@@ -1,0 +1,109 @@
+{
+  "generated_at": "2026-09-10T17:31:49",
+  "target": "research-agent",
+  "repo": "C:/Users/EDY/WorkBuddy/testCodeFast/work/targets/research-agent",
+  "permission": {
+    "baseline": "readonly",
+    "phases": [
+      {
+        "phase": "拉取前（置只读）",
+        "expect_blocked": true,
+        "write_allowed": false,
+        "passed": true,
+        "detail": "写入被拒绝: PermissionError: [Errno 13] Permission denied: 'C:/Users/EDY/WorkBuddy/testCodeFast/work/targets/research-agent\\\\README.md' → 当前只读生效"
+      },
+      {
+        "phase": "拉取期间（临时读写）",
+        "expect_blocked": false,
+        "write_allowed": true,
+        "passed": true,
+        "detail": "以读写方式打开已有代码文件成功（未修改内容）→ 当前可写 ｜ 新建并写入临时文件成功（已清理）→ 真实写入成功"
+      },
+      {
+        "phase": "真实 pull() 执行",
+        "expect_blocked": null,
+        "pull_status": "ok",
+        "perm": {
+          "readonly_before_pull": true,
+          "restored_after_pull": true,
+          "note": "拉取前已置只读；写仓库操作期间临时读写；拉取完成已恢复只读"
+        },
+        "passed": true,
+        "detail": "pull status=ok；changed_count=573；perm.readonly_before_pull=True；perm.restored_after_pull=True"
+      },
+      {
+        "phase": "拉取后（恢复只读）",
+        "expect_blocked": true,
+        "write_allowed": false,
+        "passed": true,
+        "detail": "写入被拒绝: PermissionError: [Errno 13] Permission denied: 'C:/Users/EDY/WorkBuddy/testCodeFast/work/targets/research-agent\\\\README.md' → 当前只读生效"
+      }
+    ],
+    "overall_passed": true
+  },
+  "normal_boundary": {
+    "name": "normal_boundary",
+    "scope": "ScopeSpec(tp_types={'正常', '边界'}, kinds=None)",
+    "elapsed_sec": 2.3,
+    "total": 259,
+    "by_type": {
+      "正常": 165,
+      "边界": 94
+    },
+    "by_tag": {
+      "全量": 259
+    },
+    "module_count": 24,
+    "fp_total": 165,
+    "coverage": "100.0%",
+    "orphan": 0,
+    "kind_dist": {
+      "api": 188,
+      "business": 69,
+      "ui": 2
+    },
+    "all_api": false,
+    "out": "C:/Users/EDY/WorkBuddy/testCodeFast/work/research-agent-test/validation\\normal_boundary\\test_points.json"
+  },
+  "interface": {
+    "name": "interface",
+    "scope": "ScopeSpec(tp_types={'正常', '安全', '边界', '异常'}, kinds={'api'})",
+    "elapsed_sec": 2.7,
+    "total": 329,
+    "by_type": {
+      "正常": 94,
+      "安全": 105,
+      "边界": 94,
+      "异常": 36
+    },
+    "by_tag": {
+      "全量": 329
+    },
+    "module_count": 11,
+    "fp_total": 165,
+    "coverage": "57.0%",
+    "orphan": 0,
+    "kind_dist": {
+      "api": 329
+    },
+    "all_api": true,
+    "out": "C:/Users/EDY/WorkBuddy/testCodeFast/work/research-agent-test/validation\\interface\\test_points.json"
+  },
+  "structured_cases": {
+    "ok": true,
+    "case_count": 50,
+    "modules": 8,
+    "by_scope": {
+      "正常": 13,
+      "异常": 15,
+      "安全": 12,
+      "边界": 10
+    },
+    "missing_expect": [],
+    "missing_ref": [],
+    "missing_assert": [],
+    "non_api_cases": [],
+    "all_api": true
+  },
+  "overall_passed": true
+}

@@ -2,16 +2,28 @@
 MVP 聚焦 CRUD 与本地路径登记；克隆/部署动作后续阶段补全。
 平台对目标仓库只读：绝不 push / commit 目标。
 """
+
 import json
-import sqlite3
+
 from backend.db import get_conn
-from backend.config import settings
 
 
 class ProjectManager:
-    def add(self, name, git_url=None, branch="main", ptype="pc", local_path=None,
-            run_command=None, port=None, base_url=None, auth_type="none",
-            auth_config=None, fixtures=None, health_url=None):
+    def add(
+        self,
+        name,
+        git_url=None,
+        branch="main",
+        ptype="pc",
+        local_path=None,
+        run_command=None,
+        port=None,
+        base_url=None,
+        auth_type="none",
+        auth_config=None,
+        fixtures=None,
+        health_url=None,
+    ):
         conn = get_conn()
         cur = conn.cursor()
         cur.execute(
@@ -19,9 +31,21 @@ class ProjectManager:
                (name, git_url, branch, type, local_path, run_command, port, base_url,
                 auth_type, auth_config, fixtures, health_url, status)
                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-            (name, git_url, branch, ptype, local_path, run_command, port, base_url,
-             auth_type, json.dumps(auth_config) if auth_config else None,
-             json.dumps(fixtures) if fixtures else None, health_url, "active"),
+            (
+                name,
+                git_url,
+                branch,
+                ptype,
+                local_path,
+                run_command,
+                port,
+                base_url,
+                auth_type,
+                json.dumps(auth_config) if auth_config else None,
+                json.dumps(fixtures) if fixtures else None,
+                health_url,
+                "active",
+            ),
         )
         pid = cur.lastrowid
         conn.commit()

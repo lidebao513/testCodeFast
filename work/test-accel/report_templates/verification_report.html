@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{{report_title}}</title>
+<style>
+ *{box-sizing:border-box}
+ body{margin:0;background:#0f1115;color:#e6e8eb;font-family:-apple-system,'Segoe UI',Roboto,'Microsoft YaHei',sans-serif;line-height:1.6}
+ .layout{display:flex;max-width:1400px;margin:0 auto}
+ /* ===== 侧边目录 ===== */
+ .toc{position:sticky;top:0;align-self:flex-start;width:230px;min-width:230px;height:100vh;
+      overflow-y:auto;padding:24px 12px;border-right:1px solid #232936;background:#0c0e13}
+ .toc h4{margin:0 0 12px;font-size:13px;color:#9aa3ad;text-transform:uppercase;letter-spacing:.5px;padding-left:10px}
+ .toc a{display:block;color:#b9c2cc;font-size:13px;text-decoration:none;padding:7px 10px;border-radius:6px;margin:2px 0}
+ .toc a:hover{background:#1a1f29;color:#e6e8eb}
+ .toc a.active{background:#22304a;color:#8ab4f8;border-left:3px solid #2f81f7}
+ .toc .toc-top{display:block;margin-bottom:12px;font-size:12px;color:#7fd1ff;padding:6px 10px}
+ /* ===== 主内容 ===== */
+ .wrap{flex:1;min-width:0;padding:32px 32px 80px}
+ header{border-bottom:1px solid #2a2f3a;padding-bottom:16px;margin-bottom:24px}
+ h1{font-size:26px;margin:0 0 8px;color:#fff}
+ .meta{color:#9aa3ad;font-size:13px}
+ h2{font-size:19px;margin:0;color:#7fd1ff;border-left:3px solid #2f81f7;padding-left:10px;cursor:pointer;user-select:none}
+ h2:hover{color:#a9dcff}
+ h3{font-size:15px;margin:20px 0 8px;color:#cdd3da}
+ table{width:100%;border-collapse:collapse;margin:10px 0;font-size:13px}
+ th,td{border:1px solid #2a2f3a;padding:8px 10px;text-align:left;vertical-align:top}
+ th{background:#1a1f29;color:#cdd3da;font-weight:600}
+ tr:nth-child(even) td{background:#151921}
+ tr.hidden{display:none}
+ .pass{color:#3fb950;font-weight:700}
+ .fail{color:#f85149;font-weight:700}
+ .warn{color:#d29922;font-weight:700}
+ .badge{display:inline-block;border-radius:4px;padding:1px 7px;font-size:12px;font-weight:700}
+ .badge.pass{background:#10261c;color:#3fb950;border:1px solid #1f6f43}
+ .badge.fail{background:#2d1517;color:#f85149;border:1px solid #6f2a2a}
+ .badge.warn{background:#2a2213;color:#d29922;border:1px solid #6f5722}
+ .tag{display:inline-block;background:#22304a;color:#8ab4f8;border-radius:4px;padding:1px 7px;font-size:12px}
+ .kpis{display:flex;gap:14px;flex-wrap:wrap;margin:18px 0}
+ .kpi{flex:1;min-width:150px;background:#161b24;border:1px solid #2a2f3a;border-radius:10px;padding:16px}
+ .kpi .n{font-size:28px;font-weight:800;color:#fff}
+ .kpi .l{font-size:12px;color:#9aa3ad;margin-top:4px}
+ .kpi.green .n{color:#3fb950} .kpi.red .n{color:#f85149}
+ .note{background:#161b24;border-left:3px solid #d29922;padding:10px 14px;font-size:13px;color:#d8c9a8;margin:10px 0}
+ .sec{color:#9aa3ad;font-size:14px}
+ .add{background:#10261c;border:1px solid #1f6f43;border-radius:8px;padding:4px 10px;color:#56d364;font-size:12px;font-weight:700;margin-left:8px}
+ td.step{max-width:340px;color:#b9c2cc;font-size:12px}
+ code{background:#1a1f29;border-radius:4px;padding:1px 5px;font-size:12px}
+ /* ===== 章节折叠 ===== */
+ .sec-block{margin:34px 0 0;scroll-margin-top:20px}
+ .sec-block > .sec-body{display:none;padding-top:12px}
+ .sec-block.open > .sec-body{display:block}
+ .sec-toggle{display:inline-block;width:22px;text-align:center;color:#2f81f7;font-weight:700;margin-right:4px}
+ .sec-count{font-size:12px;color:#9aa3ad;font-weight:400;margin-left:8px}
+ /* ===== 筛选条 ===== */
+ .filterbar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:10px 0 4px;padding:8px 10px;background:#12161d;border:1px solid #232936;border-radius:8px}
+ .filterbar .lbl{font-size:12px;color:#9aa3ad;margin-right:4px}
+ .filterbar button{background:#1a1f29;color:#b9c2cc;border:1px solid #2a2f3a;border-radius:5px;padding:3px 9px;font-size:12px;cursor:pointer}
+ .filterbar button:hover{background:#22304a;color:#8ab4f8}
+ .filterbar button.on{background:#22304a;color:#8ab4f8;border-color:#2f81f7}
+ .filterbar button.clear{background:transparent;border-color:#6f2a2a;color:#f85149}
+ .filterbar button.clear:hover{background:#2d1517}
+ .filterbar .cnt{font-size:12px;color:#56d364;margin-left:auto}
+ /* ===== 截图墙 ===== */
+ .shots{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;margin:14px 0}
+ .shot{background:#161b24;border:1px solid #2a2f3a;border-radius:10px;overflow:hidden}
+ .shot-h{padding:8px 12px;font-size:13px;border-bottom:1px solid #2a2f3a;display:flex;align-items:center;gap:8px}
+ .shot img{width:100%;display:block}
+ .shot img:hover{outline:2px solid #2f81f7}
+ ul{margin:8px 0;padding-left:22px} ol{margin:8px 0;padding-left:22px}
+ @media(max-width:900px){.toc{display:none}}
+</style></head><body>
+<div class="layout">
+<nav class="toc" id="toc">
+ <a class="toc-top" href="#top">↑ 返回顶部</a>
+ <h4>目录</h4>
+</nav>
+
+<div class="wrap" id="top">
+<header>
+ <h1>{{report_title}}</h1>
+ <div class="meta">{{report_meta_line}}</div>
+</header>
+
+<div class="kpis">
+ <div class="kpi"><div class="n">{{kpi_cases}}</div><div class="l">用例总数（活跃）</div></div>
+ <div class="kpi"><div class="n">{{kpi_tps}}</div><div class="l">测试点</div></div>
+ <div class="kpi"><div class="n">{{kpi_fps}}</div><div class="l">功能点</div></div>
+ <div class="kpi green"><div class="n">{{kpi_pass}}</div><div class="l">最近批次通过</div></div>
+ <div class="kpi red"><div class="n">{{kpi_fail}}</div><div class="l">最近批次失败/异常</div></div>
+ <div class="kpi"><div class="n">{{kpi_change}}</div><div class="l">变更面（功能点 新增/更新/移除）</div></div>
+</div>
+
+<section class="sec-block open" id="sec-1" data-title="一、变更摘要">
+ <h2><span class="sec-toggle">▾</span>一、变更摘要</h2>
+ <div class="sec-body">{{section_change}}</div>
+</section>
+
+<section class="sec-block" id="sec-2" data-title="二、测试点设计（按模块）" data-filter="dimension">
+ <h2><span class="sec-toggle">▸</span>二、测试点设计（按模块）<span class="sec-count">{{kpi_tps}} 项</span></h2>
+ <div class="sec-body">
+  <p class="sec">按功能模块组织的测试点（含维度：正常/边界/异常/安全），来源于代码结构自动分析。</p>
+  <div class="filterbar" data-target="table" data-col="2"><span class="lbl">维度：</span></div>
+  <table class="filt"><tr><th>模块</th><th>测试点</th><th>维度</th><th>验证方式</th><th>预期</th></tr>{{testpoints_body}}</table>
+ </div>
+</section>
+
+<section class="sec-block" id="sec-3" data-title="三、完整测试用例清单" data-filter="case_type">
+ <h2><span class="sec-toggle">▸</span>三、完整测试用例清单（{{kpi_cases}} 条）<span class="sec-count">{{kpi_cases}} 项</span></h2>
+ <div class="sec-body">
+  <p class="sec">逐条列出编号、模块、测试点、类型、步骤、预期与当前状态；状态与代码变更保持一致（C-②8 对账）。</p>
+  <div class="filterbar" data-target="table" data-col="3"><span class="lbl">类型：</span></div>
+  <table class="filt"><tr><th>编号</th><th>模块</th><th>测试点</th><th>类型</th><th>步骤</th><th>预期</th><th>状态</th><th>最近结果</th></tr>{{cases_body}}</table>
+  <div class="note">类型含义：<b>正常</b>=主流程功能验证；<b>边界</b>=参数缺失/非法等边界；<b>异常</b>=资源不存在等异常路径；<b>安全</b>=越权/鉴权缺失。</div>
+ </div>
+</section>
+
+<section class="sec-block" id="sec-4" data-title="四、用例明细与执行结果" data-filter="result">
+ <h2><span class="sec-toggle">▸</span>四、用例明细与执行结果</h2>
+ <div class="sec-body">
+  <div class="filterbar" data-target="table" data-col="3"><span class="lbl">结果：</span></div>
+  {{section_detail}}
+ </div>
+</section>
+
+<section class="sec-block" id="sec-5" data-title="五、通过 / 失败统计">
+ <h2><span class="sec-toggle">▸</span>五、通过 / 失败统计</h2>
+ <div class="sec-body">
+  <h3>5.1 综合统计</h3>
+  <table><tr><th>维度</th><th>通过</th><th>未通过</th><th>说明</th></tr>{{stats_overall_body}}</table>
+  <h3>5.2 分模块逐用例统计</h3>
+  <table><tr><th>模块</th><th>通过</th><th>未通过</th><th>通过率</th></tr>{{stats_module_body}}</table>
+  <h3>5.3 按类型（正常 / 边界 / 异常 / 安全）统计</h3>
+  <table><tr><th>用例类型</th><th>通过</th><th>未通过</th><th>通过率</th></tr>{{stats_type_body}}</table>
+ </div>
+</section>
+
+<section class="sec-block open" id="sec-6" data-title="六、结论与风险">
+ <h2><span class="sec-toggle">▾</span>六、结论与风险</h2>
+ <div class="sec-body">{{section_conclusion}}</div>
+</section>
+
+<section class="sec-block" id="sec-7" data-title="七、监控记录" data-filter="state">
+ <h2><span class="sec-toggle">▸</span>七、监控记录</h2>
+ <div class="sec-body">
+  <p class="sec">执行批次时间线（含批次号、状态、进度与结果分布），完整记录见平台 <code>run_batches</code>。</p>
+  <div class="filterbar" data-target="table" data-col="1"><span class="lbl">状态：</span></div>
+  <table class="filt"><tr><th>批次</th><th>状态</th><th>开始</th><th>结束</th><th>进度</th><th>结果分布</th></tr>{{monitor_body}}</table>
+ </div>
+</section>
+
+<section class="sec-block" id="sec-8" data-title="八、执行过程截图">
+ <h2><span class="sec-toggle">▸</span>八、执行过程截图（{{kpi_shots}} 张，内嵌）</h2>
+ <div class="sec-body">{{section_shots}}</div>
+</section>
+
+<section class="sec-block" id="sec-9" data-title="九、最终复用占比">
+ <h2><span class="sec-toggle">▸</span>九、最终复用占比</h2>
+ <div class="sec-body">
+  <p class="sec">用例资产复用情况：对账后沿用 / 更新 / 新增（C-②8 增量对账口径）。</p>
+  <table><tr><th>范围</th><th>复用（沿用+更新）</th><th>新增</th><th>复用占比</th></tr>{{reuse_body}}</table>
+  {{section_reuse_note}}
+ </div>
+</section>
+
+</div></div>
+
+<script>
+(function(){
+  // ===== 1. 章节折叠/展开 =====
+  document.querySelectorAll('.sec-block > h2').forEach(function(h){
+    h.addEventListener('click', function(){
+      var block = h.parentElement;
+      block.classList.toggle('open');
+      var tg = h.querySelector('.sec-toggle');
+      tg.textContent = block.classList.contains('open') ? '▾' : '▸';
+    });
+  });
+
+  // ===== 2. 侧边目录生成 + 高亮 =====
+  var toc = document.getElementById('toc');
+  var blocks = document.querySelectorAll('.sec-block');
+  var links = [];
+  blocks.forEach(function(b){
+    var a = document.createElement('a');
+    a.href = '#' + b.id;
+    a.textContent = b.getAttribute('data-title');
+    a.addEventListener('click', function(e){
+      e.preventDefault();
+      // 点击定位时自动展开目标章节
+      b.classList.add('open');
+      var tg = b.querySelector('.sec-toggle');
+      if(tg) tg.textContent = '▾';
+      b.scrollIntoView({behavior:'smooth', block:'start'});
+      setActive(b.id);
+    });
+    toc.appendChild(a);
+    links.push(a);
+  });
+  function setActive(id){
+    links.forEach(function(a){ a.classList.toggle('active', a.getAttribute('href') === '#' + id); });
+  }
+  // IntersectionObserver 高亮当前浏览位置
+  if('IntersectionObserver' in window){
+    var obs = new IntersectionObserver(function(entries){
+      entries.forEach(function(en){
+        if(en.isIntersecting) setActive(en.target.id);
+      });
+    }, {rootMargin:'-20% 0px -70% 0px'});
+    blocks.forEach(function(b){ obs.observe(b); });
+  }
+
+  // ===== 3. 筛选功能 =====
+  // 为每个 .filterbar 所在章节收集其全部同构表目标列的唯一值生成筛选按钮。
+  // 注意：浏览器会把 <table> 内裸写的 <tr> 自动包进隐式 <tbody>，
+  // 因此判断"表头行"必须看首格是否为 TH（不能依赖行下标 / tbody 存在性），
+  // 否则表头文字（维度/类型/结果/状态）会被误收集进筛选项。
+  document.querySelectorAll('.filterbar').forEach(function(bar){
+    var col = parseInt(bar.getAttribute('data-col'), 10);
+    var body = bar.parentElement;
+    var tables = body.querySelectorAll('table');
+    if(!tables.length) return;
+    function isHead(tr){
+      return tr.children.length && tr.children[0].tagName === 'TH';
+    }
+    // 收集唯一值（跨本章节全部表；仅取数据行第 col 列，badge/tag 文本优先）
+    var values = [];
+    var seen = {};
+    tables.forEach(function(table){
+      table.querySelectorAll('tr').forEach(function(tr){
+        if(isHead(tr)) return;
+        var cells = tr.children;
+        if(!cells || cells.length <= col) return;
+        var raw = cells[col].textContent.trim();
+        if(!raw) return;
+        var badge = cells[col].querySelector('.badge,.tag');
+        var key = (badge ? badge.textContent.trim() : raw).replace(/\s+/g, ' ');
+        if(!key || seen[key]) return;
+        seen[key] = true;
+        values.push(key);
+      });
+    });
+    if(!values.length) return;
+    // 生成单选按钮
+    values.forEach(function(v){
+      var btn = document.createElement('button');
+      btn.textContent = v;
+      btn.addEventListener('click', function(){
+        var isOn = btn.classList.contains('on');
+        bar.querySelectorAll('button:not(.clear)').forEach(function(x){ x.classList.remove('on'); });
+        if(!isOn){ btn.classList.add('on'); tables.forEach(function(t){ applyFilter(t, col, v); }); }
+        else { tables.forEach(function(t){ applyFilter(t, col, null); }); }
+        updateCount(bar, tables);
+      });
+      bar.appendChild(btn);
+    });
+    // 一键清除
+    var clr = document.createElement('button');
+    clr.className = 'clear';
+    clr.textContent = '一键清除';
+    clr.addEventListener('click', function(){
+      bar.querySelectorAll('button:not(.clear)').forEach(function(x){ x.classList.remove('on'); });
+      tables.forEach(function(t){ applyFilter(t, col, null); });
+      updateCount(bar, tables);
+    });
+    bar.appendChild(clr);
+    // 计数
+    var cnt = document.createElement('span');
+    cnt.className = 'cnt';
+    bar.appendChild(cnt);
+    updateCount(bar, tables);
+  });
+
+  function applyFilter(table, col, val){
+    var shown = 0, total = 0;
+    table.querySelectorAll('tr').forEach(function(tr){
+      // 表头行跳过（首格为 TH）
+      if(tr.children.length && tr.children[0].tagName === 'TH') return;
+      total++;
+      var cells = tr.children;
+      if(!cells || cells.length <= col) return;
+      var badge = cells[col].querySelector('.badge,.tag');
+      var key = (badge ? badge.textContent.trim() : cells[col].textContent.trim()).replace(/\s+/g, ' ');
+      var match = (val === null) || (key === val);
+      tr.classList.toggle('hidden', !match);
+      if(match) shown++;
+    });
+    return {shown:shown, total:total};
+  }
+
+  function updateCount(bar, tables){
+    var shown = 0, total = 0;
+    tables.forEach(function(table){
+      table.querySelectorAll('tr').forEach(function(tr){
+        if(tr.children.length && tr.children[0].tagName === 'TH') return;
+        total++;
+        if(!tr.classList.contains('hidden')) shown++;
+      });
+    });
+    var cnt = bar.querySelector('.cnt');
+    if(cnt) cnt.textContent = shown + ' / ' + total + ' 项';
+  }
+})();
+</script>
+</body></html>

@@ -1,0 +1,150 @@
+<!doctype html><html lang="zh-CN" data-page-node-id="n7qwK9imZTLRJT1RHiHmJL"><head data-page-node-id="KNPmdgsEUcOOy9suaZiw96"><meta charset="utf-8" data-page-node-id="VKC4FiEm7xJDJlbk0GhUL9">
+<meta name="viewport" content="width=device-width,initial-scale=1" data-page-node-id="HJn2YpVHfidyE2v5kRmiX5">
+<title>独立验证 AI 服务 · 可行性报告</title>
+<style>
+:root{--bg:#0f1115;--card:#1a1e26;--ink:#e6e8ee;--sub:#9aa3b2;--line:#2a2f3a;--accent:#4f9dff;--ok:#39b54a;--warn:#f0a020;--bad:#e5484d;--pur:#b58bff}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.75 -apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+.wrap{max-width:1120px;margin:0 auto;padding:30px 22px 90px}
+h1{font-size:26px;margin:0 0 6px}
+h2{font-size:20px;margin:36px 0 12px;border-left:4px solid var(--accent);padding-left:10px}
+h3{font-size:16px;margin:18px 0 8px;color:var(--accent)}
+.meta{color:var(--sub);font-size:13px;margin-bottom:18px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin:14px 0}
+.tablewrap{overflow-x:auto;margin:14px 0}
+table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:640px}
+th,td{border:1px solid var(--line);padding:9px 11px;vertical-align:top;text-align:left}
+th{background:#20262f;color:var(--sub)}
+tr:nth-child(even){background:#161a21}
+code{background:#0c0e12;padding:1px 6px;border-radius:5px;color:#8fd0ff;font-size:12.5px}
+pre{background:#0c0e12;border:1px solid var(--line);border-radius:10px;padding:14px 16px;overflow-x:auto;color:#cfe3ff;font-size:12.5px;line-height:1.6}
+.pill{display:inline-block;padding:1px 8px;border-radius:20px;font-size:11.5px;border:1px solid var(--line)}
+.ok{color:var(--ok);border-color:#1f5530}.warn{color:var(--warn);border-color:#5a4410}.bad{color:var(--bad);border-color:#5a2226}.pur{color:var(--pur);border-color:#3a2a55}
+.tip{background:#13202b;border:1px solid #1d3a4a;color:#bfe3f2;padding:11px 15px;border-radius:9px;font-size:13px;margin:12px 0}
+.note{color:var(--sub);font-size:12.5px}
+.flow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:10px 0}
+.box{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 13px;font-size:13px;min-width:120px;text-align:center}
+.arrow{color:var(--accent);font-size:18px}
+ul{margin:6px 0;padding-left:20px}li{margin:4px 0}
+.tag{font-weight:600}
+</style></head><body data-page-node-id="pCaz2hFfcgKvyK07ZECW3q"><div class="wrap" data-page-node-id="VDirGBnFNzUaSjn3Cv1HGE">
+
+<h1 data-page-node-id="l0Va2ixiNtxQea6YWbUcPR">独立验证 AI 服务 · 可行性报告</h1>
+<div class="meta" data-page-node-id="lfdL1T9iY4rm4DECs8BDiK">面向对象：项目决策与实施 ｜ 主题：用 AI 判定测试结果是否正常并输出可信度，再经人工确认固化为基线 ｜ 结论：<b data-page-node-id="vO0j7Kb26yzjXmGvlToZQT">方案可行，建议分层落地、闭环治理</b></div>
+
+<div class="tip" data-page-node-id="zod9281mROU6cRAkT5sBcf">该服务正好补上此前指出的核心缺口——"流程有执行、无期望结果基准"。它不要求事先写需求，而是用 <b data-page-node-id="VKTZyn7LCmZoheNK4Rl3A0">AI 推断 + 人工确认</b> 的方式<b data-page-node-id="CMkSyj6D2ZCB6FbGDn9qug">逐步制造</b>出期望结果（基线）。但 AI 判定本身不可盲信，必须配以规则锚点与人工终审。</div>
+
+<h2 data-page-node-id="EzKIp4IPpFZNCYEkRigYJD">一、系统架构</h2>
+<p data-page-node-id="MrUAWjRcBFDfEBNxcLl1oC">验证 AI 服务作为<strong data-page-node-id="0iwwsaY31QMRjxqsoNvsCP">独立于 test-accel 测试平台</strong>的微服务，只负责"判定结果是否正常"，不负责执行测试。它与现有流水线解耦，通过接口收发数据。</p>
+
+<div class="flow" data-page-node-id="sE3d8ND8O0CKgBjiJuoWTH">
+  <div class="box" data-page-node-id="qrNqCJrawKOhdXoiJDhYIz">测试用例<br data-page-node-id="Si4wm0PYaj0lqYi0N5IQFf"><span class='note' data-page-node-id="TnRV8wTIjiD7b7LbPNp2kC">(含步骤/预期)</span></div><span class="arrow" data-page-node-id="OexkPcXpFAqDa0FZhQIloe">＋</span>
+  <div class="box" data-page-node-id="oGpq9gkgGobNb1uNKY5COB">执行实际结果<br data-page-node-id="66s9GB6f0QaSeVjMEhUFxH"><span class='note' data-page-node-id="189ozXzYC2G4ywcQ7AvHPg">(状态码/响应/UI文本)</span></div><span class="arrow" data-page-node-id="QsVoGNeVRAx7Wgp3qexiFH">→</span>
+  <div class="box" style="border-color:#3a5a2a" data-page-node-id="eW1DX0MKzf5LVXuzkerNGN">验证 AI 服务<br data-page-node-id="oufiYlVfSwT5maNIcPXwrO"><span class='note' data-page-node-id="ZZ7aVApua3UHFvzrxTYzkS">判定引擎</span></div><span class="arrow" data-page-node-id="EHGaMcaOErvCpuMkGftPv5">→</span>
+  <div class="box" data-page-node-id="e1QR9M9of06uBGov3Y1Gk6">判定 + 可信度%<br data-page-node-id="uYnKx1A0xm1SBYiaWWiQVA"><span class='note' data-page-node-id="D7dDc0K6HEAGrHYZSpMQLU">+ 理由</span></div><span class="arrow" data-page-node-id="TdWAeNimELxhjhZM79UJ7A">→</span>
+  <div class="box" data-page-node-id="MLw96dJBFj6Tb0Cb8nMlXJ">人工确认台<br data-page-node-id="KmCnoyg1LvCqAvepFIVSkG"><span class='note' data-page-node-id="eVt64ds9HT8YjRhDuzkOlW">按可信度排序</span></div><span class="arrow" data-page-node-id="YfINnTu8sKioj8YL0zjiFL">→</span>
+  <div class="box" style="border-color:#3a2a55" data-page-node-id="aSh919lNNJLEj59ObJZK3r">基线库<br data-page-node-id="5tzuJzeia4SqrAOPyIqJ4r"><span class='note' data-page-node-id="q90RI5wMoSfD7AVFxcMyTw">标准用例</span></div>
+</div>
+
+<h3 data-page-node-id="1satoGapc0V5lGBaSJGz5k">核心组件</h3>
+<table data-page-node-id="w6pBymxhfpHhgF9IGLpzpA">
+<thead data-page-node-id="UicyaPfkVmo1vgmyX2obx5"><tr data-page-node-id="OjEipnTKPnuC8WrfvtWlx8"><th data-page-node-id="TAaIFu7JZimZ9gh8R6ymEG">组件</th><th data-page-node-id="cVn5sBbUadILiQtln2fZ2h">职责</th><th data-page-node-id="BUKFgsSal9AqTq39bgrlv3">关键设计</th></tr></thead>
+<tbody data-page-node-id="DTpmdxuZTDE9H6kkiTmbhx">
+<tr data-page-node-id="KxUQAI8NIKIYJ9kARpQAfC"><td data-page-node-id="SBj3GNgJOBDDbniRygUNmD"><b data-page-node-id="2ZJAvA6hlenfwAdcqzAiFb">判定引擎</b></td><td data-page-node-id="bYR1rgGstCpCFjd4jFriOM">接收"用例+实际结果"，输出 正常/异常/存疑 + 可信度(0–100) + 理由</td><td data-page-node-id="U11A6meljMz6Dz2a5NMFB9">LLM + 结构化 Prompt；以"源码契约预期（见本批结构化用例）"为强参考锚点；低温度 + 多次投票降随机</td></tr>
+<tr data-page-node-id="5BaECkRtoHQEPmB8c8vkGA"><td data-page-node-id="qtQ8s2SVZ6tLqz6oGpokac"><b data-page-node-id="jv62bJVrf4kgHUA4bcvjVg">基线库</b></td><td data-page-node-id="G1YGCA67QZ3Wa3ioPKFAx3">存储人工确认后的标准用例（输入+预期+确认结论）</td><td data-page-node-id="T8D2HUVGRbdlCCfo2GF2iQ">版本化、可回滚；既作最终真相，也作 AI 的 few-shot 示例与评测集</td></tr>
+<tr data-page-node-id="7WxDn8zXH0fhetP5mLZllA"><td data-page-node-id="S1S8AQ2j9p3crEHu6e7swi"><b data-page-node-id="7v8udibUW34f35mrAsmDrE">人工确认台</b></td><td data-page-node-id="Vktag94U32d807VqgCgaNP">按可信度降序展示待确认项，支持 通过/驳回/修正</td><td data-page-node-id="lwAXYyWg2glzVnDpKVBgET">低置信与"异常"优先；关键路径强制人工</td></tr>
+<tr data-page-node-id="lS48OoJqBs7Iy0Mmh6Xkrq"><td data-page-node-id="gjqCIXHX7aleRzDkXiueKe"><b data-page-node-id="BbXFEihBgcReHlS18YvcFH">校准与度量</b></td><td data-page-node-id="otvhiDwUv7fgvuqGHqmkd2">持续评估 AI 判定准确率，监控置信度是否可靠</td><td data-page-node-id="mNY6AWImNZLrWNDBliEgb8">reliability diagram（置信度 vs 实际准确率）；漏判率、人工占比看板</td></tr>
+<tr data-page-node-id="vlNGCYjNB7BgXwLbaUscHY"><td data-page-node-id="YgHpzm4lpgDtV5vOvCkxPl"><b data-page-node-id="NQLwPrsvHZqBm6fGytmk6l">脱敏网关</b></td><td data-page-node-id="ZjVhkfm5poRGA9EG99TGnf">出入 AI 前对响应做 PII 脱敏</td><td data-page-node-id="Wuwf2ScMnIyQyqcewqoGVW">账号/金额/对话内容掩码；优先私有化/本地模型</td></tr>
+</tbody>
+</table>
+
+<h3 data-page-node-id="GpskVyOlELOHVdaSddRzLD">与现有 test-accel 的关系（解耦）</h3>
+<pre data-page-node-id="L9KfJhfIsGRlvmO0DD8xYr">test-accel（执行）  ──推送──▶  验证 AI 服务（判定）
+     ▲                                  │
+     │                                  └──▶ 人工确认台 ──▶ 基线库
+     │                                                     │
+     └──────────── 基线回流作 few-shot / 评测集 ◀──────────┘</pre>
+<p class="note" data-page-node-id="vISskbDcIYbzbn07UII1sw">执行与判定分离：测试平台只管"跑"，AI 服务只管"判"，人工只管"最终确认"。任一层可独立升级、替换模型或换执行器。</p>
+
+<h2 data-page-node-id="9R4bnx7p4scIS4vZPpASnS">二、数据流转</h2>
+<div class="tablewrap" data-page-node-id="zaunqcbe4BFRkW34BLvu9g"><table data-page-node-id="7mS6DpEN7iNSXf2StSqIwx">
+<thead data-page-node-id="DxAtYFgxwlk76b8NI2ORlx"><tr data-page-node-id="q2kzyAjJ0q15MUGkvo4M4S"><th data-page-node-id="ZQeg40Mp1JYgKUKif1jqDu">步骤</th><th data-page-node-id="GsNszDEDza7fRcPeWvh4xi">动作</th><th data-page-node-id="HeD7S4mhDvlFvtu6KEWoDa">输入</th><th data-page-node-id="FHP2PTh2VaeuMBBqKrk5er">输出</th><th data-page-node-id="5ZuoVqp7TBbSlDNe9hZ4bM">存于</th></tr></thead>
+<tbody data-page-node-id="xiXxllKhQCT1V5zbnqnbvt">
+<tr data-page-node-id="pbq2tKf4Bs4WMe781npCOy"><td data-page-node-id="eHbSkCcooZrlx8nbpZcVoU">① 执行</td><td data-page-node-id="j4MyjaVfmcDII2pqyowgUj">test-accel 按本批结构化用例执行（UI/接口层）</td><td data-page-node-id="dX5SfQDoBEhh6JGSkYOBCy">用例（含预期结果契约）</td><td data-page-node-id="xB1Wf1806BNMVESQbryeu8">实际结果：状态码、响应体、UI 文本/截图</td><td data-page-node-id="Ru16UIOkWCgEeJwYhRux1H">测试平台 runs 表</td></tr>
+<tr data-page-node-id="I18wX4kpSp0b3vPKtj7vOa"><td data-page-node-id="dipie0kiVvxlSNNuPpA1tr">② 推送</td><td data-page-node-id="gM7IGmMAwznalgkMA5YVfk">将"用例 + 实际结果"发往验证 AI 服务</td><td data-page-node-id="xV4iWVDoQ5uH5zjDdpc2qA">用例 + 实际结果（+契约预期）</td><td data-page-node-id="34zHCIi6VsnAnVbe8GfsI2">判定请求</td><td data-page-node-id="lqsGoAKtud7EEZEKHFJxvq">消息/接口</td></tr>
+<tr data-page-node-id="PVRwYgom54eEiM7bE28QDd"><td data-page-node-id="8wLqU2SfI9BnbI72egi52A">③ 判定</td><td data-page-node-id="RgfUscvNQW7qkL5FdYlx1Q">AI 比对 实际结果 vs 契约预期/历史基线/业务合理性</td><td data-page-node-id="WhBVBNvdF1SHCOHvJ2UEI7">请求</td><td data-page-node-id="HLZQlPR4EiMqHJ3uao3oTO">标签(正常/异常/存疑) + 可信度% + 理由</td><td data-page-node-id="NEtZrEcaQaUasMtvPwuCgB">判定结果表</td></tr>
+<tr data-page-node-id="uOnYMobeFZXUTk8XK2sRlv"><td data-page-node-id="UUf9323iiNmJa1YvqNXriH">④ 排序</td><td data-page-node-id="uDbLGR7Bo63j6z9fDT5r9t">按可信度降序；异常与低置信优先人工</td><td data-page-node-id="ybtdZHf6nBN0Kds7oj5QGN">判定结果</td><td data-page-node-id="HTcAsmPubq0sYZznfgDG3k">待确认队列</td><td data-page-node-id="0fR5hbpzNsSB7EFlt2B8CY">确认台</td></tr>
+<tr data-page-node-id="9H80uf9zXEdeOYmIbbgad4"><td data-page-node-id="eZIVzV4fvh0LEqQAf5igoc">⑤ 确认</td><td data-page-node-id="iyZMQli4gcKNkqwYHPFhDH">人工 通过/驳回/修正</td><td data-page-node-id="lE3tnfRBS0NU1iAEdazDWa">队列项</td><td data-page-node-id="rxPDQV0CApyCQsX7c3nZPz">确认结论</td><td data-page-node-id="haliwUQyQsRmbcVI3Hlj79">基线库（固化）</td></tr>
+<tr data-page-node-id="Zw22SD15DpvGg9H00iTN86"><td data-page-node-id="KaV0tvoHFso66pO8hpFvZZ">⑥ 回流</td><td data-page-node-id="mcixOd5UeD8QHZUwQ8mX3r">确认结果写回基线，作 AI 的 few-shot 与评测基准</td><td data-page-node-id="Zg7TAq89wlyxiHFMiXt9wQ">确认结论</td><td data-page-node-id="TdsnkhB5jgYvFbI9R9Xfic">更优的后续判定（闭环自进化）</td><td data-page-node-id="jGK83aIGQvFBoxFEeRhKfw">基线库 / Prompt 缓存</td></tr>
+</tbody>
+</table></div>
+<div class="tip" data-page-node-id="gmn2moqCBS4TvvvPJv5kkL">闭环本质：<b data-page-node-id="caR6I94vICJY6yjhYlC68g">没有需求文档 → 用执行结果 + AI 初判 + 人工确认，制造出需求（基线）</b>；基线越多，AI 越准，人工越少——飞轮效应。但飞轮起点需"人工种子"（冷启动，见风险 R6）。</div>
+
+<h2 data-page-node-id="P7hIDV1pjrO98KApuG9IpN">三、潜在风险</h2>
+<div class="tablewrap" data-page-node-id="lB1qL1poWIDeqAgdaSs5gZ"><table data-page-node-id="PqiTwdLNlavRK0xtmz0LS4">
+<thead data-page-node-id="syimKSrOfn8xSUvNF2w8cK"><tr data-page-node-id="hA4iVVFcpHIvcJvxrm9k9z"><th data-page-node-id="qMwRTgdhb3s4PtxGOWBziG">编号</th><th data-page-node-id="u5nfsPQXlNsFAMjucWvK4M">风险</th><th data-page-node-id="t2tRCc6M5MM5yWvMd1soga">说明</th><th data-page-node-id="ewx676ZNHBaE0Bxea7wFVi">缓解</th></tr></thead>
+<tbody data-page-node-id="w0du4RJgiYI6aAKeFqJbVR">
+<tr data-page-node-id="otuEwMi9J9CmI0L9CqRKPk"><td data-page-node-id="HEtULfyLgIyRXFpStdSZN4">R1</td><td data-page-node-id="Ntnen938FRNFiDCP9IxHjg"><span class="pill bad" data-page-node-id="0Vdl2k3ESqqtJCw9m54Vt7">一致性</span>判定漂移</td><td data-page-node-id="BgDuDPXYJTZXH0XF2vtaTa">同一结果多次判定可能不同（随机性）</td><td data-page-node-id="4nrFryeuj4PUQ1ffes37bm">低温度 + 多次投票取多数；相同用例哈希缓存判定</td></tr>
+<tr data-page-node-id="wn1dT5LQ5qH2BG75zNRqCd"><td data-page-node-id="vZ7zf6QHRlNhO0KcrfgFjV">R2</td><td data-page-node-id="654W91nyhBtRU1QzF1mrZF"><span class="pill warn" data-page-node-id="py1rhAMG1ZEeya3rrSk5M2">校准</span>可信度失真</td><td data-page-node-id="6OpCBiq5cHxxF37MhNl9FF">模型常"过度自信"，高%未必真准</td><td data-page-node-id="EQF8fWPlSVpaOwHEDgIxqF">用人工确认做校准；画 reliability diagram；置信度仅作排序依据，不作结论</td></tr>
+<tr data-page-node-id="BfWsqpO5H0onpIItmeT3cm"><td data-page-node-id="8Qy1FjbujQN7lMHaIpuI4J">R3</td><td data-page-node-id="UF8bdUuRreY0yKGdIrfUcZ"><span class="pill bad" data-page-node-id="BIHABKmN9tPcgAFHCw3gt0">污染</span>基线误固化</td><td data-page-node-id="X2PeUz9BvZa6yps5CQyRcL">人工误确认 → 错误进基线 → 自我强化</td><td data-page-node-id="RDwUJuK8teGNYmmrAsaHvu">基线双人/抽样复审、版本化可回滚；设可信度门槛(&lt;70% 强制人工)</td></tr>
+<tr data-page-node-id="4uBybS866AYB6HkNemOkFS"><td data-page-node-id="xgMNepQvPAPsKq1SHUXCmS">R4</td><td data-page-node-id="2BMEvevlzOzSecznjztnAW"><span class="pill bad" data-page-node-id="aISXKhLGUFhHtiOUIBBi5U">合规</span>隐私与数据出境</td><td data-page-node-id="YPxFIVernhK3V7y3sGyniK">响应含账号/金额/对话等敏感数据</td><td data-page-node-id="699THDDHDSJ0QuIr5r3eOK">出入 AI 前 PII 脱敏；优先私有化/本地模型；明文不出内网</td></tr>
+<tr data-page-node-id="lzcaxZ5dACjYsYZiKskrhw"><td data-page-node-id="jRBQktSlD5xnqPEf0bzWP6">R5</td><td data-page-node-id="A3nCm5Q02O9BJkqKulYtJo"><span class="pill warn" data-page-node-id="gd7JN7Jwk9pa0MCzU6HyKD">成本</span>规模与延迟</td><td data-page-node-id="LvzDBQb2nf3vA3lKMYV4lJ">每条都调 LLM，量大则贵且慢</td><td data-page-node-id="i5wBhSwwE2Xmbi4YeKsOHJ">分层：规则(状态码/契约)先筛，仅规则无法判定才调 AI；批量/异步</td></tr>
+<tr data-page-node-id="yF4y5FIo8zFQcPIuOGe8ZP"><td data-page-node-id="n77kKV6UCvpVzKSxd6iDC1">R6</td><td data-page-node-id="AQWATeOTHrCcEo3PMfV4g5"><span class="pill warn" data-page-node-id="DN71AWPiFzXxCgFgW6LL3Y">冷启动</span>无基线</td><td data-page-node-id="UrkAu0C3nUXBMVYNH20Vas">初期无 few-shot，判定质量低</td><td data-page-node-id="1rYuz3z6dYdlafanIWhORM">先用本批白盒契约预期作锚点；小批量人工种子铺底</td></tr>
+<tr data-page-node-id="h56fLgmVt5Uq7kmg7U6P5t"><td data-page-node-id="ScwWm39oIBmmlGs3UejYZp">R7</td><td data-page-node-id="s69GuP8WjIZW1ctDpUthYV"><span class="pill bad" data-page-node-id="vSSaU0pO7LfBxW4K97STDJ">误判</span>安全类反转</td><td data-page-node-id="wLR1eyCHNPjIjMRocgkv7L">应 401 却返回 200，AI 可能误判"正常"</td><td data-page-node-id="z4BAjNmUQlP4NnJsm4l5M1">契约预期作<strong data-page-node-id="hM7c0L2HsZcwGKiFRbDFV5">强约束</strong>：AI 只判"是否符合预期"，不做自由发挥</td></tr>
+<tr data-page-node-id="QVJ8jeM0JOh8rUMoF513lT"><td data-page-node-id="08Em5ELcbiSEiItFAR9Pzq">R8</td><td data-page-node-id="WA9Hs2n9tDPzI5dAMlfolD"><span class="pill pur" data-page-node-id="X8QnW4eKNTAJ51YJD5HqQb">责任</span>替代风险</td><td data-page-node-id="GE5Cnj7U95iGMhND6ABpTv">误把 AI 判定当最终结论</td><td data-page-node-id="dTEGB76emaGwY6pIOVKp7X">关键资金/权限路径保留人工终审；AI 仅降人工量，不替人担责</td></tr>
+</tbody>
+</table></div>
+
+<h2 data-page-node-id="peIGGYhNl8nx4eykidnjw6">四、实施建议</h2>
+<h3 data-page-node-id="WqZj1KptljAeMCrJ5kMpi2">1. 分层判定（先规则、后 AI）</h3>
+<ul data-page-node-id="g8mqKQG0WyEJq5wGovEGMO">
+<li data-page-node-id="zub9robbOTnx98lSG6ehQN"><b data-page-node-id="lFhdWMKePNqXCkMJ4FBg4e">规则层</b>：用本批结构化用例的"契约预期"（状态码、返回结构、revoked:true 等）先做确定性校验——这部分不调 AI、零成本、100% 可复现。</li>
+<li data-page-node-id="gblEWy8BnNvYPRMaEYcIZY"><b data-page-node-id="sTURJ48S0z6Au2WshjyAyC">AI 层</b>：仅当规则无法判定（如业务数值是否合理、UI 文案是否正确）时，才把"用例+实际结果+契约预期"送给 AI 做语义判定。</li>
+</ul>
+
+<h3 data-page-node-id="wlCep4DL8nur98sXdW7MFg">2. 把白盒契约预期当"锚点"，而非让 AI 凭空判</h3>
+<p data-page-node-id="z8RLSbnMvQLTFdRLqQcGE4">即"AI 负责判断实际结果是否符合已知的契约/业务预期"，而不是让 AI 自己发明标准。这样 AI 输出可解释、可控，也直接复用第一部分成果。</p>
+
+<h3 data-page-node-id="n6ufBFwvMORG1W5Vds2Z4Y">3. 基线治理三原则</h3>
+<ul data-page-node-id="OA4GBoMMb8L1Z6u44mncHM">
+<li data-page-node-id="RVuiiqPhmspAA2N9sTjBLP"><b data-page-node-id="TEnuBbjn1VjU11ZfcfVC5m">版本化 + 可回滚</b>：基线更新留痕，误固化可一键回退。</li>
+<li data-page-node-id="snZdvwuDifrnFqObeFc1dg"><b data-page-node-id="F3SYUmZxXv7rvga5x9NpLn">抽样复审</b>：定期对已确认基线抽检，防止 R3 污染累积。</li>
+<li data-page-node-id="gvYcbt6hSz9uBZLgdcmgnY"><b data-page-node-id="mh4xrXihp9dvySWbFe2lmf">置信门槛</b>：可信度低于阈值（建议 70%）一律转人工，不自动入库。</li>
+</ul>
+
+<h3 data-page-node-id="gNjzAQSaywg3b7NSOCMTnw">4. 持续校准与度量</h3>
+<ul data-page-node-id="3b86eU8NKe6IvRBUQAfgWv">
+<li data-page-node-id="EO0zbAQ7R25wfJymJsZS1u">跟踪指标：自动判定准确率、人工确认占比、基线增长曲线、漏判率（应异常却判正常）。</li>
+<li data-page-node-id="qdgF65yMUFa8LoCwJhCKZe">用人工确认结果反推 AI 的"置信度-准确率"对齐度，定期优化 Prompt。</li>
+</ul>
+
+<h3 data-page-node-id="A1dQEbZMwc8vcgWMGBGZ0i">5. 数据与安全</h3>
+<ul data-page-node-id="ODv5VU4uCt6FNroXfYgzMf">
+<li data-page-node-id="Xed5ASbU7G460lzie5XtNE">出入 AI 服务前对响应做 PII 脱敏（账号、金额、对话内容掩码）。</li>
+<li data-page-node-id="un65WD8DyB4ogCwq0000bQ">优先本地/私有化模型；若用公网 LLM，须评估数据出境合规。</li>
+</ul>
+
+<h3 data-page-node-id="3awESb82Sm8OjSvlEIySuX">6. 渐进落地路线</h3>
+<table data-page-node-id="2JMgnPjNbVrDpRQQ7fpYXa">
+<thead data-page-node-id="HhBdFMPm7KSE16sU7437Fz"><tr data-page-node-id="BdZNskRV6YGFQFp6vF3US0"><th data-page-node-id="vQ3bTFAGUcaLXA1GTXxqiv">阶段</th><th data-page-node-id="rAIskCAuXVfhFU4Xb5JAWb">范围</th><th data-page-node-id="KEBDBWxDguE5f3MKyEYiCQ">目标</th></tr></thead>
+<tbody data-page-node-id="5q6LRObv6Lm6jFCLoSFeDB">
+<tr data-page-node-id="1pdUyjPQJHrRWSikNZCjDP"><td data-page-node-id="NafBUFmH505zJCcL94WJVK">POC</td><td data-page-node-id="YfuIMdFbAeR63tPEuZxEca">非关键模块（如 schedules / audit_kb 查询）</td><td data-page-node-id="pdBT6c7JDSJE7vtch8iRpR">验证 AI 判定+人工闭环跑通；积累首批种子基线</td></tr>
+<tr data-page-node-id="KANNUj2F9QBMk7UhcBDgeS"><td data-page-node-id="baHI5RSewQ2pZrG8kgc7Yw">试点</td><td data-page-node-id="MpiQobLoAkea8xj0ff4t57">接入本批 50 条结构化用例执行结果</td><td data-page-node-id="4UUxAUZfxJSmjK79qEvbAW">规则层全覆盖，AI 层接管规则无法判定的语义项</td></tr>
+<tr data-page-node-id="C8d3akpoSHJXqj0D2qBfpa"><td data-page-node-id="7blMung0wBKvK93DIFxjDq">推广</td><td data-page-node-id="u9ytXzdIQUWetNx4BoIKX9">全量 277 路由 + 关键权限/资金路径</td><td data-page-node-id="dXCzZ1EYapy5RvgAWnrM6a">关键路径人工终审，其余 AI+基线自动流转</td></tr>
+</tbody>
+</table>
+
+<h3 data-page-node-id="oRNi950cpWTUF4WG1jnGdj">7. 可行性结论</h3>
+<div class="card" data-page-node-id="HhDCp7ONIpPfYuZ0twdTXf">
+<p class="tag" style="color:var(--ok)" data-page-node-id="4GHwxL22IDpXrnLyGm9LS1">总体可行 ✅</p>
+<ul data-page-node-id="WpGp2b3MZ2sTsRAVjpHX5Q">
+<li data-page-node-id="WhG4HojHqhftFVbT5baYMS">技术可行：判定、可信度、人工确认、基线回流均为成熟模式，无不可逾越的技术障碍。</li>
+<li data-page-node-id="aL045euU4T0LfVAcRZ9A2y">价值明确：直接补齐"无期望结果"缺口，且以闭环方式<strong data-page-node-id="ZKIvpz8EUQe5MezRZCOSXQ">自造基线</strong>，越用越准。</li>
+<li data-page-node-id="NnlVjyUVWKU8emB04gVitW">关键前提：必须<b data-page-node-id="9lFNXmlmtfkuOx7A30Yi9z">分层（规则+AI）</b>、<b data-page-node-id="45CpsUvn0UUDA3CndFSzUf">契约锚点</b>、<b data-page-node-id="ZzqvfCVtAtYaVaBOL7Econ">基线治理（可回滚+复审+门槛）</b>、<b data-page-node-id="ojYJEwyEKlZ7dDmxRvIsFg">数据脱敏</b>四件套，否则会出现一致性差、基线污染、隐私违规。</li>
+<li data-page-node-id="5rf1zEsefbDOdiGDYCptHm">最佳切入点：把第一部分产出的 50 条白盒契约用例作为 AI 判定的首批"强参考锚点"与种子基线，立即具备可运行价值。</li>
+</ul>
+</div>
+
+<p class="note" data-page-node-id="RxBf2kOQxXXgFkHloOtDBl">配套交付物：本目录 <code data-page-node-id="bFT3u8KaHvpueLFHCG4bza">结构化测试用例_含预期结果.html</code> / <code data-page-node-id="ziW8xLnseknCJavKFZMF1S">../research-agent-test/structured_cases.json</code>（第一部分成果，可直接作为验证 AI 服务的首批锚点与输入）。</p>
+
+</div></body></html>

@@ -1,0 +1,36 @@
+# ============================================================================
+# CI 护栏（guard）：远程也不跑偏
+# 触发：push 到主分支 / 任意 PR
+# 内容：统一跑 scripts/gate_all.py（ruff lint+format / 枚举 / 架构 / mypy / bandit / pytest）
+# 任一失败即阻断合并，保证「优化生成」产物始终符合 ARCHITECTURE / ADR 约束
+# ============================================================================
+name: guard
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: work/test-accel
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install quality tools + project deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff mypy bandit pytest pytest-cov
+          # 项目运行依赖（执行器需 fastapi/python-dotenv 等）
+          pip install -r requirements.txt || true
+
+      - name: Quality gate (统一门禁)
+        run: python scripts/gate_all.py

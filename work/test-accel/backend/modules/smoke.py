@@ -4,11 +4,14 @@
 - 登录冒烟（提供 account+password）：unified-login → 拿 token → 探受保护端点
 不依赖 ENABLE_DYNAMIC_PROBE 开关，是独立的主动探活能力。
 """
+
 import time
+
 import requests
 from requests.adapters import HTTPAdapter
 from requests.exceptions import RequestException
 from urllib3.util.retry import Retry
+
 
 TIMEOUT = 3
 HEADERS = {"User-Agent": "test-accel-smoke/0.1", "Connection": "close"}
@@ -27,8 +30,13 @@ def _probe(method: str, url: str, **kw):
     t0 = time.time()
     try:
         r = _SESSION.request(
-            method, url, timeout=TIMEOUT, headers=HEADERS,
-            proxies={"http": None, "https": None}, **kw)
+            method,
+            url,
+            timeout=TIMEOUT,
+            headers=HEADERS,
+            proxies={"http": None, "https": None},
+            **kw,
+        )
         return {
             "ok": True,
             "status": r.status_code,
@@ -47,23 +55,27 @@ def _probe(method: str, url: str, **kw):
 def _try_login(base: str, account: str, password: str):
     """尝试 unified-login，失败回退本地 login。返回 (token, detail)。"""
     # 1) unified-login（account + password）
-    r = _probe("POST", f"{base}/api/v1/auth/unified-login",
-               json={"account": account, "password": password})
+    r = _probe(
+        "POST", f"{base}/api/v1/auth/unified-login", json={"account": account, "password": password}
+    )
     if r["ok"] and r["status"] == 200:
         try:
             body = _SESSION.post(
                 f"{base}/api/v1/auth/unified-login",
                 json={"account": account, "password": password},
-                timeout=TIMEOUT, headers=HEADERS,
-                proxies={"http": None, "https": None}).json()
+                timeout=TIMEOUT,
+                headers=HEADERS,
+                proxies={"http": None, "https": None},
+            ).json()
             token = body.get("access_token") or body.get("data", {}).get("access_token")
         except Exception:
             token = None
         return token, {"endpoint": "/api/v1/auth/unified-login", "status": r["status"]}
 
     # 2) 回退本地 login（username + password）
-    r2 = _probe("POST", f"{base}/api/v1/auth/login",
-                json={"username": account, "password": password})
+    r2 = _probe(
+        "POST", f"{base}/api/v1/auth/login", json={"username": account, "password": password}
+    )
     detail = {"endpoint": "/api/v1/auth/login", "status": r2["status"], "probe": r2}
     token = None
     if r2["ok"] and r2["status"] == 200:
@@ -71,8 +83,10 @@ def _try_login(base: str, account: str, password: str):
             body = _SESSION.post(
                 f"{base}/api/v1/auth/login",
                 json={"username": account, "password": password},
-                timeout=TIMEOUT, headers=HEADERS,
-                proxies={"http": None, "https": None}).json()
+                timeout=TIMEOUT,
+                headers=HEADERS,
+                proxies={"http": None, "https": None},
+            ).json()
             token = body.get("access_token") or body.get("data", {}).get("access_token")
         except Exception:
             token = None
@@ -96,8 +110,9 @@ def _login_and_probe(base: str, account: str, password: str):
     }
 
 
-def smoke_project(proj: dict, account: str = None, password: str = None,
-                  base_url: str = None):
+def smoke_project(
+    proj: dict, account: str | None = None, password: str | None = None, base_url: str | None = None
+):
     """对单个项目做冒烟验证，返回完整报告字典。"""
     base = (base_url or proj.get("base_url") or "").rstrip("/")
     # 统一用 127.0.0.1 直连，避免 localhost 解析走 IPv6(::1) 导致的探测超时
@@ -129,16 +144,16 @@ def smoke_project(proj: dict, account: str = None, password: str = None,
         login_smoke = _login_and_probe(base, account, password)
 
     if not service_up:
-        verdict = "UNREACHABLE"   # 服务未起 / 地址或端口错误
+        verdict = "UNREACHABLE"  # 服务未起 / 地址或端口错误
         verdict_cn = "服务不可达（未启动或地址/端口不对）"
     elif login_smoke is None:
-        verdict = "SERVICE_UP"    # 匿名可用，未做登录验证
+        verdict = "SERVICE_UP"  # 匿名可用，未做登录验证
         verdict_cn = "服务已启动（匿名探活通过，未做登录验证）"
     elif login_smoke["token_acquired"]:
-        verdict = "READY"         # 登录可用，完全就绪
+        verdict = "READY"  # 登录可用，完全就绪
         verdict_cn = "完全就绪（登录态可用，受保护接口可访问）"
     else:
-        verdict = "AUTH_FAIL"     # 服务起但登录失败
+        verdict = "AUTH_FAIL"  # 服务起但登录失败
         verdict_cn = "服务已启动，但登录验证失败（账号/密码或登录链路问题）"
 
     return {

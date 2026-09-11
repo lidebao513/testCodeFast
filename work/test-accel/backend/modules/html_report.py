@@ -9,9 +9,12 @@
 对 CSS 大括号的转义问题）。未提供的 token 自动回退到示例数据，保证模板单独
 打开 / 未传参时也是一份“完整可预览”的报告。
 """
+
 from __future__ import annotations
+
 import json
 from pathlib import Path
+
 
 TEMPLATE = Path(__file__).resolve().parents[2] / "report_templates" / "test_report.html"
 
@@ -26,7 +29,10 @@ SAMPLE = {
     "account": "test_ft001@ft.cntaiping.com",
     "generated_at": "2026-09-07 18:00:00",
     "author": "test-accel / WorkBuddy",
-    "kpi_total": "6", "kpi_pass": "5", "kpi_fail": "1", "kpi_rate": "83.3%",
+    "kpi_total": "6",
+    "kpi_pass": "5",
+    "kpi_fail": "1",
+    "kpi_rate": "83.3%",
     "change_summary_stat": "对比基准 → 目标：64 个文件变更 / 54 提交 / +2896 -723（占位示例）。",
     "change_summary_body": """
       <tr><td>backend/.../tools/router.py</td><td>新增 195 行</td><td>+195 / -0</td><td>@mention 路由、未知体熔断</td></tr>
@@ -51,7 +57,8 @@ SAMPLE = {
       <li>T-D 超长报告未被完整验证（中）。</li>
       <li>6 项单测因缺运行时数据失败（低，CI 注入数据后可转绿）。</li>
       <li>移动端大改未覆盖（中，建议补 UI 回归）。</li>""",
-    "reuse_ratio": "82%", "new_ratio": "18%",
+    "reuse_ratio": "82%",
+    "new_ratio": "18%",
     "reuse_detail": "按生效代码量估算：复用约 80–85%，新建/修正约 15–20%（4 处 harness 修正 + 1 诊断脚本，无重写）。",
 }
 
@@ -63,7 +70,7 @@ def render_report(context: dict | None = None) -> str:
     if context:
         data.update({k: v for k, v in context.items() if v is not None})
     for key, val in data.items():
-        tpl = tpl.replace("{{%s}}" % key, str(val))
+        tpl = tpl.replace(f"{{{{{key}}}}}", str(val))
     return tpl
 
 
@@ -76,14 +83,15 @@ def from_live_json(json_path: str, meta: dict | None = None) -> str:
         ok = bool(r.get("pass_"))
         reasons = "；".join(r.get("reasons", []) or []) or "—"
         rows.append(
-            f"<tr><td>{r.get('id','')}</td><td>{r.get('name','')}</td>"
-            f"<td>{r.get('elapsed','')}s</td><td>{r.get('resp_len','')}</td>"
+            f"<tr><td>{r.get('id', '')}</td><td>{r.get('name', '')}</td>"
+            f"<td>{r.get('elapsed', '')}s</td><td>{r.get('resp_len', '')}</td>"
             f"<td><span class='badge {'pass' if ok else 'fail'}'>"
-            f"{'PASS' if ok else 'FAIL'}</span></td><td>{reasons}</td></tr>")
+            f"{'PASS' if ok else 'FAIL'}</span></td><td>{reasons}</td></tr>"
+        )
     total = len(results)
     passed = sum(1 for r in results if r.get("pass_"))
     failed = total - passed
-    rate = f"{passed/total*100:.1f}%" if total else "—"
+    rate = f"{passed / total * 100:.1f}%" if total else "—"
     ctx = {
         "report_title": "验证报告 · 线上环境",
         "report_subtitle": f"验证产物来源：{Path(json_path).name}",
@@ -92,11 +100,15 @@ def from_live_json(json_path: str, meta: dict | None = None) -> str:
         "account": data.get("account", ""),
         "generated_at": data.get("generated_at", ""),
         "author": "test-accel / WorkBuddy",
-        "kpi_total": total, "kpi_pass": passed, "kpi_fail": failed, "kpi_rate": rate,
+        "kpi_total": total,
+        "kpi_pass": passed,
+        "kpi_fail": failed,
+        "kpi_rate": rate,
         "cases_body": "\n".join(rows),
         "stats_by_type_body": (
             f"<tr><td>线上场景验证</td><td>{passed}</td><td>{failed}</td>"
-            f"<td>{rate}</td><td>来自 {Path(json_path).name}</td></tr>"),
+            f"<td>{rate}</td><td>来自 {Path(json_path).name}</td></tr>"
+        ),
     }
     if meta:
         ctx.update(meta)

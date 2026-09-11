@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-page-node-id="AUaGNSXPQjI0xTFIIgGJ2Y">
+<head data-page-node-id="24SdmXSvJvRSg5DAHeVNWU">
+<meta charset="UTF-8" data-page-node-id="WYNGBE00EbOmEag46y9zwM">
+<meta name="viewport" content="width=device-width, initial-scale=1.0" data-page-node-id="D6xmF8uHYJADFzrlWJzW1k">
+<title>枚举统一 + 执行层(UI/接口) 方案报告</title>
+<style>
+  :root{
+    --bg:#ffffff; --fg:#1f2329; --muted:#6b7280; --line:#e5e7eb;
+    --acc:#2563eb; --accbg:#eff6ff; --ok:#16a34a; --okbg:#f0fdf4;
+    --warn:#d97706; --warnbg:#fffbeb; --bad:#dc2626; --badbg:#fef2f2;
+    --codebg:#f6f8fa; --chip:#eef2ff;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);
+    font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    line-height:1.7;font-size:15px}
+  .wrap{max-width:980px;margin:0 auto;padding:32px 24px 80px}
+  h1{font-size:26px;margin:0 0 6px}
+  h2{font-size:20px;margin:34px 0 12px;padding-bottom:8px;border-bottom:2px solid var(--line)}
+  h3{font-size:16px;margin:22px 0 8px;color:var(--acc)}
+  .sub{color:var(--muted);margin:0 0 18px}
+  .card{background:var(--accbg);border:1px solid #dbeafe;border-radius:10px;padding:16px 18px;margin:14px 0}
+  .ok{background:var(--okbg);border-color:#bbf7d0}
+  .warn{background:var(--warnbg);border-color:#fde68a}
+  .bad{background:var(--badbg);border-color:#fecaca}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13.5px}
+  th,td{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+  th{background:var(--codebg);font-weight:600}
+  code{background:var(--codebg);padding:1px 6px;border-radius:5px;font-size:12.5px;
+    font-family:"SFMono-Regular",Consolas,monospace}
+  pre{background:var(--codebg);border:1px solid var(--line);border-radius:8px;
+    padding:14px 16px;overflow:auto;font-size:12.5px;line-height:1.55}
+  .tag{display:inline-block;background:var(--chip);color:#3730a3;border-radius:6px;
+    padding:1px 8px;font-size:12px;margin:2px 4px 2px 0}
+  .tag.del{background:var(--badbg);color:var(--bad)}
+  .tag.new{background:var(--okbg);color:var(--ok)}
+  .tag.keep{background:var(--accbg);color:var(--acc)}
+  ul{margin:8px 0 8px 4px;padding-left:20px}
+  li{margin:4px 0}
+  .note{color:var(--muted);font-size:13px}
+  .foot{margin-top:36px;padding-top:14px;border-top:1px solid var(--line);color:var(--muted);font-size:12.5px}
+</style>
+</head>
+<body data-page-node-id="Ofvm5Dr2iVRJE5Hwd7weJt">
+<div class="wrap" data-page-node-id="T0H3pNxYGAAisSNoRr6b8F">
+
+<h1 data-page-node-id="Dbg8tJ1Op7Wg2pAJFT0FNP">枚举统一 + 执行层(UI / 接口) 方案报告</h1>
+<p class="sub" data-page-node-id="4IJHYl3SBeKvr4HX70UNFZ">面向非技术评审的方案文档 · 生成于 2026-09-10 · 状态：<b data-page-node-id="hiKYL8G2ccTXIQlWJkEULW">待确认（未执行）</b></p>
+
+<div class="card ok" data-page-node-id="2eil1tlDTiCgzMQGBv4chy">
+<b data-page-node-id="0x0ppiM6BM4aiHW7Rm6WkP">可行性结论：</b>方案<b data-page-node-id="35OuhihUA7e4hZ79zWdfLr">可行</b>。新增"执行层"维度（UI / 接口）作为独立枚举，不污染现有行为维度
+<code data-page-node-id="fcABlE7M4kWY9GCsGRjfcK">tp_type</code>；执行器按所选模式派发，UI 层无法覆盖时回退接口层验证，逻辑清晰、风险低。
+本方案在既有"单一可维护枚举源"提案基础上，吸收你本次新增的"执行层"需求，并按你要求列出<b data-page-node-id="F78rUgB6ATO9ItukE2nukB">可删除项</b>。
+</div>
+
+<h2 data-page-node-id="tZQuYFg93iTDY7wVu7dcIM">一、需求澄清与理解</h2>
+<p data-page-node-id="5Lz4nrKu6JnagAUQXYdWj6">你的原话："增加测试执行的纬度：UI 和接口，用来后续执行接口测试或 UI 测试的选项，如选择 UI 层无法覆盖执行的情况下会自动转为 UI 层验证。"</p>
+<div class="card warn" data-page-node-id="Dld00M2XI1Va8nsFpk7B8d">
+<b data-page-node-id="Fn2tYiosZGFofHlnmF7AAy">理解说明（请确认）：</b>我判断末句"转为 <u data-page-node-id="gOOIdmXblfmLsjeB2tJTW8">UI 层</u>验证"为笔误，正确应为"转为 <u data-page-node-id="XL2FITejw9h7p4HutMaNzb">接口层</u>验证"——
+否则"UI 选不覆盖→仍回 UI"是空转、无意义。故方案按：<b data-page-node-id="eQYfiblBUw4FG0J6dgPYgp">选 UI 模式但覆盖不了 → 自动回退接口层（HTTP/接口）验证</b> 设计。
+若你本意确为"UI→UI"，请告知，我将改为不改变层、仅标记"未覆盖"。
+</div>
+<ul data-page-node-id="ntqfaZRUrTmbHAIvrGjzKX">
+  <li data-page-node-id="ZQkxDSaahlxEk0O222lU4g"><b data-page-node-id="CYD1Vd3fBH6F6RfqlSkkfB">执行层（VerifyLayer）</b> = 新维度，取值 <code data-page-node-id="i2rhkHpuFQQgWVbrSFCGbV">接口</code> / <code data-page-node-id="3hDr4fLkJdrfD9qffBH87X">UI</code>，用于"跑用例时选哪种执行通道"。</li>
+  <li data-page-node-id="da3Sx7NMFqoNdEq1XT6BAU"><b data-page-node-id="Lxydf2o7k6xH1CsP6OEEbC">回退规则</b>：优先按用户所选模式；当所选=UI 但该测试点本质是接口（如 API 路由、后端业务函数）或浏览器不可用，则自动改用接口层验证。</li>
+  <li data-page-node-id="BIIhNCwGukjRtFrV4XVj6d"><b data-page-node-id="LITSAvJBR4fniPnX4WppEd">与"范围关键词"脱钩</b>：你明确说过"接口"不是之前的范围关键词 <code data-page-node-id="ebIMeRieIBjcJxG4qsCmZr">ScopeKeyword</code>。因此"接口"从 scope 里移除，改为执行层枚举值。</li>
+</ul>
+
+<h2 data-page-node-id="Q7E4S91DMHA4hjQDECqy2F">二、修订后的枚举总览（单一来源 backend/core/enums.py）</h2>
+<table data-page-node-id="UedyGNgZdrRdhFcBtqGqHZ">
+<tr data-page-node-id="v4QkLDlaKYx0qfhlmmkiYC"><th data-page-node-id="meokkfZGtnGFEdnhpKShv0">枚举轴</th><th data-page-node-id="xdYU3J3GxSFV1EOzN5Gcwc">取值</th><th data-page-node-id="Xzsoj2TF2o9rBSo6O7hpRB">处置</th><th data-page-node-id="wsshJ5yGyURsWfBVA2ZAju">说明</th></tr>
+<tr data-page-node-id="NCOUDSgtopJg2ZrpJnwRHL"><td data-page-node-id="IHiLN01dN2AwkTGgL6H6fV"><code data-page-node-id="2JUsfIIJ5v4lK6RYvt8xII">TPType</code> 行为维度</td><td data-page-node-id="A9imOUO0SpBcCLKrm3HhLW">正常 / 异常 / 安全 / 边界</td><td data-page-node-id="G9vL3doI6MYvMsBp4uMGKb"><span class="tag keep" data-page-node-id="YazDMw3Ke7bYl70WpV4kiv">保留·不动</span></td><td data-page-node-id="abzqTcGkpqvPff788ZrufX">不加入"接口"；行为维与层维分离</td></tr>
+<tr data-page-node-id="iGU8vdvtmaA14BWkXZkHKf"><td data-page-node-id="rWd3H2NT8xiiRnQt88cxuH"><code data-page-node-id="qepScqCrQoJAK4NRIrDyUn">Tag</code> 标签</td><td data-page-node-id="abVIZNzu6rhsqZulWbazI3">全量 / 更新</td><td data-page-node-id="wxBF6wuTc1Cl1adPGfsy3U"><span class="tag keep" data-page-node-id="FNIFxUWVnuVa6CpTIZSjG6">保留</span></td><td data-page-node-id="r0ukWfC5Sury8FkEsSG6gL">diff 增量标记</td></tr>
+<tr data-page-node-id="jl1AO3Qo4XSs0JTZ6pRleH"><td data-page-node-id="YudQyiN7nHatASMsVwNHMh"><code data-page-node-id="n3lVeh8MZ8E4YLa2ufLoTw">FType</code> 来源类型</td><td data-page-node-id="RxG4k5HhnOTuS4LGPmyC9R">api / page / ui / business / component</td><td data-page-node-id="GITVVeGMB9xxnVMb1JmmNb"><span class="tag keep" data-page-node-id="vF1zhFNC0Zqb0fBAef0l0E">保留·小写唯一</span></td><td data-page-node-id="dWcMSB5NO35E1HESwyBdqy">来自哪类代码产物</td></tr>
+<tr data-page-node-id="XPIBUX7Zi8PgBqeJ4aq58i"><td data-page-node-id="hRNfofTKqGesNkvuJdWkiK"><code data-page-node-id="a228ETy6PqCLjristeYMnF">VerifyLayer</code> 执行层</td><td data-page-node-id="oc0lZz2BCaqH2Id8kyjdf8"><b data-page-node-id="0uO1B3an7AgYU7tFW8Sa6m">接口 / UI</b></td><td data-page-node-id="v7T9Ln5g7pbPlC7BraLkzw"><span class="tag new" data-page-node-id="xMRvGfnBry1lRVfWqQn19H">新增</span></td><td data-page-node-id="kofHXXYjBiC568FZJiUEom">本次需求核心；驱动执行模式+回退</td></tr>
+<tr data-page-node-id="TrvSHU0udlhchzoualpTN0"><td data-page-node-id="OU5xxSpGrLSi613y3bTrKY"><code data-page-node-id="PL8ebMQCaeMbiF7mkvFnxW">KIND_DISPLAY</code> 中文名</td><td data-page-node-id="QePWezgusLRWNQHtbPUvc9">接口/页面路由/交互组件/业务函数/功能点</td><td data-page-node-id="B8bXoHBYeRgBXGkpcOL0QI"><span class="tag keep" data-page-node-id="f0B8hyQ1iYlCiwvhbBONxW">保留</span></td><td data-page-node-id="QaGNqqjKTD83fwxWZEqNEK">ftype→中文展示映射</td></tr>
+<tr data-page-node-id="uKIODACc5on8KwyHKVHQwC"><td data-page-node-id="B9WHmQVSqZdjfOC0fLpjE6"><code data-page-node-id="Rj1B5u71kRk332hE6Rr5fx">Dimension</code> 子类</td><td data-page-node-id="YJzcbU2vXLIBDmVgtojW63">安全-鉴权缺失/安全-越权/边界-参数缺失非法/异常-资源不存在/正常-可用性</td><td data-page-node-id="VdYz5sMCUU2HkfDUX9XdVc"><span class="tag keep" data-page-node-id="D78GkiCFG0k1XQbTvC1MD5">保留·可简化</span></td><td data-page-node-id="7uLNn14fDrg6ZV19HNHN6n">tp_type 的子分类</td></tr>
+<tr data-page-node-id="oLWkq3I6NAFvDzhglGPvfm"><td data-page-node-id="ceqHwGjgWbu49GunRyuY3Q"><code data-page-node-id="FjTWOI8z9XtQK7XUIymVSM">Method</code> 方法标记</td><td data-page-node-id="hXMoJfFi7mIEYcwivFiBzF">GET/POST/…/PAGE/UI</td><td data-page-node-id="wOHccTdHokavUwgnQJeFM1"><span class="tag keep" data-page-node-id="PkWlECyEkdTRy1KDar1ybJ">保留·补枚举</span></td><td data-page-node-id="FYEBjRCZe7G9RLCid82jXU">经复核 <code data-page-node-id="gOzz70adB0iL9wdqOVEFvH">PAGE/UI</code> 大写是 <code data-page-node-id="dYQErDWxKLUJAGiGRy4dBm">method</code> 字段值，<u data-page-node-id="c3wgyT5DNIG0G7ttnBIVCc">非 ftype 重复，不可删</u></td></tr>
+<tr data-page-node-id="NDgWhA9fbIj0EJsxzRKF8a"><td data-page-node-id="dwUZM2bkKQr1uzMPDJCRt1"><code data-page-node-id="MmzXWcnmiEu1eMZeJkQ3Pn">ExecStatus</code> 执行状态</td><td data-page-node-id="x48PwF9l9fl9tPsQP6K8pU">pass/fail/error/skipped/running/pending/triggered/revoked</td><td data-page-node-id="nHIt8D21isfZW0BWAReX2U"><span class="tag keep" data-page-node-id="V4bkJ5yWjCtHSVEZRBr3Gh">保留</span></td><td data-page-node-id="xNhX4fvCeyfCyUNntfY8Kk">用例执行结果</td></tr>
+<tr data-page-node-id="VuGNhKwLkqLYDUbjoiu0FW"><td data-page-node-id="BlRvd5sgdCDpiOKEUtinu1"><code data-page-node-id="HlJN2uC172T5O3hkAFKZma">PullStatus</code> 拉取状态</td><td data-page-node-id="hgAoL1RyFeQwGFm0G6e6cJ">ok / repo_escape_blocked</td><td data-page-node-id="qmBP63g5zdZYDEGdBUa54y"><span class="tag keep" data-page-node-id="EPV9QWLIAxDeuTA3V0EVjy">保留</span></td><td data-page-node-id="RWABPjd2UhmlsAPFn4LU1h">权限管控结果</td></tr>
+<tr data-page-node-id="rB9gysz3MgbjcJdirEM8CK"><td data-page-node-id="cKb4RVpIGFasJdoJb2yMfa"><code data-page-node-id="BBsAiiOLek4EbPkSZp4r69">Scope</code> 范围常量</td><td data-page-node-id="XMaVLJpATEdjBdeCs3GFsm">ALL_TP_TYPES / DEFAULT_SCOPE={正常,边界}</td><td data-page-node-id="I1JqZ4uEPBvzpcIEVIZStO"><span class="tag keep" data-page-node-id="WkdF3OONAcJCPE6Wz0Tjsp">保留·迁入</span></td><td data-page-node-id="2sSvbVRSxGEBVBIYSkFGN8">"全部"仅作 resolve 助词，不注册为枚举值</td></tr>
+</table>
+
+<h2 data-page-node-id="6FV4v42fSH13sdwnYZCurF">三、需要改动 / 可删除 清单</h2>
+
+<h3 data-page-node-id="v6zJuI2xIcbEp5pRHqAbof">3.1 新增（New）</h3>
+<ul data-page-node-id="TWsEwHcCUCGfCITwXGYfWr">
+  <li data-page-node-id="rPWwvuYqWhxSyxGBzFtBof"><code data-page-node-id="SrLCIjZW7OkRTXyWuv1OiC">backend/core/enums.py</code> —— 唯一枚举真值源（含 <code data-page-node-id="H39CrrBYwvAJp6aZfR2GPa">VerifyLayer</code>）。</li>
+  <li data-page-node-id="CAYEtRORhiCIRlUkqduLpw"><code data-page-node-id="QB1iWByOrEO01EAchdqS3U">scripts/check_enums.py</code> —— 枚举一致性门禁（扫描裸字面量）。</li>
+  <li data-page-node-id="UbLOroeHCTr7W3Z4GGEPNN">每个测试点 / 用例新增字段 <code data-page-node-id="6AWEPAgSFdtJ143vbRkTHw">verify_layer</code>（默认由 ftype 推导）。</li>
+</ul>
+
+<h3 data-page-node-id="XCCUwy90wsQKD0PNqjsPAJ">3.2 可删除 / 退役（Delete）</h3>
+<table data-page-node-id="jan8ynfxAtaWflOe6CuEjQ">
+<tr data-page-node-id="1aunOkz45p6GN9pEr4nk81"><th data-page-node-id="1IHjD0ZRHpCYSEzZGkdvgQ">删除项</th><th data-page-node-id="UxZfcd6cq7lV1oGnRFWGBu">位置</th><th data-page-node-id="uNS8YQyZ9QFaCUHuTOWTIM">原因</th></tr>
+<tr data-page-node-id="q49dmu1sy32jZhXX5RNu1T"><td data-page-node-id="tbxcrdD9uFdbCL9nuFTgJC"><span class="tag del" data-page-node-id="SqHHHkXcVkqqp76nv7hQY1">删除</span><b data-page-node-id="0PHI5KbbsUcv6U5XavEa3O">范围关键词"接口"</b></td><td data-page-node-id="YiaO1GufgxCxbEaFAic6rd">
+  <code data-page-node-id="gefkQ4tT5rwyeJeHMuY3qE">gen_test_points.py:99,103,119</code>（<code data-page-node-id="eAIga8vnqG7Bp3NMLNWF0J">has_iface</code> 逻辑）<br data-page-node-id="fsiQWKT1DEnYMWBSVdtAa6">
+  <code data-page-node-id="aJCVUKOdB85zTMI6DfuT4w">code_analyzer.py:1110-1115,1314-1316</code>（<code data-page-node-id="m8AClK9xacv6FwJDJctXWT">kinds={"api"}</code> 即"接口"范围过滤 + 文档）<br data-page-node-id="UazTtfC3Uoix30H3X23fJv">
+  <code data-page-node-id="SX1q8BCKEMOnaQvIC6REBw">gen_test_points.py:349,412,557</code>（报告文案"可选…接口"）
+</td><td data-page-node-id="YG5MfSE7KPrpfCKCX4mtUx">你明确："接口"不是范围关键词，改为执行层枚举。接口来源筛选能力由 <code data-page-node-id="TZ4FJ1mzPT61DoTID2M1iu">verify_layer=接口</code>（=ftype∈{api,business}）等价覆盖，不丢能力。</td></tr>
+<tr data-page-node-id="ZBkZAJKMBIVnMy7mRD9gjT"><td data-page-node-id="X9lE5SZfMmzqKxDeHJ43dz"><span class="tag del" data-page-node-id="BlxbAS7IjrxQoEMWQHMGQS">撤回</span><b data-page-node-id="mcDL5wtFfNTHX6emBOBvt4">此前"PAGE/UI 大写可删除"结论</b></td><td data-page-node-id="yNmjUqVNVBZuG3sfClsViV">—</td><td data-page-node-id="yhR70A7FohbGdGgreeY634">误判。它们是 <code data-page-node-id="BhYxbGW2qeObrDg3I6czC8">method</code> 字段值（前端产物方法标记），与 ftype 小写是两字段，<b data-page-node-id="dEafp8Rfsx8Ir5CQWyxvvI">保留</b>并补入 <code data-page-node-id="ScAyGS0OjogN58rFaNhZmo">Method</code> 枚举。</td></tr>
+</table>
+<div class="card" data-page-node-id="5J4rdtiuVwf7chKSdGfxYn">
+<b data-page-node-id="GNsiqpkzZJHSBZsKMjxwyN">说明：</b>除"范围关键词接口"外，你此前整理的 10 个枚举轴<b data-page-node-id="XBKoiZxZE4trzoIvkfV71A">基本都需保留</b>（它们是平台运转的真实维度）。
+真正"可删"的只有<b data-page-node-id="fe6dm1KISR8CkafS0ML6AD">接口作为范围关键词</b>这一处语义；其余属"统一迁入枚举源 + 补 Method/VerifyLayer"，属改造非删除。
+</div>
+
+<h3 data-page-node-id="PWwWAjUeC6OBWqVH20ODz1">3.3 需改造（Change）</h3>
+<ul data-page-node-id="Jfx4WIL71itdECiv3oRiZD">
+  <li data-page-node-id="HX0CdpPZbGsLk32XFTxkh9"><code data-page-node-id="bzjjINvb9qPUljOY4AQntt">gen_test_points.py</code>：移除 接口 scope 解析；<code data-page-node-id="x5DfF055R8fJWCqpLXlp4U">ALL_SCOPES/DEFAULT_SCOPE</code> 改从 <code data-page-node-id="70VbsMYETaSJ2Pz9CHyHk4">enums</code> 导入；报告文案改为"接口属执行层"。</li>
+  <li data-page-node-id="lZOad1t8HAn9HizZBZVgqr"><code data-page-node-id="2GBSEFaKXndQxURlSqnY2O">code_analyzer.py</code>：每个测试点注入 <code data-page-node-id="P53wyEcyACRtFM7XNY750Z">verify_layer=derive_verify_layer(ftype)</code>；<code data-page-node-id="yfRAKEInr4UDqghZjulu0B">ScopeSpec</code> 保留（仅 tp_types 来源过滤，去掉"接口"语义）；导入枚举。</li>
+  <li data-page-node-id="bZZHPy6AFSwmOW0eucYTUn"><code data-page-node-id="YIodEhdlHJhhxOANnfbOyV">case_generator.py</code>：每个用例注入 <code data-page-node-id="4DxphaP3051jLhMFv9aa6c">verify_layer</code>；导入枚举。</li>
+  <li data-page-node-id="KNF4z34RWA81SH7F8Ptng5"><code data-page-node-id="Ft1DksVpbuWHc7TBpDhNsX">executor.py</code>：实现 <code data-page-node-id="LtmvnnqtIji5MGW8VnAWHc">select_execution_mode()</code> 模式派发 + UI→接口回退；状态/层引用枚举。</li>
+  <li data-page-node-id="eD8IkMsj4WW7Xl5dvcahOD"><code data-page-node-id="jHroT5b5Fu1Ek8NEPDESUN">config.py / db.py / main.py / analytics.py / full_report.py / reporter.py / html_report.py / exporters.py / batch_store.py</code>：裸字面量改为枚举引用。</li>
+  <li data-page-node-id="ad3CJYMSUu5nIS1PG9grQu">两份 <code data-page-node-id="ItSdJkli3r7MaTCrH13tGL">SKILL.md</code>：范围表移除"接口"选项；新增"执行层"说明。</li>
+</ul>
+
+<h2 data-page-node-id="SNgBZM3yTNM3UapKWkYHeb">四、执行层核心设计（代码示意，落 enums.py）</h2>
+<pre data-page-node-id="2bfJVMaiAl1xlG36qPesJH">class VerifyLayer(Enum):
+    INTERFACE = "接口"   # 接口层：HTTP/requests 直接打接口
+    UI = "UI"            # UI 层：Playwright 渲染页面交互
+
+# 由来源类型推导默认执行层
+def derive_verify_layer(ftype: str) -> VerifyLayer:
+    # api(接口路由) / business(后端业务函数) → 接口层
+    # page(页面) / ui / component(前端交互组件) → UI 层
+    return VerifyLayer.INTERFACE if ftype in ("api", "business") else VerifyLayer.UI
+
+# 执行模式选择 + 回退
+def select_execution_mode(preferred: VerifyLayer, ftype: str, ui_available: bool) -> VerifyLayer:
+    if preferred == VerifyLayer.INTERFACE:
+        return VerifyLayer.INTERFACE          # 选接口层：直接走，无回退
+    # preferred == UI：以下情况回退接口层验证
+    if ftype in ("api", "business"):          # 本质无 UI 面 → 回退
+        return VerifyLayer.INTERFACE
+    if not ui_available:                       # 浏览器/Playwright 不可用 → 回退
+        return VerifyLayer.INTERFACE
+    return VerifyLayer.UI                      # 正常走 UI 层
+</pre>
+<div class="note" data-page-node-id="QjXSA2FkeW8T5IJVBrqs2I">回退触发条件有两类：① 测试点本质是接口型（api/business）；② UI 执行环境不可用（无浏览器）。
+两者任一成立即转接口层验证，并可在报告中标注"layer_fallback: true"便于你追溯。</div>
+
+<h2 data-page-node-id="r6BITUTNbOPZDG8ILfnkMJ">五、落地步骤（按你选定的 Option A 全量执行）</h2>
+<table data-page-node-id="umghGn4ao1Yotu2D7h4Kc4">
+<tr data-page-node-id="yqh6fTSGi2uVfD7AbDc6y4"><th data-page-node-id="7pAKJHhyeHiahcEBE6GOFC">步</th><th data-page-node-id="sMPwUffGXfAOAIfzzyqXwa">动作</th><th data-page-node-id="2ozf63q01rZU34At95kMSA">改动文件</th><th data-page-node-id="tWU3IQ51I10yBErgV1NLec">回归验证</th></tr>
+<tr data-page-node-id="vXjhldYDLBrT0iCMqwBoS1"><td data-page-node-id="y03lpsFvxQ15kJboj44CXw">1</td><td data-page-node-id="b407XUaw1TH2LcsKjtznQ2">建 <code data-page-node-id="pKV2tpGzNl5vV4U2WN3pB6">enums.py</code> + <code data-page-node-id="Gzd8jDIL2oglhGEpK09pzQ">check_enums.py</code>（含 VerifyLayer / derive / select）</td><td data-page-node-id="nKLAgOGbGn4yu3r8oJSg94">新增 2 文件</td><td data-page-node-id="6Fg1eUcXrdd7q4NrOrBKzC">门禁空跑通过</td></tr>
+<tr data-page-node-id="M5kYXqTBb35wBlSEWgTv6T"><td data-page-node-id="DKi2qZ73ZmipAAqJUaoZLS">2</td><td data-page-node-id="iKUHjZJh8sb0TS6jW10Qsp">核心生成链路接枚举 + 注入 verify_layer + 移除接口 scope</td><td data-page-node-id="9siTuTHOX4PIGrwlhjNwQy">gen_test_points.py / code_analyzer.py / case_generator.py / config.py / db.py</td><td data-page-node-id="r2T1AW2dymo2gtEHnHRScF">重跑生成器，输出条数与现 test_points_new.json 一致、且每条带 verify_layer</td></tr>
+<tr data-page-node-id="z2OjQMFEBjAAUlz0vICTfh"><td data-page-node-id="CAQejJ7UOPDKe0CVjMlVvG">3</td><td data-page-node-id="7KkRZhVWEFJghuJs9507Nw">执行层接枚举 + 模式派发 + UI→接口回退</td><td data-page-node-id="RZEe8s4npIElRx6CzqnakN">executor.py / main.py</td><td data-page-node-id="4t2Kc6J0aEzKhc1g7I376T">重跑 validate_full_pipeline.py，结果不变；新增 verify_layer 落盘</td></tr>
+<tr data-page-node-id="Tx0ygUbRqDHh4ZMQtE7Ztv"><td data-page-node-id="nt9wIsRDDc7EJLXTDOBxqC">4</td><td data-page-node-id="p35AFrajbO7antBOsUnbmj">报告渲染接枚举</td><td data-page-node-id="QBk5UYjBpV8MogCSqGZuh6">analytics / full_report / reporter / html_report / exporters / batch_store</td><td data-page-node-id="FxX7Fpe34CXlBjnE2DVurh">重跑 gen_validation_reports.py，输出一致</td></tr>
+<tr data-page-node-id="h2KaFvx3iQ79oNjKEeKMqg"><td data-page-node-id="P19YX514rUwHkQ1wml1jo3">5</td><td data-page-node-id="yB3CVILAozqd74VjkIq1J0">文档与脚手架同步</td><td data-page-node-id="0aOuxOWFDZ0tXicdG5aeHp">两份 SKILL.md（移除接口 scope、加执行层）</td><td data-page-node-id="DF2dmcCRmBCIDrQEotL4O3">check_enums 零违规；现有报告无误</td></tr>
+</table>
+
+<h2 data-page-node-id="RPb6Q1jlOhXQHMAuF1pdp5">六、风险与边界</h2>
+<ul data-page-node-id="j5GYBIdvme4ttFEMV59xHg">
+  <li data-page-node-id="QRmiGZBZkFqFPgYwlzCKS0"><b data-page-node-id="M1MXWS8qN1ZvdFOXTZnk1U">回退语义</b>：UI→接口回退后，验证强度降级为"契约/结构级"（状态码/路由/鉴权），不做页面交互断言。报告需显式标注，避免误判"已 UI 验证"。</li>
+  <li data-page-node-id="8cqCPwvAXsx20LKinAxjaa"><b data-page-node-id="fDkViktUBQ8ESifmu7xEPA">能力保留</b>：移除"接口"范围关键词后，仍可经 <code data-page-node-id="ypzQhoAuRFva91FOsUw0ML">verify_layer=接口</code> 或 <code data-page-node-id="85UcEuQsAwQMs4e2pEF1iV">ftype=api</code> 筛选接口型用例，不丢覆盖。</li>
+  <li data-page-node-id="5bwm5MbztH1F7dgjkREaxn"><b data-page-node-id="FOtHjAwaTAjz3dSZSNDcpX">数据库</b>：<code data-page-node-id="YZkFlhDxkFmyJX0q70F4fG">tp_type</code>/<code data-page-node-id="3Kd6jedBcShl7dIXFTOLtW">tag</code> 仍存字符串；新增 <code data-page-node-id="t6d3SIIcnECs6MEWfSuOwP">verify_layer</code> 字段（可加列或并入扩展 JSON），无需改表结构硬约束。</li>
+  <li data-page-node-id="Ypv8D3CnQDrQygS8fRc2DY"><b data-page-node-id="3NYJ0r15wVG4LKkeJxcWO1">改动面</b>：约 12 个 .py 多为字面量替换，机械低风险；建议先 Step1-2 看效果。</li>
+</ul>
+
+<h2 data-page-node-id="zL1GxjAFuNXodcTXPhdok3">七、交付物（执行后）</h2>
+<ul data-page-node-id="f66alxoZnOs8zXklkCeAJ8">
+  <li data-page-node-id="EPQFvjSpK2Dho7Z7Z1bKqK"><code data-page-node-id="BBJ5svuJvxROlMucu86EHd">backend/core/enums.py</code> —— 唯一枚举真值源（含执行层）。</li>
+  <li data-page-node-id="eEVRR0dyNyqIy7mDGA4ATP"><code data-page-node-id="xKq8nG8hogGfflgY7gD4k6">scripts/check_enums.py</code> —— 枚举一致性门禁。</li>
+  <li data-page-node-id="nSEDpsXo2ZaecJ6nqsUZ3M">上述 12 模块引用替换 + 两份 SKILL.md 同步。</li>
+  <li data-page-node-id="ZmaSOhDNzyofSkAVcWTyss">回归验证报告（生成器/验证脚本输出不变 + verify_layer 已注入 + 门禁零违规）。</li>
+</ul>
+
+<div class="foot" data-page-node-id="omAef9dS2itnPYgXms26hk">
+本方案为"先给方案、待确认执行"。确认后我将按 Option A 五步全量落地，并在执行中持续回归。
+如需调整（如 VerifyLayer 命名用"接口层/UI层"、或回退改"标记未覆盖而非转接口"），请一并告知。
+</div>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,171 @@
+=== diff --stat (codeup/test-20260906..codeup/test-20260907) ===
+ .workbuddy/memory/2026-09-07.md                    |  27 ++
+ backend/research-agent-source/.run                 |   1 -
+ backend/research-agent-source/.run/diag-log.jsonl  | 119 ++++++
+ backend/research-agent-source/.run/kline.b64       |   1 +
+ backend/research-agent-source/.run/llm-trace.jsonl | 247 ++++++++++++
+ ...212\200\350\203\275\350\247\204\350\214\203.md" | 294 ++++++++++++++
+ backend/research-agent-source/main.py              | 114 +++++-
+ backend/research-agent-source/restart.py           | 145 +++++++
+ backend/research-agent-source/rq_client.py         |  53 +++
+ backend/research-agent-source/server.py            | 168 ++++++--
+ backend/research-agent-source/test_hang.py         |  29 ++
+ backend/research-agent-source/test_hang2.py        |  63 +++
+ backend/research-agent-source/test_hang3.py        |  70 ++++
+ backend/research-agent-source/test_resp.json       |  31 ++
+ .../tests/test_failure_modes.py                    | 192 +++++++++
+ backend/research-agent-source/tests/test_fm007.py  | 157 ++++++++
+ .../tests/test_output_quality.py                   | 216 ++++++++++
+ backend/research-agent-source/thread_meta.sqlite   |   0
+ .../tools/flash_daily_rollup.py                    |  25 ++
+ .../research-agent-source/tools/minimax_chat.py    |   7 +-
+ backend/research-agent-source/tools/router.py      | 195 +++++++++
+ .../research-agent-source/tools/sandbox/backend.py |  34 ++
+ .../tools/toolcall_sanitize.py                     | 253 +++++++++++-
+ .../agents/builtin/business-data-agent.yaml        |  17 +
+ .../agents/builtin/finance-data-agent.yaml         |   4 +
+ .../workspace/agents/builtin/main.yaml             |  32 +-
+ .../agents/builtin/market-review-agent.yaml        |   3 +
+ .../workspace/agents/daily_perf/agent.yaml         |   8 +
+ ...270\232\345\212\241\350\257\264\346\230\216.md" |  48 ---
+ ...217\243\345\276\204\345\255\227\345\205\270.md" |  21 -
+ ...255\227\346\256\265\347\220\206\350\247\243.md" |  61 ---
+ .../finance-data-agent/financial-report-reader     |   1 +
+ .../finance-data-agent/stock-finance-profiler      |   1 +
+ .../market-review-agent/stock-tech-analysis        |   1 +
+ .../workspace/skills/dcf-valuation/SKILL.md        |  62 +++
+ .../skills/dcf-valuation/references/assumptions.md |  48 +++
+ .../skills/dcf-valuation/scripts/dcf_calc.py       |  81 ++++
+ .../workspace/skills/equity-fundamentals/SKILL.md  |  68 ++++
+ .../references/ratio_reference.md                  |  66 ++++
+ .../equity-fundamentals/scripts/ratio_calc.py      |  85 ++++
+ .../workspace/skills/financial-red-flags/SKILL.md  |  50 +++
+ .../references/red_flags_checklist.md              |  78 ++++
+ .../skills/financial-red-flags/scripts/mscore.py   |  74 ++++
+ .../workspace/skills/industry-research/SKILL.md    |  58 +++
+ .../industry-research/references/frameworks.md     |  58 +++
+ .../workspace/skills/k-line-chart-analyst/SKILL.md | 291 ++++++++++++++
+ ...232\234\346\250\241\345\274\217\345\272\223.md" | 109 ++++++
+ ...242\230\347\231\273\350\256\260\347\260\277.md" |  64 +++
+ frontend/app/.run/frontend.pid                     |   1 +
+ frontend/app/.run/server.pid                       |   1 +
+ frontend/app/gateway-test-keys.txt                 |   4 +
+ frontend/app/src/App.tsx                           |  23 +-
+ frontend/app/src/api/adapter.ts                    |  49 ++-
+ frontend/app/src/api/backend.ts                    |  11 +
+ frontend/app/src/components/chat/AsciiWave.tsx     |  74 +++-
+ frontend/app/src/components/chat/Composer.tsx      |  25 +-
+ frontend/app/src/components/chat/ImageLightbox.tsx |  94 +++++
+ frontend/app/src/components/chat/MessageItem.tsx   |  38 +-
+ .../src/components/mobile/ArtifactFilesEntry.tsx   |   4 +-
+ frontend/app/src/components/mobile/EmptyState.tsx  |  67 ++++
+ .../app/src/components/mobile/HistoryDrawer.tsx    |  22 +-
+ .../app/src/components/mobile/MobileComposer.tsx   | 165 +++++---
+ frontend/app/src/components/mobile/MobileShell.tsx |  36 +-
+ .../app/src/components/mobile/MobileTabBar.tsx     |  76 ++++
+ .../app/src/components/mobile/SubPageHeader.tsx    |   5 +-
+ frontend/app/src/components/mobile/TeamSheet.tsx   |  22 +-
+ .../app/src/components/mobile/menuPermissions.ts   |   1 +
+ frontend/app/src/index.css                         |  31 ++
+ frontend/app/src/lib/capabilityModes.ts            |  20 +-
+ frontend/app/src/mock/chat.ts                      |   2 +
+ frontend/app/src/pages/DailyPerfPage.tsx           |  46 +--
+ .../src/pages/mobile/MobileArtifactPreviewPage.tsx |   2 +-
+ .../app/src/pages/mobile/MobileArtifactsPage.tsx   |  51 +--
+ frontend/app/src/pages/mobile/MobileBudgetPage.tsx | 359 +++++++++++++++++
+ frontend/app/src/pages/mobile/MobileChatPage.tsx   | 266 ++++++++++---
+ .../app/src/pages/mobile/MobileDiscoverPage.tsx    |  70 ++--
+ .../app/src/pages/mobile/MobileEmailListPage.tsx   |  22 +-
+ .../app/src/pages/mobile/MobileInvestHomePage.tsx  | 407 +++++++++++++++++++
+ .../app/src/pages/mobile/MobileKnowledgePage.tsx   |  52 +--
+ .../app/src/pages/mobile/MobileLibraryPage.tsx     |  59 +++
+ frontend/app/src/pages/mobile/MobileMePage.tsx     |  46 ++-
+ frontend/app/src/pages/mobile/MobileMemoryPage.tsx |   4 +-
+ .../app/src/pages/mobile/MobilePipelinePage.tsx    |   6 +-
+ .../app/src/pages/mobile/MobileSchedulePage.tsx    |   2 +-
+ frontend/app/src/pages/mobile/MobileSharePage.tsx  |   2 +-
+ frontend/app/src/pages/mobile/MobileSkillsPage.tsx |   2 +-
+ frontend/app/src/pages/mobile/MobileTasksPage.tsx  | 121 +++---
+ frontend/app/src/pages/mobile/MobileTeamPage.tsx   | 436 ++++++++++++++-------
+ frontend/app/src/pages/mobile/MobileWecomPage.tsx  |   4 +-
+ frontend/app/src/pages/pc/PcChatPage.tsx           |  17 +-
+ frontend/app/src/pages/pc/PcListPages.tsx          |  11 +-
+ frontend/app/vite.config.ts                        |   4 +-
+ start-dev.bat                                      |  34 ++
+ 93 files changed, 5869 insertions(+), 755 deletions(-)
+=== changed file count ===
+93
+=== additions/deletions (numstat sum) ===
+added_lines=5869 removed_lines=755
+=== commit log ===
+93aa0d8 优化
+c5b1afe Merge branch 'master' into kline-20260907
+722e198 kline开发
+8a46e81 fix(mobile): MobileComposer 底色可选，投研页输入区底色与页面 panel 灰背景一致
+881333f feat(mobile): 投研页加快答/标准/深度研究档位胶囊（与对话页同 key 互通），键盘弹起自动隐藏
+d36b669 feat(mobile): 投研页底部问答条复用主对话 MobileComposer 同架构，发送跳转主对话自动提问
+19a3c77 feat(mobile): 投研页顶部新增盯大盘同款大卡（三指数+涨跌点+轮播指示），替换原盯市场卡列
+a52d0f0 fix(mobile): 投研页顶部「投资研究」页题去掉，仅留数据时间戳
+2e0846d feat(mobile): 底部 Tab 资料换投研；资料回抽屉记忆管理下；投研页去返回改频道标准
+d283dff 装载4个金融技能(dcf估值/基本面/财务排雷/行业研究)入workspace/skills；专家页新增技能+工具两个tab(总计四个，纯展示只读)
+eda0b67 test_output_quality: thread_id 前缀匹配（测试线执行，主线代收防 reset 抹掉）
+dd3af4c feat(mobile): 抽屉场景区审计下新增「投研」入口 → /m/research
+3e9a678 feat(mobile): 投研垂类 L0 投研首页 mock（/m/research，10 区块全 MOCK）
+ac84ff3 ui(mobile): discover page compact summary and attachment name (15.5px lh1.4), titles unchanged
+9e90a6d ui(mobile): compact secondary text on experts/tasks/artifacts (desc 15.5px lh1.4), titles and structure unchanged, more content per screen
+dda20d5 根治深圳问数事故：fs系工具签名登记+同形歧义裁决(空名调用可认回ls/read_file等)；占位名窗口熔断只数本轮(撞HumanMessage即停)，修复历史占位名锁死会话
+350abe3 ui(mobile): artifacts page font scale-up per spec (card title 20/meta 18/group header 18/count+time 15.5)
+327839c ui(mobile): email list page font scale-up per spec (subject 20/meta 18/summary 20/buttons 15.5, empty-state 24)
+cacbd6b restore gateway-test-keys.txt (lost after reboot); add K-line technical analysis spec doc
+5852103 每日业绩入口页还原普通样式：撤深色驾驶舱(exh作用域/html-body底色同步)，回全局白底+标准墨阶+浅灰卡片
+10c094d fix(mobile): caps row only on empty home; keyboard detection via focus events (works in wechat webview) with visualViewport fallback
+461fe20 fix(mobile): keyboard-aware UI - hide capability capsules, mode capsule row and bottom tabbar while typing, composer docks to keyboard
+9a39270 feat(budget): add special-budget cockpit page (/m/budget, mock data per approved design) + drawer scenario entry + home capsule route
+f264d75 ui(mobile): de-blue four tab pages - badges/avatars/active tabs/chips now black-bg white-text, blue icons -> ink; task renamed to desktop sensitive info scan
+89cee04 ui(mobile): four tab pages font scale-up per expert spec (L1 24/L2 22/L3 20/L4 18/L5 15.5/L6 13.5, 52 replacements, zero arbitrary text-[px] left)
+bfd681e feat(capability): restore PPT mode (pptx output); email capsule now routes to /m/email (drawer mail entry)
+ed7b975 根治字典日期锚旧：pension_dicts三文档移出git跟踪(同flash_reports先例,杜绝push reset回滚)；rollup跑批新增索引重建+后端重启，确保search_pension_dicts与六表同日
+b56d060 feat(capability): rename modes - writing->gongwen label, ppt->email label, with matching prompts/icons (ids kept)
+5d31e64 ui(mobile): remove tabbar top hairline between composer and bottom nav (light+dark)
+4e174be ui(mobile): capability capsule row moved from hero down to above composer (annotated screenshot)
+76334c7 ui(mobile): home first-principles pass - content lowered (pad 18-36vh), spacing hierarchy fixed (32/12), wave lowered to 64%/34vh op.45 with top-bottom fade mask, fu chars reduced to 1/3 with spatial dilution
+1239192 ui(mobile): more whitespace under subtitle; ascii wave lowered and shortened so it no longer presses the header
+72324e4 ui(mobile): remove HTML mode capsule from home row and + panel (definition kept, PC unaffected)
+cf51508 ui(mobile): capability capsules -> horizontal row under info bubbles (same treatment)
+e51449b ui(mobile): home info bubbles -> horizontal row below subtitle (was vertical above composer)
+d638eff feat(mobile): 福潮美学——ascii波满幅100vw×44vh+径向mask波谷留白(浪潮为字让开);福字退为峰值专属(d>=0.86退潮浮现);新增福金token --c-fu(#B07A2E/#D4A85C)仅用于峰值福字;字符蓝四阶收三阶,深色墨蓝灰字符海;800ms起势与标题逐字同步;红点收口仅待办行显示。build全绿,SSE零触碰
+be1f21e feat(mobile): 输入区整合方向B+聊天页底部一体白(P0)——外槽/底栏灰底->白底,底栏补0.5px发线;能力气泡行收进「+」面板(快捷通道/创作模式分区);档位胶囊去胶囊化改纯文字触发器(圆点+档位名+时长,全端去黑底反色);空态能力引导移入消息区;录音红token化。build全绿,SSE零触碰。依据:composer_bg_proposal P0
+3c42e18 业绩权威源硬切换：bmp_dashboard(2026-08-08停更)禁用，指向每日业绩六表pension_flash；路由行补经营情况/机构经营关键词；ISSUE-005入账
+b1f5196 fix(mobile): 用户气泡纯黑改深灰(新增--c-bubble-user 64/84双套token,三处气泡统一);消息列顶距16->56px,首条内容完整露出顶部羽化区(治过程卡被遮)。build全绿,零逻辑变更
+1d578d8 fix(mobile): 主聊天用户气泡统一黑底白字(bg-chipgray->bg-ink,text-ink->text-white),与知识库/企业微信气泡同款。build全绿,零逻辑变更
+53cd8fa fix(mobile): 气泡与底栏选中态去蓝——知识库/企业微信用户气泡 bg-brand->bg-ink;底栏 Tab 选中态 text-brand->text-ink;用户气泡文字 15.5->20px/1.5 对齐输出正文并加下划线(offset 3px)。build全绿,零逻辑变更
+79911cc fix(mobile): 卢总三连——全站蓝色实心按钮统一换黑(bg-ink,22处,气泡/装饰蓝不动);首页标题26->32px副标题15->18px;知识库页补优化(空态标题18px、快捷卡44px触控、引用块圆角12px、页尾声明18px)。build全绿,零逻辑变更
+d6c2328 测试专线首批产出：输出质量断言器 + FM-007 断流丢正文回放用例
+9d93054 feat(mobile): 非对话页设计方案全量落地(P0-P2)+发现页顶部分类筛选条整行删除(卢总令)。P0:彩色标签/头像色中性化、主动作全站44px、知识库提问条对齐Composer;P1:专家卡单列大卡、我的页去胶囊页头(分享迁入关于卡)、卡片阴影边框统一;P2:新建EmptyState组件统一三态、底部声明段前18px。六次build全绿。禁区(Chat/Audit/api/TabBar/Composer)零触碰
+aac9d96 fix(mobile): 非对话页字体适老放大 44 处(P0+P1+P2)——专家/资料/产物/发现/派/我的六页+TeamSheet/产物入口两公共件。12px/14px 未入映射表的真缺口逐处换类;徽标角标 10px->11px;正文级 13.5-15px->15-15.5px 对齐对话区体系。只改字号类,零逻辑变更。依据:font_audit 报告。对话页/审计页/api 未触碰
+8f40f26 fix(mobile): UI打磨三连(P2)——派Tab图标 SendHorizontal->ClipboardList(纸飞机语义弱且与发送钮撞车);输入区按钮图标 18/17->20/19px 随44px按钮同步;输入框多行长高封顶132->150px(适配18px字号约5行)。影响面:仅移动端观感,无逻辑变更。依据:UI深研报告P2-7/P1-6/P1-5
+ce911ce fix(mobile): UI一致性三连(P1/P2)——消息间距20->18px与块间距统一;深色底栏补0.5px顶发线治消息区/底栏糊并;输入框文字16->18px对齐适老正文。影响面:仅移动端观感,无逻辑变更。依据:UI评审P1-2、UI深研P0-3与P1-5
+b9985e5 fix(mobile): 输入区容器 px-3->px-4,与消息流 16px 边线对齐(P2-1)。原因:pill 边线比正文各外扩 4px,底部视觉比内容区宽。影响面:仅移动端输入区横向落点。依据:UI评审报告P2-1
+a5e9f4a fix(mobile): 浅色输入 pill 补 0.5px 细发线(--c-line),与深色发线对齐(P1)。原因:chipgray(242) 对 panel(247) 灰阶差仅 5,阳光屏下边界发糊,补线后 ΔL*≈0.105。影响面:仅浅色模式输入框边界观感。依据:UI深研报告P1-4
+d523ae9 fix(mobile): 输入区三枚圆钮 40->44px 达触控规范,pill 60->64px、圆角 30->32px 保持全圆(P0)。原因:40px 低于 44px 触控目标下限,适老关键项;按钮放大后 pill 同步加高保留呼吸感。影响面:仅移动端输入区观感与触控,无逻辑变更。依据:UI深研报告P0-1
+83046bf fix(mobile): 底栏加 px-4 左右边距,与消息流 16px 边线同轴(P0-1)。原因:底栏全宽 0 边距与正文区无共享对齐轴,产生底层模块割裂感。影响面:仅移动端底栏五栏落点内收,交互不变。依据:UI评审报告P0-1
+9bd4d64 fix(mobile): 底栏五栏导航适老放大——标签10.5px\u2192text-xs(13.5px)、图标21\u219222px、描边1.8/2.2\u21922.0/2.4、内容区56\u219260px。原因：标签跌破适老最小字级(全站最小辅助字12.5px)、图标感知尺寸不足、激活描边差0.4px不可感知。影响面：仅移动端底部导航观感，无逻辑变更。依据：UI深研报告P0-2
+2789e2f FM-007 断流重连丢正文自愈：done 收尾与服务端历史对账补挂缺失正文
+c06f420 fix(sanitize): 签名表补 fill_widget_template（qid+data_json）——20:44 fdc7a847 / 20:49 b468f1da 双现场：业绩组件渲染调用 data_json 数千字符长 JSON，流式长参数首分块丢名，Q2/Q4 组件双双渲染失败。FM-001 新变体，回放套件固化。
+c40a658 fix(sanitize): FM-006 思考标签残留清洗——reasoning_split 边界泄漏（</mm:think> 残留+内心独白）经子代理 task 结果污染主 agent 最终答复头部（e61fc605 实证）。after_model 机制性清洗：完整 think 段剥离、残留标签开头的前缀独白整段丢弃、纯泄漏空消息整条丢弃；主/子/daily_perf 全链路生效。回放套件组7 六用例（含事故现场原文回放），45/45 PASS。故障模式库登记 FM-006。
+0c93cee fix(main.yaml): §2.1.3 交付话术纪律块错位修复——7e23a19 追加时落在文件尾顶层，被 YAML 并进 skills: 列表，deepagents 技能中间件把整句提示词当技能目录加载（Skills load errors 告警），且四条纪律实际从未进入 system_prompt。挪回 system_prompt 块内 2.1.2 之后；回放套件新增 3 条结构性断言（skills 列表纯净/话术纪律在位/PDF 规则在位）防同类编辑缺陷。39/39 PASS。
+3ac247c feat(会诊三刀): 月度专家会诊根治方案落地（卢总拍板立刻做）
+bd2b8c6 docs: ISSUE-003 占位名死循环事故登记
+4d83744 fix(sanitize): 占位名死循环根治——签名表补 rq_snapshot/rq_trading_calendar + missing_tool_name 窗口硬熔断(>=3)
+335aeb7 perf(issue-002): 长任务耗时治理族五项（卢总0906晚拍板）\n\n1. write_file分块硬检测：单次content超12000字符拒绝+分块引导\n2. rq_snapshot聚合快照工具\n3. 子代理todos收敛（框架原生文案口）\n4. README并入交付正文\n5. 问题登记簿ISSUE-002入账\n离线验证 10/10 PASS
+d829d66 docs(main): PDF改为按需项——默认交付HTML，用户明确提出PDF/打印/归档才转（卢总0906拍板）
+7e23a19 fix(q7): deliver-assets产物卡移动端失踪四连修（0906晚施工单）
+0fcf88d fix(mobile): 主Tab页头部整条移除、全页底纹一体化（对齐WorkBuddy）
+4eb5ed0 fix(mobile): 主Tab页头部做减法（对齐WorkBuddy项目空间）
+e88aed6 fix(mobile): 底栏去分割线、输入框贴底下移（对齐WorkBuddy）
+ab4d69d feat(mobile): 底部五栏导航手术（对话/专家/资料/派/发现，对标WorkBuddy）
+2641aa9 专家天团页改版（对标 WorkBuddy 专家广场）：双 tab 专家/专家团、专家卡片网格化+能力标签；封闭专家独立提问路径（撤掉擅长问题直问按钮，唯一出口为向天团提问）；新专家/团供给收口科技部流程（页面明示）；专家团 tab 为预置编队展示壳（P1 实体化）；PC 端同步
+854d418 路由精细化 P0 前端：档位改名场景化 速答/研究/深度研究（key 不变，默认研究）
+9dc2430 路由精细化 P0 后端：统一路由层 tools/router.py（@专家直呼解析+会话驻留+route_decision 观测事件）、server.py chat 入口接线、main.yaml 委派三级规则（必派/可派/禁派）+ 两条收口纪律、daily_perf 频道护栏（非问数固定文案拒答）、技能下沉（finance-data/market-review 专属技能挂子代理，_groups 符号链接组）
+847d51e 每日业绩深色页去白边：挂载期间 html/body 底色与 theme-color 同步为 --exh-bg，卸载还原（治安全区/overscroll 露白）
+99497c8 P2 定案修复三连：回补去重加流代际（同流多次合法调用不再误杀）、同消息空壳双胞胎空调用确定性丢弃（治静默截断/交付卡片丢失）、产物路径 thread UUID 誊抄纠错（等长差异<=3 字符改回本会话目录，治 widget 404 类）

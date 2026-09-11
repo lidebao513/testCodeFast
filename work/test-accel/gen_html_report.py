@@ -11,13 +11,16 @@
   # 3) 无参数：生成一份示例报告到 report_templates/sample_report.html
   python gen_html_report.py
 """
-import sys
-import json
+
 import argparse
+import json
+import sys
 from pathlib import Path
 
+
 sys.path.insert(0, ".")
-from backend.modules.html_report import render_report, from_live_json
+from backend.modules.html_report import from_live_json, render_report
+
 
 ROOT = Path(__file__).resolve().parent
 

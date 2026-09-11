@@ -1,0 +1,25 @@
+# ============================================================================
+# pre-commit 本地门禁（test-accel 项目级）
+# 安装：cd work/test-accel && pre-commit install
+# 作用：commit 时跑 scripts/gate_all.py（ruff/mypy/bandit/枚举/架构/pytest 全量门禁），
+#       违反即阻断提交，保证「生成/优化」不跑偏。
+# 说明：本配置用 local hook 直接调 gate_all.py，由 gate_all.py 自行解析 ruff/mypy/bandit
+#       （PATH → 托管环境 → python -m），无需联网拉取第三方 pre-commit 仓库；离线可用。
+#       若 test-accel 作为独立仓库提交，此配置即生效；若作为 testCodeFast 子目录提交，
+#       请用仓库根的 .pre-commit-config.yaml（同样的 local hook）。
+# ============================================================================
+repos:
+  - repo: local
+    hooks:
+      - id: quality-gate
+        name: test-accel 质量门禁 (gate_all)
+        entry: bash -c 'cd "$(git rev-parse --show-toplevel)/work/test-accel" && python scripts/gate_all.py'
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: commit-msg-convention
+        name: 提交信息格式 (Conventional Commits)
+        entry: bash -c 'cd "$(git rev-parse --show-toplevel)/work/test-accel" && python scripts/check_commit_msg.py "$@"' bash
+        language: system
+        pass_filenames: true
+        stages: [commit-msg]

@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-page-node-id="L4YPLjEUlIKQgvbyvXfnPr"><head data-page-node-id="MRjRTbVsAbmyTFF0aqRtzJ"><meta charset="utf-8" data-page-node-id="0pSyZ2w7ricg7nQ4SZKORY">
+<meta name="viewport" content="width=device-width,initial-scale=1" data-page-node-id="WJVE3VTy8WCjByVG8BjA5C">
+<title>福享 Agent 全量测试报告 2026-09-09 18:29</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#0f1117;color:#e6e6e6;font-family:-apple-system,'Segoe UI',Roboto,'PingFang SC','Microsoft YaHei',sans-serif;line-height:1.6}
+header{padding:24px 28px;background:linear-gradient(135deg,#1a2740,#0f1117);border-bottom:1px solid #2a3550}
+header h1{margin:0 0 6px;font-size:22px;color:#fff}
+header .sub{color:#9fb3d1;font-size:13px}
+nav{position:fixed;left:0;top:0;bottom:0;width:210px;background:#151a26;padding:80px 14px 20px;overflow:auto;border-right:1px solid #2a3550}
+nav a{display:block;color:#9fb3d1;text-decoration:none;padding:7px 10px;border-radius:6px;font-size:13px;margin-bottom:3px}
+nav a:hover{background:#23304d;color:#fff}
+main{margin-left:210px;padding:28px 34px 80px;max-width:1100px}
+h2{color:#7fd1ff;border-bottom:1px solid #2a3550;padding-bottom:6px;margin-top:38px;font-size:18px}
+h3{color:#ffd479;font-size:15px;margin-top:24px}
+.kpis{display:flex;flex-wrap:wrap;gap:14px;margin:18px 0}
+.kpi{flex:1;min-width:150px;background:#151a26;border:1px solid #2a3550;border-radius:10px;padding:14px 16px}
+.kpi .n{font-size:26px;font-weight:700}
+.kpi .l{color:#9fb3d1;font-size:12px;margin-top:3px}
+.kpi.pass .n{color:#4ade80} .kpi.fail .n{color:#f87171} .kpi.skip .n{color:#94a3b8}
+.kpi.inc .n{color:#fbbf24} .kpi.tot .n{color:#7fd1ff}
+table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13px}
+th,td{border:1px solid #2a3550;padding:7px 9px;text-align:left}
+th{background:#1c2436;color:#cfe0ff}
+tr:nth-child(even) td{background:#121724}
+.warn{background:#2a1f1f;border-left:4px solid #f87171;padding:12px 14px;border-radius:6px;margin:12px 0}
+.ok{background:#16241c;border-left:4px solid #4ade80;padding:12px 14px;border-radius:6px;margin:12px 0}
+.note{background:#1c2436;border-left:4px solid #7fd1ff;padding:10px 14px;border-radius:6px;margin:10px 0;font-size:13px;color:#bcd}
+code{background:#0b0e15;padding:1px 5px;border-radius:4px;color:#9be7a8;font-size:12px}
+ul{margin:8px 0 8px 20px} li{margin:3px 0}
+.tag-new{color:#fbbf24;font-weight:600} .tag-all{color:#7fd1ff}
+</style></head>
+<body data-page-node-id="cVE1XuQ2YOzeeaPkiFstOQ">
+<nav data-page-node-id="qE7KTAr8UFRAAVtCRfplY4">
+<a href="#overview" data-page-node-id="iRDKdReWzhT0DxIzXf9xUt">0 · 概览</a>
+<a href="#phase" data-page-node-id="NVQI76Lch9vGmQx4NlWnrS">1 · 三阶段覆盖核查</a>
+<a href="#change" data-page-node-id="eeRE9UD3PycPrgLJiLF766">2 · 变更摘要</a>
+<a href="#tp" data-page-node-id="iBYuJiCXg1CRj6PpPgIfMe">3 · 测试点总览</a>
+<a href="#case" data-page-node-id="7lJqIXu8kSUyN20zN9GJiy">4 · 用例总览</a>
+<a href="#exec" data-page-node-id="A7ywXTfUwl3cw2tSEtj147">5 · 执行结果统计</a>
+<a href="#defect" data-page-node-id="Ae0JWZ6B8t3dOvKBbGJlDj">6 · 缺陷分析</a>
+<a href="#new" data-page-node-id="kOwze7nkd0y2KZR8dAJ9Lz">7 · 新增用例专项</a>
+<a href="#conclusion" data-page-node-id="jTT39AUu4FlODAAzDNGGbB">8 · 结论与风险</a>
+<a href="#deliver" data-page-node-id="zi83UGVFPkG2zC2hjV6KiH">9 · 交付物清单</a>
+</nav>
+<header data-page-node-id="LpLNUBPsT6KNCEBfqEIzwE">
+<h1 data-page-node-id="CHTp2FyPf2bnmx4xZA50bW">福享 Agent（research-agent）全量功能测试报告</h1>
+<div class="sub" data-page-node-id="F9sTuUmKIC83pHpqL7vNGs">测试环境 <code data-page-node-id="Z3B8d38wY9g9JG9CtAUWqg">http://47.97.154.50:8090/chat</code> ｜ 分支 <code data-page-node-id="t7AQWeCN2rSjQsTDBIlYFC">codeup/test-20260907</code> ｜ 生成时间 2026-09-09 18:29 ｜ 执行器 Playwright 自带 Chromium（headless）</div>
+</header>
+<main data-page-node-id="enkoDCj5WUdIfKydBaVjad">
+
+<h2 id="overview" data-page-node-id="674iaoQHSnDoQ3Q49VgS2T">0 · 概览</h2>
+<div class="kpis" data-page-node-id="rPL8OiARaHp3cENU9C7mvz">
+<div class="kpi tot" data-page-node-id="R4ulJ1GuKCnkFyJHpQeN3E"><div class="n" data-page-node-id="TffwJGWPvPVthTgESGutGt">400</div><div class="l" data-page-node-id="psRvTEvr3UBmHU6aee45Xt">测试点（全代码扫描）</div></div>
+<div class="kpi tot" data-page-node-id="cz6Zc92LFFq4Xs8BO0xaGE"><div class="n" data-page-node-id="rPDV99R6swPvLO3hv3AknW">400</div><div class="l" data-page-node-id="tsXN3gLROgIFtPtZWdCgmi">测试用例（1:1 映射）</div></div>
+<div class="kpi tot" data-page-node-id="AAwXXgDki7iv6FfRFaDdyk"><div class="n" data-page-node-id="LqMtbTtBvJAMBp58x0XSxU">400</div><div class="l" data-page-node-id="YgOXy9lps5NXzpGwtRun5x">已执行用例（无遗漏）</div></div>
+<div class="kpi pass" data-page-node-id="RGR63BRTvqmD4Gf8O4pHCE"><div class="n" data-page-node-id="izXnSDc292bhcFeF9uqlO0">150</div><div class="l" data-page-node-id="0njEeAlJkeoXJPzqy7iHx5">通过</div></div>
+<div class="kpi fail" data-page-node-id="ZdBi7A7eXtGejHStcQdHB0"><div class="n" data-page-node-id="Za3HgxqA63gc4Pi71igEmP">88</div><div class="l" data-page-node-id="HflLGDAL3o9OKUK0Z9NpTA">失败</div></div>
+<div class="kpi skip" data-page-node-id="LDf2jivrmsXxJpp7DnivNm"><div class="n" data-page-node-id="xwEV6LbPdh2EyMq9KRjBKa">145</div><div class="l" data-page-node-id="W4e4XtHZNDXJJBhZ3M12XS">跳过(405)</div></div>
+<div class="kpi inc" data-page-node-id="eYo11CJfMN9dvXVGQrRr1z"><div class="n" data-page-node-id="ZWGsoX2MTWtnbSfQEoWDCb">17</div><div class="l" data-page-node-id="PH4dXtDFpNNjyAOkdCECAX">存疑</div></div>
+<div class="kpi fail" data-page-node-id="PCRjgMD9KA8TYErYfVuFhC"><div class="n" data-page-node-id="p4S6rOXmAPVAgLkAFbBDRT">46</div><div class="l" data-page-node-id="EDKLyE2KdfW3aDAQwAnyAB">真实缺陷(已校准)</div></div>
+</div>
+<div class="note" data-page-node-id="iq1bZBIrutstVIsKEzVf9a">执行总用时 <b data-page-node-id="RPjcWz0OnCS94kITiyzD22">23.6 分钟</b>（后台 task <code data-page-node-id="4pphYirpvQXkeddxlHYkyi">o7FGeg</code>）。测试点/用例/执行三阶段均通过覆盖核查：测试点覆盖率 100%、孤儿 0；用例 400 条 1:1 映射；执行 400/400 唯一 ID、缺漏 0、重复 0。</div>
+
+<h2 id="phase" data-page-node-id="pWkHT9By5FB8anKHf1M2Oi">1 · 三阶段覆盖核查</h2>
+<table data-page-node-id="kMzkLsjeNNR1Y37BsOKGL8">
+<tr data-page-node-id="HUFCDzHkjKHLqHRT0ycT9O"><th data-page-node-id="w5M9QQC5jZAOJDfh82URIu">阶段</th><th data-page-node-id="qEoDmRgCghhzRRDeUfspIZ">目标</th><th data-page-node-id="zCgOpRs0c6iMDiN4P4uUQO">核查项</th><th data-page-node-id="Bt3IexjAoZQFBBVYqnBNWZ">结果</th></tr>
+<tr data-page-node-id="6YSVRolQNFUduCov6AmWAS"><td data-page-node-id="aWrzhkTrzeKSw7jKIM4jjZ">Phase 1 全代码扫描生成测试点</td><td data-page-node-id="xCiWxn3pluxBzPR1YEKr4i">覆盖所有功能模块</td><td data-page-node-id="JxzcYGJNy759bvXJ2IESXF">功能点覆盖率 / 孤儿测试点 / 模块数</td><td data-page-node-id="Dnfw2moxvkMV2tqkczpGnq"><b data-page-node-id="KzyEnoZpN8F24yJ9CiPeVm">165 功能点 100% 覆盖，孤儿 0，24 模块</b></td></tr>
+<tr data-page-node-id="6hOIX03MunU0qpzca9Kbuu"><td data-page-node-id="TwhaFr5tbJbi3FC8PY10mN">Phase 2 每测试点生成用例</td><td data-page-node-id="IGu05pAq1Q2YCHzBHnI5nL">1:1 映射 + 全量/新增 打标</td><td data-page-node-id="g4cuT7DsEtSWXVQobDoMBG">测试点→用例 映射完整性</td><td data-page-node-id="mC8TgoDzEZHjLp9rO5oulL"><b data-page-node-id="bgFAlIs7qxkdcnK6cQD6xg">400 测试点 → 400 用例，无遗漏无重复</b>；全量 355 / 新增 45</td></tr>
+<tr data-page-node-id="svCdBN1eQ7ymYiS8yvuaD6"><td data-page-node-id="HXL4ZlyJ0XGvHPlRVOmS3H">Phase 3 Playwright Chromium 执行</td><td data-page-node-id="nRnJtOwACYHSFCVdyYiPeF">全量执行无遗漏</td><td data-page-node-id="cGNSYFLjhq3S78jHtEodaM">用例执行完整性</td><td data-page-node-id="ySYCDFaSCzl6kbBNb5sav5"><b data-page-node-id="LR69cxvyfVYEnVLO48PA8M">400/400 唯一 ID，缺漏 0，重复 0，错误 0</b></td></tr>
+</table>
+<div class="ok" data-page-node-id="UPXgfI1M7jgwWVbpY3GLF7">三阶段均满足"基于完整代码、覆盖无遗漏"的要求。Phase 1 的"更新"测试点（45 条）即对应本次 diff 增量，在 Phase 2 中映射为 <span class="tag-new" data-page-node-id="f5Wi2ZspxdDBNbxAji0pNA">新增</span> 标签用例。</div>
+
+<h2 id="change" data-page-node-id="Bc5qc8CSIsS3pD7RvAdUsJ">2 · 变更摘要</h2>
+<p data-page-node-id="WGdf3KkI0EfxUaChiZNFe3">基线 <code data-page-node-id="ZEYkGvtcFu4I0NEXrjnKND">codeup/test-20260906</code> → 目标 <code data-page-node-id="gewIp3bpd02qbEs4S4rWAv">codeup/test-20260907</code>：<b data-page-node-id="fh6Ezsqllluk5E2UrZr5d0">93 文件变更，+? / -? 行</b>。</p>
+<p data-page-node-id="DUTXZsT9xQ5kXPhDnzvkRo">主要变更面：新增 5 个金融技能（dcf-valuation / equity-fundamentals / financial-red-flags / industry-research / k-line-chart-analyst）、移动端大规模改版、PC 对话页与统一路由层 <code data-page-node-id="94aBYu3iy11CZzM5mf5fdh">tools/router.py</code>、能力胶囊、福潮美学。详见 <code data-page-node-id="XzoWc8mDSIzJ5vIYhN3gxP">research-agent-test/change_summary.txt</code>。</p>
+<div class="note" data-page-node-id="kuzC9VSy60vPBNVRHg34p2">本次"新增"测试用例（45 条）即由此 diff 衍生，作为本次发布的回归专项。</div>
+
+<h2 id="tp" data-page-node-id="u1nEm5BCJedHzOcojh0d01">3 · 测试点总览</h2>
+<table data-page-node-id="EImmZGe4BFOvE0AYPT7A6U">
+<tr data-page-node-id="VRMHYqaNtYgtvjBAZGyWAi"><th data-page-node-id="e2fsU94iFHFA6NjDSBbQyW">维度</th><th data-page-node-id="yJnDocf3lIfY8gVjUDMqzy">数量</th><th data-page-node-id="IVOSWTjtJKtBQRYeAcSuiv">标签</th><th data-page-node-id="SxuWDJD1ykzt7remcxl5Z2">数量</th></tr>
+<tr data-page-node-id="B5CaSGCtqXzyIvOTAwyiNV"><td data-page-node-id="tWYSPampkN5eStCqtAniUa">正常 / 异常 / 安全 / 边界</td><td data-page-node-id="DCSPaQhmENOfGsjOH0FLXq">165 / 36 / 105 / 94</td><td data-page-node-id="O8qKd2iF0SeInYz4RIJcKj">全量 / 更新(→新增)</td><td data-page-node-id="QVwAAwjguczN6O4PEjz2yH">355 / 45</td></tr>
+</table>
+<p data-page-node-id="CzECxC02IybgkQwDBPeZBf">覆盖模块分布（Top10）：</p>
+<table data-page-node-id="zr2ufS10QqUuJksASZLvB4">
+<tr data-page-node-id="TgwHYadATEbxy9mqnoMSu7"><th data-page-node-id="n33yLodpRkzFbPxQl2jM0B">模块</th><th data-page-node-id="RCLBNp3r0IdG5CbfZWjyuI">测试点数</th><th data-page-node-id="QKteVqnsTfakSBbiJIUViF">已执行用例数</th></tr>
+<tr data-page-node-id="BVf3Dw2ib7McbXbIM8Mec3"><td data-page-node-id="OXExFeA6N53KpfjUjzYg1R">账户/用户/鉴权 Auth</td><td data-page-node-id="UIWkyctesUGPdOliVaqoMM">123</td><td data-page-node-id="5b8ynZAhwD4C0GKjlJsiB2">123</td></tr>
+<tr data-page-node-id="jViqoiG95jeNgwcYsrHC5c"><td data-page-node-id="Sc4EBVj6m2MJIshcjyrVH2">产物/文档 Artifact</td><td data-page-node-id="yJkpuQYp3jVzhyMsICsJKU">72</td><td data-page-node-id="zsUXkB7KGFYIGjX2J4YdGu">72</td></tr>
+<tr data-page-node-id="AgYf8sKg0G9F3EYWQIEKAr"><td data-page-node-id="ktwjXu6HPf7RjmIMJLg0pA">审计/审核看板 Audit</td><td data-page-node-id="lCBL25fHZhJRU6zbS4a1nD">52</td><td data-page-node-id="4yXEtLjWeZ03eT3eeLv4ZD">52</td></tr>
+<tr data-page-node-id="xUIOYP8TYguBF7KCG689kq"><td data-page-node-id="113Zcw50xl5mdbManIiscD">线程 Thread</td><td data-page-node-id="8qbii4zpDhljVwyYtmqnn5">37</td><td data-page-node-id="GpQ2X3xFoKpxaUdPJ5UAoD">37</td></tr>
+<tr data-page-node-id="TEjBfC15wCFzvA2nI503o0"><td data-page-node-id="qWnEJvd9HFZ4n98uXF0dJ2">对话/会话 Chat</td><td data-page-node-id="MaE5xO8dgh5MfCA17rTLSD">21</td><td data-page-node-id="kxP53mHAtwBdBkZ5urd8h8">21</td></tr>
+<tr data-page-node-id="FwXkYk5fyptq19lUHHRHYl"><td data-page-node-id="xHEIpisb6eWa0rls4DuYBI">业务函数·主服务编排</td><td data-page-node-id="1Ye4nKmHFhV5Tp1cqhbsaG">12</td><td data-page-node-id="C9MMY4qAh028VKGvcwMgz9">12</td></tr>
+<tr data-page-node-id="IU0keJpkK4wcjfKveqpRka"><td data-page-node-id="iRSMncPCCOEi7zo0CLyCg5">业务函数·流水线接口</td><td data-page-node-id="BqCwZemVnUxbsJqjf1gwUF">10</td><td data-page-node-id="dTORG3RYEQQA8WSNJ0iQKA">10</td></tr>
+<tr data-page-node-id="Eh9EghqotsysuVb30c2ggJ"><td data-page-node-id="FblEDYkk4cPSeXlFv9TBY9">业务函数·邮件实时处理</td><td data-page-node-id="iEhkMLVHK4GpHiAtlNyY34">9</td><td data-page-node-id="6S6OsNoyARCwi0Q2jh58lI">9</td></tr>
+<tr data-page-node-id="e5VMF2n0saSePtRVCrOAo3"><td data-page-node-id="vpYWqMZWkGADYlZLoxTEsi">业务函数·网关加解密</td><td data-page-node-id="TCiDzcwMW01yMmsBBFYxyJ">8</td><td data-page-node-id="3BxzhqQCJWAnko9dG5dDcb">8</td></tr>
+<tr data-page-node-id="yuI9oHDBBD1ReoGMY3oCTX"><td data-page-node-id="lSPcqCE2HNhECKwHsvcDAx">业务函数·统一身份鉴权</td><td data-page-node-id="bJeA08QtbbBAXxSSXzRQD3">8</td><td data-page-node-id="YvWJEvX9lTzYJojErwvg02">8</td></tr>
+<tr data-page-node-id="8wyVEGdw4Ddh9wSzxVgKlo"><td data-page-node-id="TITFeBfiya8BNcZpbDeZ53">业务函数·通知推送</td><td data-page-node-id="TCoJW9HxjEqR8l9ANnWxJk">7</td><td data-page-node-id="9pyaxGqtgwvk8IUP3H2iMa">7</td></tr>
+<tr data-page-node-id="QX1jwEE2YG3uk0t2QcSC4L"><td data-page-node-id="jsNENDPowDM84IQBdIJ2aQ">SQL/查询 Query</td><td data-page-node-id="WCXvf87e6cDtGFvCL3skGH">6</td><td data-page-node-id="ysHSXlhay9E9dPX86KUGql">6</td></tr>
+<tr data-page-node-id="inikteVIt31uPuiZ3ftR2l"><td data-page-node-id="rCjiZPXrUd0faVuH6RnMGi">工具/集成 Tool</td><td data-page-node-id="uhDWI4KpWICwX8CNBAcCmK">6</td><td data-page-node-id="99MH5IQC620tujWxdliDRc">6</td></tr>
+<tr data-page-node-id="NWxbrAiqwSKmgqsObR4GDp"><td data-page-node-id="3C3TpiOMIJVC07rrqaquhk">业务函数·内容总结</td><td data-page-node-id="hpx9BDhb8l2z99xwBD5vqM">5</td><td data-page-node-id="AWlr7m3rABfpgU0860T7mu">5</td></tr>
+<tr data-page-node-id="KbAagc60oRjIA4RTX2tICB"><td data-page-node-id="H2zsx16VpstcAO7LvUHQpw">智能体 Agent</td><td data-page-node-id="8mKji9tInRJOOIGLC2ZP6D">3</td><td data-page-node-id="HmwdtGauBJCc3oANLAEImT">3</td></tr>
+<tr data-page-node-id="iaXaGcdEaRmOyCy3BCUANn"><td data-page-node-id="NlVaZGXgN2RRFdZifbSoiy">健康/其它</td><td data-page-node-id="wIQ4yYoc6Jsd55apwxOUtI">3</td><td data-page-node-id="pzL5bhG5FYMr1OlRUmaEpR">3</td></tr>
+<tr data-page-node-id="To64c8OjDAQ4xJbzDZxGpO"><td data-page-node-id="9XDrvJbyLweUnx4VHju0h4">未归类 Other</td><td data-page-node-id="V171QJIlKm6gUalrPEa74o">3</td><td data-page-node-id="ohhlbsvRIJrFBa0aLOy8SS">3</td></tr>
+<tr data-page-node-id="hCsSVC9rUHOXXiq9AMYooo"><td data-page-node-id="Jl81BE0bJD0W7JiMs3fVfV">简报 Briefing</td><td data-page-node-id="y4J4WEptplPYf83CkyRoiY">3</td><td data-page-node-id="CzVzX8UJlBASL9vTCX49j3">3</td></tr>
+<tr data-page-node-id="AixqHG7ceq3bh0DdOiiVOv"><td data-page-node-id="kj54BjlNYSjg2PYtI9dPFL">业务函数·晨会简报</td><td data-page-node-id="9hzGCQ97qVHcHEYJSIYc8R">3</td><td data-page-node-id="QLCAsVml1Im6dtm4aY28Eu">3</td></tr>
+<tr data-page-node-id="p0jPhgot9EsNF4PSdP1lDA"><td data-page-node-id="WPLuHTz7t35Q5EjTwfHVJ2">业务函数·执行大厅指标</td><td data-page-node-id="8XXzXfdLu9M6OlbLaaBH7y">3</td><td data-page-node-id="6b6qiD8J5Nxa1RvHAnldT3">3</td></tr>
+<tr data-page-node-id="KANjDi3eQXdqNX3Cm9PG0o"><td data-page-node-id="3j5mzYS7iUFkMZ3EDTjxVC">业务函数·晨报生成</td><td data-page-node-id="AwLgldMO8WH7WApbSpK6Tg">2</td><td data-page-node-id="S3lziymBh47sUloHeCDH3u">2</td></tr>
+<tr data-page-node-id="H8ufCjd5MtIZ3GfL5MOKdi"><td data-page-node-id="vJM3dG5hqyYJ6P8kzVXMHr">前端 Frontend</td><td data-page-node-id="A6dYcum1AbB04HZTDm7mGt">2</td><td data-page-node-id="KlCs7in4G5B4pXyi9sdEXn">2</td></tr>
+<tr data-page-node-id="Ugg4VWucHd2B1twICAdzMM"><td data-page-node-id="UQ2sKPkXrbRvEscSE6TdnR">业务函数·执行大厅性能</td><td data-page-node-id="MRRlH3JuXHunX9Ja4dxlFG">1</td><td data-page-node-id="9fNeG0PKoCxUZL5BAIGsbB">1</td></tr>
+<tr data-page-node-id="1qFyE0GA4NJxVRHyaIVFQR"><td data-page-node-id="Btfp2SEoz75kzn1XLnrP0i">业务函数·网关中间件</td><td data-page-node-id="1iv0uBDS2gIvGbYCvMa4At">1</td><td data-page-node-id="O4sqjKL9VMKlA2iAJZ8PHB">1</td></tr>
+</table>
+
+<h2 id="case" data-page-node-id="eXhXxMlX2GWdBhWzYy1Ooj">4 · 用例总览</h2>
+<table data-page-node-id="YeYw5HVgfUY9OnZPF7nzbe">
+<tr data-page-node-id="Mt32FdWECh5iiKduHoHTAW"><th data-page-node-id="FUY1uJB7vT3DsekaVzyhVr">执行类型</th><th data-page-node-id="9COjXCXAyOkrQaWQKcUgZU">用例数</th><th data-page-node-id="DWsqBOqNkW4QoXT17AjwEr">结果分布</th></tr>
+<tr data-page-node-id="7CQzA2DBDbhI0APim7eVEz"><td data-page-node-id="bh1eD8te4NYT1RKUoyFDSU">api</td><td data-page-node-id="BiuxYcrDzq4zJ0joyxuZRT">329</td><td data-page-node-id="oKlYFvKBUONn83OL9Upr4P">{"inconclusive": 17, "pass": 79, "fail": 88, "skip": 145}</td></tr>
+<tr data-page-node-id="ioJPsUTu0a14p7Mtfck5FJ"><td data-page-node-id="72c70JU8ersGRil9LjEBBx">chat</td><td data-page-node-id="iR6hFEGWDkmmYt4pYNXTbC">69</td><td data-page-node-id="8h7nILUQtqSsXGATrTGdCj">{"pass": 69}</td></tr>
+<tr data-page-node-id="b5LNu2c7aPcVF8XAGJ9GcY"><td data-page-node-id="GLUe4CgsQHevnsqRbLAqJF">ui_nav</td><td data-page-node-id="9H0aBEHROzDzmZEylwrFEW">2</td><td data-page-node-id="hBP7jYK9VZL7TWIe4wXGBH">{"pass": 2}</td></tr>
+</table>
+<p data-page-node-id="2ubiP0zOpyzroCf7yKF7Vb">标签分布：<span class="tag-all" data-page-node-id="fRNYXQLmnEORcyv6vYQpnm">全量 355</span> ／ <span class="tag-new" data-page-node-id="OkHm7IZBFW1G1ipoQOtnIF">新增 45</span>。每条用例含 <code data-page-node-id="ZalswWP4Hsuho9td4RJf5A">case_id / tp_id / fp 映射 / module / 标签 / 维度 / 方法 / 预期 / 执行策略 / 通过准则</code>。</p>
+
+<h2 id="exec" data-page-node-id="48HqLfdMSbhsMu6fOFZrPL">5 · 执行结果统计</h2>
+<div class="kpis" data-page-node-id="AVwrNyLfiok1ZU0NK4D6Sd">
+<div class="kpi pass" data-page-node-id="EtpO1XSyXj9BWB4N48Qqnn"><div class="n" data-page-node-id="iCIi6bb2glNrkYEII4nmwn">150</div><div class="l" data-page-node-id="WRUe5rnjeHkJ4AructpmF8">通过</div></div>
+<div class="kpi fail" data-page-node-id="VyHuWk3dIcobY0q3DFgg71"><div class="n" data-page-node-id="b3oTJtdwyGK6bjJeDD3iH5">88</div><div class="l" data-page-node-id="6XL9Mp8Xp6Oa4tmFTvV5hS">失败</div></div>
+<div class="kpi skip" data-page-node-id="lPgmF3YeUr1kPeWuu0BuIB"><div class="n" data-page-node-id="PocNxwwTXmK1G64naPJFXa">145</div><div class="l" data-page-node-id="BrXaBc4u8DlExaW6P7DbiQ">跳过(405)</div></div>
+<div class="kpi inc" data-page-node-id="lDcDs92mKOrnQkM0ALrkGa"><div class="n" data-page-node-id="VQsfAF4GsIzdaMuFAVR3AT">17</div><div class="l" data-page-node-id="nQxJNPs5SppJZl1lsWMNL3">存疑</div></div>
+<div class="kpi fail" data-page-node-id="azNDPY56MW9EbGIjzaUMd6"><div class="n" data-page-node-id="JHRrttANYnjvT4iaSXdQiI">0</div><div class="l" data-page-node-id="KlwAZpyzj3n514ohlpRl2D">错误</div></div>
+</div>
+<p data-page-node-id="pHTtlneoquqgioU5AEt66j">失败按维度：{'边界': 42, '异常': 14, '正常': 6, '安全': 26}。</p>
+<p data-page-node-id="2gC9N5dC6Q7rPEmVQddtY0"><b data-page-node-id="Gwk5cvV0lSLx9CYffOwABK">跳过(145)</b> 全部为 <code data-page-node-id="tEtdlWXjma7fK3t3zgC6MV">405 网关拒绝方法</code>——即路由存在但仅接受特定 HTTP 动词，对其余动词返回 405，属预期行为（含 <code data-page-node-id="bfmdwBxr87kCivkHXPzPdA">/users</code> <code data-page-node-id="vx0sFa1ocOaFFGtBdavu1S">/roles</code> <code data-page-node-id="EYMApOtZ2OEu51B6AfSunX">/login</code> <code data-page-node-id="JuAxxNEpTdnJPP6ZaTotGH">/account</code> <code data-page-node-id="ioGwkHlFn7Vv7ZTsB9C32N">/mock</code> <code data-page-node-id="6n8m5O0aBky8k0Vp0OpGvp">/proxy</code> <code data-page-node-id="dvBBoMsxNd6ESoUsdusW3R">/status</code> 等基路径跨 GET/POST/PUT/DELETE/PATCH 探测）。</p>
+<p data-page-node-id="0fsd9ZPeD8HCwbTKM1LFx9"><b data-page-node-id="OCCqn9i4fnsuXlcF5oKMe6">存疑(17)</b>：正常流程 POST 不带合法请求体返回 422（端点可达、校验生效），及安全类 GET 在无令牌时返回 422（网关先校验后鉴权）——均非失败，需合法请求体方可断言 2xx。</p>
+
+<h2 id="defect" data-page-node-id="DVnh1fa79QxAITEJTlv71Z">6 · 缺陷分析（已校准）</h2>
+<p data-page-node-id="GF8ZkPKII2eoTEaiTspihG">原始 88 失败中含大量"误判性"计数（dev-mock 端点本就不鉴权、GET 不校验参数属正常）。经二次归因，真实缺陷与预期行为分离如下：</p>
+
+<h3 data-page-node-id="zoAbf1MNpZqxvbhV4gfU9z">6.1 疑似鉴权缺失（未授权返回 2xx）：22 条（真实后端）</h3>
+<div class="warn" data-page-node-id="FIXCM8VxoSbeist8ZNVjuo">下列 <b data-page-node-id="ClUgBvyUzLfr9PvnZSBYi2">真实后端</b> GET 端点在<b data-page-node-id="CA0unmPbwrGNuEj8bb8uaE">完全不带令牌/会话</b>的匿名请求下返回 2xx，疑似鉴权中间件未对 GET 路由强制生效。集中在 审计 Audit(9)／账户 Auth(8)／产物 Artifact(6)／对话 Chat(2)／简报 Briefing(1)。<b data-page-node-id="b5KEreueEpuGClM0fWPFFx">需人工核对响应体是否含真实业务数据</b>以确认是否真泄露。另有 4 条（<code data-page-node-id="nTXsUv7qGY4GYCNe10hd5k">/diag-log</code> <code data-page-node-id="yFB3s87tdr9lRbgoZIP6YG">/document</code> <code data-page-node-id="h3wQouUBoBw0MdtikEtL99">/items</code> <code data-page-node-id="zRHdaGwP6pLgx0s4D9EXzE">/mock/state</code>）属 dev-mock/开放端点，预期开放已排除。</div>
+<table data-page-node-id="zAMAdYZP2iB8iUt1Eiv77u">
+<tr data-page-node-id="SXGNqN0Vdvg3fckPYKs2LV"><th data-page-node-id="BVB8sgZ87OJPMCGRlnERoL">方法</th><th data-page-node-id="LTMdoZwI0EkhTMy1gw1F2R">路径</th><th data-page-node-id="TB2K8NDT0TmE0XF0HX4xXd">模块</th><th data-page-node-id="SUlmf1ZaMYRURAN7qCKKUZ">用例</th></tr>
+<tr data-page-node-id="kgEyEbMbjVqEujvPfnKSuK"><td data-page-node-id="I00vdLsRoIK45aKQChaAK3">GET</td><td data-page-node-id="KmN7O5pkI1wJhFiUcf8Oht">/items/{item_id}</td><td data-page-node-id="R6ad7ZSCsKX7WDDBTO1TNt">审计/审核看板 Audit</td><td data-page-node-id="G7rlFeTdFwz0vN8k120hl6">TC-066</td></tr>
+<tr data-page-node-id="UjzdCaCLfqiOBtXVIEmhih"><td data-page-node-id="2UVhtb3lKzGlmmIiD2AjnK">GET</td><td data-page-node-id="3HxUNYy2NstSxzGKcKyDGx">/document_info</td><td data-page-node-id="TNJ7OBQzPbxdJzxJyF78o8">产物/文档 Artifact</td><td data-page-node-id="TP5OOL5sabDqVQxXqZEmFc">TC-137</td></tr>
+<tr data-page-node-id="fRw2YX6SgRUdMVTby5pLJQ"><td data-page-node-id="G5JMjXsaGR2DfLT3fI2Ji0">GET</td><td data-page-node-id="6gqFsh0DHyeawKjmCahO5K">/regulations/search</td><td data-page-node-id="CfFOqed7oCGcw1xngH6I4b">审计/审核看板 Audit</td><td data-page-node-id="xqEYFyLC1GrkoC8WY1ZLxA">TC-140</td></tr>
+<tr data-page-node-id="HUSnSOTDltIIE3Lur1obC6"><td data-page-node-id="eWfBOoT5T9Yoy8Z0BrePet">GET</td><td data-page-node-id="B5DDRF68yl9937ZHhcfHXv">/pending/count</td><td data-page-node-id="bMtHbuD99VQYpS3eH4HdO4">审计/审核看板 Audit</td><td data-page-node-id="m3lTFbdw65cxFk4fslimu5">TC-143</td></tr>
+<tr data-page-node-id="A4sxRYu4DImAEALMSA7pF8"><td data-page-node-id="uOei2hR2y6t87E5dWzaQw2">GET</td><td data-page-node-id="1idcgo9Hg3fOUeM5MgCADt">/pending</td><td data-page-node-id="F6c5svsxS3UUahecJwnBVW">审计/审核看板 Audit</td><td data-page-node-id="TzVAEt6XCEbW96sn3xLjKT">TC-146</td></tr>
+<tr data-page-node-id="8qcUbQBx9zxQzjmAXVE3yP"><td data-page-node-id="c0Uwoqf9x6KIFDGhVfycX7">GET</td><td data-page-node-id="DtVfjOFaPxtpi6U2bTbmNt">/documents</td><td data-page-node-id="HiMKPwGWWtrZrpy9t9WXHB">产物/文档 Artifact</td><td data-page-node-id="pRNzSO77YgRHA8Xh2SE9GW">TC-157</td></tr>
+<tr data-page-node-id="m6yXZranppXA67kuDqf71S"><td data-page-node-id="LAbOClvNcEN7yB0oWjKKIH">GET</td><td data-page-node-id="XnOoE5Uq9LUDcGAZaUkTGZ">/documents/{src_id}/content</td><td data-page-node-id="t60EOH5Gf4VVInSM29cAFs">产物/文档 Artifact</td><td data-page-node-id="FWnf2m4fPypJjCvUIHbxKy">TC-160</td></tr>
+<tr data-page-node-id="lO5KuptoZ6KKyvQYV0gYBD"><td data-page-node-id="FQhbiuDeltmDinGcCK0IUq">GET</td><td data-page-node-id="1lu3BIMvPaGbukcHDQLwaI">/documents/{src_id}/diff</td><td data-page-node-id="FVxWKnEgvKdohybA4lJDDn">产物/文档 Artifact</td><td data-page-node-id="kUXM7SGDfPZPXTWNgayO9g">TC-164</td></tr>
+<tr data-page-node-id="S3MMdhnufNhbJGTXw2fqnO"><td data-page-node-id="DIlpfuEBKHRPrC9OZCv023">GET</td><td data-page-node-id="Bhoh0zJprwZ5VLzEArGiDO">/logs</td><td data-page-node-id="xKzPZmlqHyhNDYqadeLqeZ">审计/审核看板 Audit</td><td data-page-node-id="wNKtiFiOO5JupoO23FbQ5m">TC-168</td></tr>
+<tr data-page-node-id="uYA30d5KGHSCcL1i3BbtOb"><td data-page-node-id="rrQoX8h9tCcQYnsjngs9ID">GET</td><td data-page-node-id="VdanSW17Pzc85K909eL4rg">/users</td><td data-page-node-id="qkPn3LUug5KnzDteFypdNn">账户/用户/鉴权 Auth</td><td data-page-node-id="BMwwzO3qu7Uoz5mwat9V8V">TC-174</td></tr>
+<tr data-page-node-id="q5wZCXu6b7ICWDu3triatf"><td data-page-node-id="56vbUB64Q6P076gUg6eXhy">GET</td><td data-page-node-id="XKm5VG3OCHKECBkrzFtt5T">/me</td><td data-page-node-id="Fgi2aqak0DycFZYQt5nD8B">账户/用户/鉴权 Auth</td><td data-page-node-id="WwKNd5imqrQODILxkIxmeg">TC-187</td></tr>
+<tr data-page-node-id="wCnoO8lJoEGRl3hbDK9cej"><td data-page-node-id="A2Bqhz8VLsLBPoBXaBZv1x">GET</td><td data-page-node-id="OflPaWxKbUSwtncalu5Ggg">/catalog</td><td data-page-node-id="7ECWfMXWBg6Eooj71SfmW0">审计/审核看板 Audit</td><td data-page-node-id="XlHrvslS4zx2bYRkOOZgTN">TC-190</td></tr>
+<tr data-page-node-id="HtwVAsYowTUmNtJSHXjcxG"><td data-page-node-id="YbpZHIKb0ij9fWCByQGQDu">GET</td><td data-page-node-id="xZN4sN5tUpSWiPnoyyHler">/roles</td><td data-page-node-id="Lgfd1DeLCqC7go5V2zfZPF">账户/用户/鉴权 Auth</td><td data-page-node-id="JjtiFryAZiUN0s69M6Juv1">TC-193</td></tr>
+<tr data-page-node-id="GClrFXnsu4HJM2xAlCVPAx"><td data-page-node-id="4gaWBCDa1kefvwTlKrmfGu">GET</td><td data-page-node-id="2D2rPFtmnFeDnlBPuHFQL8">/users</td><td data-page-node-id="tmQgRil4WHnAOgVnEK4Cqy">账户/用户/鉴权 Auth</td><td data-page-node-id="HFLKS3X4HmItcxFUg0C9zT">TC-209</td></tr>
+<tr data-page-node-id="b5JleCAVs1Hccbube6Rn3j"><td data-page-node-id="Gbq3XYwPOfgZF5gGK2MRcD">GET</td><td data-page-node-id="COflRuAEi6zmBFtF0K3gyf">/me</td><td data-page-node-id="MZ44iVuPUOE0GVTqboMFHm">账户/用户/鉴权 Auth</td><td data-page-node-id="TzCiyFL2ETXRcqFL8XEa44">TC-226</td></tr>
+<tr data-page-node-id="haoD8k5A3VyAvinlEesRj8"><td data-page-node-id="WBsXeoxnnLGZnQQbH9I2uo">GET</td><td data-page-node-id="fxCgD21Jb8e8YB8cm1DFZZ">/today</td><td data-page-node-id="b329exSaieTY7tjrImUkem">简报 Briefing</td><td data-page-node-id="P4UhHaLg7yRFIeALXa1RSg">TC-244</td></tr>
+<tr data-page-node-id="wkiwyXWIXNGkK9TrAt8byS"><td data-page-node-id="CGxNwwv58yIQmlNnu0zc4f">GET</td><td data-page-node-id="gLsmaBoQogfdq0V5ahdJ6o">/ask-quota</td><td data-page-node-id="IIIU1CEiUE68pNGoOwYcG1">对话/会话 Chat</td><td data-page-node-id="M4ZYSqcFrUFJ2iogVzJpap">TC-250</td></tr>
+<tr data-page-node-id="11aVlfkqUXu3OGPG6ssxG2"><td data-page-node-id="1RIMMhDpjTdSJRxCUuHZIi">GET</td><td data-page-node-id="jNArPKKMIvX8k75hL5ygtj">/login/{session_key}</td><td data-page-node-id="W12b1Ztat1QgIkou6QzPnr">账户/用户/鉴权 Auth</td><td data-page-node-id="jldumABpetFV4yH5SQZMx1">TC-286</td></tr>
+<tr data-page-node-id="aaHbzN8HMomAQE3z9tSuCE"><td data-page-node-id="V0S6i5TiWs5lO2clMUAGcp">GET</td><td data-page-node-id="GwSuUfCcPKhX5UPz3KALbU">/accounts</td><td data-page-node-id="SXhsA7AvTe8CGtGf1XDMkd">账户/用户/鉴权 Auth</td><td data-page-node-id="rM5rxY0HkGKnHMvZhBQOwC">TC-295</td></tr>
+<tr data-page-node-id="ijtvaDv4FEGurXYKz8BNLh"><td data-page-node-id="bSOdQqqdFnOmsgQNbtYcc5">GET</td><td data-page-node-id="Cd9jiR9Nwg5ycjQ1gEQ4x1">/status</td><td data-page-node-id="G2OoT6FUgyDOQD580BWPTj">审计/审核看板 Audit</td><td data-page-node-id="ajzo0GilEG4Fqqd6Dapsrt">TC-311</td></tr>
+<tr data-page-node-id="FHo8iHGSGtyPbLFD3r8Sc2"><td data-page-node-id="R5L1i0MDv6BOt15qFU1XfW">GET</td><td data-page-node-id="SwAcJApEgMcAQ5qjImArw3">/accounts/{account_id}/whitelist</td><td data-page-node-id="O2UFJxKDDqRt5kt8tnTjRa">账户/用户/鉴权 Auth</td><td data-page-node-id="fAG6Z97cCGBiImUtmB0sD7">TC-314</td></tr>
+<tr data-page-node-id="HAGZeCKEUvAwAUQ56XtSmZ"><td data-page-node-id="qlQxGloBycYyqQJx1PMOA5">GET</td><td data-page-node-id="xXFs7055zHZAdHC8jQT3aZ">/dl/{short_id}</td><td data-page-node-id="k80PqdS1wVwxNbiHc9uOjP">产物/文档 Artifact</td><td data-page-node-id="iwt7JSZAfCRDj9PKJQ7CC0">TC-327</td></tr>
+</table>
+
+<h3 data-page-node-id="qFFLKCBsNZda5Nw6WSXBJS">6.2 写方法弱参数校验：4 条</h3>
+<div class="warn" data-page-node-id="HaAXUdeLdNJtKa57PzafE5">POST/PUT 接口在空体/非法参数下仍返回 2xx，服务端未做充分入参校验。</div>
+<table data-page-node-id="nixsnqdpTCrpNDAPr32kgJ">
+<tr data-page-node-id="3wfFOGbNwKAOMJEUzjSaHO"><th data-page-node-id="m33rMzxVmD7NAd0uJs12AY">方法</th><th data-page-node-id="pd6A2pb9lIhZjIEnwV3IXT">路径</th><th data-page-node-id="7Lf4ptjNYpbt6jmi5CLHKo">模块</th><th data-page-node-id="9dKYMJiDfo0CzWB5o3HgHp">用例</th></tr>
+<tr data-page-node-id="VTzYZNkZs5yIUcdxptPWwt"><td data-page-node-id="mxE1RqHqmerLfnz3RKjFN6">POST</td><td data-page-node-id="aXDf2HSAo2jlsRBOuPikiE">/api/v1/auth/logout</td><td data-page-node-id="FHT4BappHQvv6m9x9mFHEK">账户/用户/鉴权 Auth</td><td data-page-node-id="8Ey7oI15oJDxyn0mDC0pE1">TC-009</td></tr>
+<tr data-page-node-id="FIqmYVLAsyawblN0Zu7kyg"><td data-page-node-id="8PFtNXX1USK09liP9oWjaw">POST</td><td data-page-node-id="ggMu8eI5052QQcXIqYSXyx">/api/v1/threads/{tid}/abort</td><td data-page-node-id="dcfAZ3P3HT9LgKQRTkB5Mf">线程 Thread</td><td data-page-node-id="h8zYPrPewSnyYthoqkSpnD">TC-025</td></tr>
+<tr data-page-node-id="6jmaxJfnxcc8OMuDTEs1FY"><td data-page-node-id="hZUVYIlQ3lu20MpSheq25F">POST</td><td data-page-node-id="GByAhLDpDNiK8ejHuykgzb">/api/v1/wps/v3/3rd/files/{file_id}/upload/address</td><td data-page-node-id="I9QqLCCK7D6Af1TgPJiN6b">产物/文档 Artifact</td><td data-page-node-id="PAYbeQyWzxB0GjKVN69zoU">TC-122</td></tr>
+<tr data-page-node-id="FvEaXEfix8FiYJCpqssdL2"><td data-page-node-id="dIVP6Ubga7wzgblD8upBrf">POST</td><td data-page-node-id="oSa3Q0FsCCnrAhReJ6Ui8o">/api/v1/wps/v3/3rd/files/{file_id}/upload/complete</td><td data-page-node-id="glKDMd4xHuARrO18oHqunn">产物/文档 Artifact</td><td data-page-node-id="g6SOg5cB3uuulMqFnShjhR">TC-131</td></tr>
+</table>
+
+<h3 data-page-node-id="lSfij6Du6Le0BZHdWtullg">6.3 错误 404 语义：14 条</h3>
+<div class="warn" data-page-node-id="rRb4a7xHj8lc54ZL3i7RQS">异常维度用例请求"不存在的资源"时，服务端返回 2xx（多为 200 + 空/错误体）而非规范 404。REST 语义不严谨，且可能掩盖"资源缺失"真实状态。</div>
+<table data-page-node-id="VyAI1Sy3rbKDXbJWeCbrCd">
+<tr data-page-node-id="JcV5kOkZBrCPC1EPbWNDSQ"><th data-page-node-id="3RcrzOLPY869WZx9E8gD8o">方法</th><th data-page-node-id="dH94yUNxOWE7M5LO4MY3IB">路径</th><th data-page-node-id="Z7C1ENcavFUOsbauZoO4UC">模块</th><th data-page-node-id="jUVtCCSkQilFHMMlZ4XwPB">用例</th></tr>
+<tr data-page-node-id="feNdlin4dJMv1vuQNeIAFM"><td data-page-node-id="gWzRVav8CA3iChzFY6r3G6">GET</td><td data-page-node-id="uL49Qg6byTcbZPqCHge0bg">/api/v1/threads/{tid}</td><td data-page-node-id="ocvvoF21s0BtbVU7fzoqHH">线程 Thread</td><td data-page-node-id="DfNt4WM3M4GZ7dRqdTbGdc">TC-022</td></tr>
+<tr data-page-node-id="YyCraoCCkYak9fMybt9vp7"><td data-page-node-id="8IfiFkyvTYJOsGbMbAfDLU">POST</td><td data-page-node-id="CbHwwW1uQGbEckq0YVAwFK">/api/v1/threads/{tid}/abort</td><td data-page-node-id="31IrWWUnLd8dT26jCwRgRW">线程 Thread</td><td data-page-node-id="8IOcGX3RT86FbN56YmCU1Q">TC-026</td></tr>
+<tr data-page-node-id="MKN0YEIkCM9OhTyqjXAd85"><td data-page-node-id="g4oBDioFSjVtcAclv1bgr7">GET</td><td data-page-node-id="ur3ErBGb6Tz35GohTSLkSw">/items/{item_id}</td><td data-page-node-id="KV4RghTrTlBoLLb6uJihDo">审计/审核看板 Audit</td><td data-page-node-id="7fB3FvBJ0BUiQUDpyo7QqT">TC-068</td></tr>
+<tr data-page-node-id="ChH4dqY4u9SvO5ddFnsgoZ"><td data-page-node-id="juwfvo8BxqrrfoyuEpusPB">GET</td><td data-page-node-id="u5AIBOdwghrKcg2OShk3cB">/api/v1/wps/v3/3rd/files/{file_id}</td><td data-page-node-id="Hgs5KWA4NmCiikZGme1Kss">产物/文档 Artifact</td><td data-page-node-id="7ZxwQDT9KEatFSf1WTfKUM">TC-100</td></tr>
+<tr data-page-node-id="pGlhCoghHqxLkpPVPlMkSG"><td data-page-node-id="YeXYwIQMPSkZt8dygdEYpN">GET</td><td data-page-node-id="1IXcsM39AEXOrqUyn3Gl1d">/api/v1/wps/v3/3rd/files/{file_id}/download</td><td data-page-node-id="RQBCYEV8JSKI2hHxJwgaCy">产物/文档 Artifact</td><td data-page-node-id="gQ4Nu6ir85rxGyqp1ffSpz">TC-104</td></tr>
+<tr data-page-node-id="xluI8uzCTpCWbY04D1Mkv2"><td data-page-node-id="xu9wH3mt1HB8jupqQu2sLL">GET</td><td data-page-node-id="b70CR0WG68HNn31sC92xD0">/api/v1/wps/v3/3rd/files/{file_id}/permission</td><td data-page-node-id="sykdq7hrIDcuV4EnevABno">产物/文档 Artifact</td><td data-page-node-id="2uSTrvFxbDWGNLCUEqHAqE">TC-112</td></tr>
+<tr data-page-node-id="kcZQQRXCn6YUtfdZ3BkgAC"><td data-page-node-id="bdKUUyxMEVdA4JS8FD2STP">GET</td><td data-page-node-id="PHMiJ0gfmwZdEifA48Sgpe">/api/v1/wps/v3/3rd/files/{file_id}/upload/prepare</td><td data-page-node-id="KXV9Ps1GEhLeZU1MVwWBJ8">产物/文档 Artifact</td><td data-page-node-id="hh1rIUYtsBNyFCifUAN7TX">TC-119</td></tr>
+<tr data-page-node-id="idRxBLighXcVPC2s6Us6Hd"><td data-page-node-id="GaFw71FonpbxfRv6YOO1Q8">POST</td><td data-page-node-id="QUTVLiuyIdNZMvGznzgc4a">/api/v1/wps/v3/3rd/files/{file_id}/upload/address</td><td data-page-node-id="KNeAyI54Pj3Rx1ra25CD9Y">产物/文档 Artifact</td><td data-page-node-id="aUOkZ9nAt2GkvnSiLLGSqO">TC-123</td></tr>
+<tr data-page-node-id="CIEFs2MxsT4haiajxGVqrX"><td data-page-node-id="TheZUydmO74GA8yOIFDFY4">POST</td><td data-page-node-id="pHjSRtlkWSFXhaI0xitTFa">/api/v1/wps/v3/3rd/files/{file_id}/upload/complete</td><td data-page-node-id="YiWKvGLi8rDBDwifliusCX">产物/文档 Artifact</td><td data-page-node-id="gBaadobrVy8kaRzmQ1o7WQ">TC-132</td></tr>
+<tr data-page-node-id="AF3A3HUWihk3EOvdPJy6vn"><td data-page-node-id="Dc7ZpuL5zJ3BQQgsmgP3eE">GET</td><td data-page-node-id="P5qz0o7TcnHmSsI3AyEwNZ">/documents/{src_id}/content</td><td data-page-node-id="KwXxwXCpU5UwNzOb77zAac">产物/文档 Artifact</td><td data-page-node-id="DMAaiE8hxtI0FhRRymy27j">TC-162</td></tr>
+<tr data-page-node-id="gcqn108pE54U9otj3fCbQH"><td data-page-node-id="95kSeCr1DIf1eMqFwxpc7h">GET</td><td data-page-node-id="b0qMWshsF07ZC5MnLKOfdK">/documents/{src_id}/diff</td><td data-page-node-id="prrdct3hoE3hCO62cCAEA4">产物/文档 Artifact</td><td data-page-node-id="a5bYiw2Wa0tWGXbQJU7sl8">TC-166</td></tr>
+<tr data-page-node-id="pRvqsyogqkh7vGOt0gJA0k"><td data-page-node-id="uMEGLngL1HmNsZuc4ALMqu">GET</td><td data-page-node-id="GfvnF3yh2eoRjj3ABmub4g">/login/{session_key}</td><td data-page-node-id="8oxeBpLhMiKQEN919y1xVV">账户/用户/鉴权 Auth</td><td data-page-node-id="VOy2op3SjZrhPz8fPUV9w9">TC-288</td></tr>
+<tr data-page-node-id="j4QRwwYWlCj4fKfNHKX3Iu"><td data-page-node-id="kUECNhoFBdIiABlGhsoTno">GET</td><td data-page-node-id="pj7QLGACM1w8vGetlWOvrC">/accounts/{account_id}/whitelist</td><td data-page-node-id="aZqzDhjX7ZOwGB4dr38ChS">账户/用户/鉴权 Auth</td><td data-page-node-id="8xOrllrFlfz6u1kYxbneiZ">TC-316</td></tr>
+<tr data-page-node-id="9lUlGHHv6mF8m3EHE9clmq"><td data-page-node-id="QviGwSjOtMP1Uw5ORWwtwc">GET</td><td data-page-node-id="ASvveXCvpkAla9HBgnk8et">/dl/{short_id}</td><td data-page-node-id="7pNMj8wEtOY9K3H4XhstQq">产物/文档 Artifact</td><td data-page-node-id="fpajNjgTDTBBYz9GvFx0nu">TC-329</td></tr>
+</table>
+
+<h3 data-page-node-id="OEgTi3110d4g4qHDo5z1Kx">6.4 404 路由缺失（正常流程）：3 条</h3>
+<div class="warn" data-page-node-id="2MTlJwnWuziBqBjdtz5Rvb">正常维度用例访问的代码分析所得路由实际返回 404（路由未真正注册/已移除）。</div>
+<table data-page-node-id="D3HNUMCOpTOq58gGgl3bHM">
+<tr data-page-node-id="F5P85ERfWL0TzgqePRNt3w"><th data-page-node-id="NKgpp4hqCh0tR0aUxsmYHE">方法</th><th data-page-node-id="im7fArOEYbSsUIbNc2Ng9T">路径</th><th data-page-node-id="vZREvcRfLVsoHO0lCXx8Qw">模块</th><th data-page-node-id="ZckLygItXM07ZW9tPYHl7F">用例</th></tr>
+<tr data-page-node-id="tdonJ9nVTaQv6Z6QFU5XA0"><td data-page-node-id="B5pwSHoskgPrtFoW5hqmu6">GET</td><td data-page-node-id="J23q7bqa8jpONgINHzWb68">/api/v1/threads/{tid}/result/{name}</td><td data-page-node-id="0MhIFUnJEJlTcCp6xWds6s">线程 Thread</td><td data-page-node-id="djSDfoTd2Fo84r4izAalTI">TC-027</td></tr>
+<tr data-page-node-id="DO364A5MOGeHuohuUB6k7S"><td data-page-node-id="klobDj1VEZodtBf0B0v3QD">GET</td><td data-page-node-id="KszqJlnGPu1BIXstMVGYyF">/api/v1/threads/{tid}/artifact/preview</td><td data-page-node-id="1r1beiLaeswXC81OisdYVT">线程 Thread</td><td data-page-node-id="JR4HpFW9FyQn5TGB7B0lFh">TC-031</td></tr>
+<tr data-page-node-id="sQj9NnqM6UnedLu6m1Bz21"><td data-page-node-id="sjWurfpW4sGKRiBRmgYY4Y">POST</td><td data-page-node-id="E22RZJCG0ne25jerLuh2Sz">/api/v1/wps/register</td><td data-page-node-id="9hnyPhUQyaSjYR8ouqfHe6">产物/文档 Artifact</td><td data-page-node-id="YcM9uH9h4xgb1j1wITGlpU">TC-094</td></tr>
+</table>
+
+<h3 data-page-node-id="TmBqJEeOLemgR8rFLGsbAf">6.5 其他</h3>
+<ul data-page-node-id="OFHv9a8sABBHddtNxZ0IMg">
+<li data-page-node-id="9F0aHLG5rwaNHECYL7BGRK"><b data-page-node-id="hROfTgucLm7iyqD8XrzWvZ">403 ×2</b>：鉴权相关但返回 403（部分符合预期拒绝，部分需确认）。</li>
+<li data-page-node-id="wkZ5byKDVedH8wdHDVaCEc"><b data-page-node-id="PfVcxwNzZJhDbbM5DoTi9w">500 ×1</b>：服务端内部错误，需排查。</li>
+<li data-page-node-id="DZ3LYHpg3cQUrT3z2bo9sK"><b data-page-node-id="ucRTHfOd5RibmlF4A206K6">已排除的误判</b>：鉴权绕过中的 4 条 dev-mock/开放端点；弱参数校验中的 38 条 GET（GET 不校验查询参数属正常）。</li>
+</ul>
+
+<h2 id="new" data-page-node-id="s6JVPfqAbzqxdRztJeocz7">7 · 新增用例（本次 diff 回归）专项</h2>
+<p data-page-node-id="kjfMeHEyB3eis56UIlUREJ"><span class="tag-new" data-page-node-id="TkH6DhiNPovEBN1otobwnM">新增</span> 用例共 45 条，结果：通过 20 ／ 失败 12 ／ 跳过 6 ／ 存疑 7。</p>
+<p data-page-node-id="fgyNkq4bEQStwbyyi78clx">新增用例失败明细（需重点回归）：</p>
+<table data-page-node-id="4jdWce93zSSWmE5QuDbBEH">
+<tr data-page-node-id="mTudPqpdVHU8WWgNQ6AJZU"><th data-page-node-id="u9OGGBObcyheP0kmzdtz3g">方法</th><th data-page-node-id="CV6dokPaC4n6dhg8DQhFrR">路径</th><th data-page-node-id="sCygGGqi2MdJifrG5LedXa">模块</th><th data-page-node-id="nWG6EtBxV82k7NzAxtRANF">用例</th><th data-page-node-id="iLMry8Z8MxXtkaB5777GUO">原因</th></tr>
+<tr data-page-node-id="fa2u9FRYpUGkkpgfQzxJRU"><td data-page-node-id="QRZmh2dL83LT6pbMB1N7uP">POST</td><td data-page-node-id="qv4Ij4OGEEwGKexIADWvS2">/api/v1/auth/logout</td><td data-page-node-id="pTgDKzw2EZ7gPDclnkFAdD">账户/用户/鉴权 Auth</td><td data-page-node-id="qztTLn89lGUAmFgsywAOIm">TC-009</td><td data-page-node-id="fUyalkAtZz8zydS351nNCF">非法参数被接受(200) | http://47.97.154.50:8090/</td></tr>
+<tr data-page-node-id="P7xkvRCRQF0nXRgmGuQf7b"><td data-page-node-id="6k22qNB5o7LH7HpJOdioQ8">GET</td><td data-page-node-id="rf0HN7F2G0hadDNMI5fLk6">/api/v1/auth/me</td><td data-page-node-id="kOgFJzMO1pqXAUsMvpaKea">账户/用户/鉴权 Auth</td><td data-page-node-id="44YKOI7iHKvMraBOpryX54">TC-012</td><td data-page-node-id="iFP1dmD7jjDFEERDDzIDXf">非法参数被接受(200) | http://47.97.154.50:8090/</td></tr>
+<tr data-page-node-id="aYQjfjyLfpwI8gZRxjAKym"><td data-page-node-id="CflSLmOjBqaOu5l9OaprQI">GET</td><td data-page-node-id="cBFEDk8AEoSzjxCj19FPQ1">/api/v1/threads/{tid}</td><td data-page-node-id="3njSYJ7gNoEQMNG008pfSm">线程 Thread</td><td data-page-node-id="GB9bmLZrTL0pBMIXPQlEgh">TC-021</td><td data-page-node-id="YZOGLr7tuEYFNiKQAfgiad">非法参数被接受(200) | http://47.97.154.50:8090/</td></tr>
+<tr data-page-node-id="OOcsS2TV2hv08JnJ9O3BjY"><td data-page-node-id="UFcnunLGc6tNL5dzeLx2Rt">GET</td><td data-page-node-id="dEyaICXSfFfz7Jw8xLYHAK">/api/v1/threads/{tid}</td><td data-page-node-id="SCm4nJD6M0OSruGbYhWECg">线程 Thread</td><td data-page-node-id="rOsnbQP4wOIhyKnH6qtSgD">TC-022</td><td data-page-node-id="wZhznFVR0qIDS9jLDDHwKh">不存在资源返回2xx(200) | http://47.97.154.50:80</td></tr>
+<tr data-page-node-id="qgDLOEJo3Vcfi8pmWDvHVv"><td data-page-node-id="elzvnvRGLRYX4X7P7thA6f">POST</td><td data-page-node-id="kZwAo21lxaNDVXKv66oJ9U">/api/v1/threads/{tid}/abort</td><td data-page-node-id="CJguaphNgaf9VV7cSMmwG3">线程 Thread</td><td data-page-node-id="HmeCObeAKJBhEcc3yt4T62">TC-025</td><td data-page-node-id="aBDIa6MsQa59CYvHcTIQMM">非法参数被接受(200) | http://47.97.154.50:8090/</td></tr>
+<tr data-page-node-id="0rSsBDJexWHKs7RxxMu8YP"><td data-page-node-id="qAEttuxTBg0QY4Le1w6o2e">POST</td><td data-page-node-id="b1LmWYxNJM4uq4W7HsIpY5">/api/v1/threads/{tid}/abort</td><td data-page-node-id="FgJGBhjUjCLTDE37QVebxN">线程 Thread</td><td data-page-node-id="BehIFMjSnvPoCQRM68Qxi7">TC-026</td><td data-page-node-id="YAicpUwUsCZFX1SudFvdpD">不存在资源返回2xx(200) | http://47.97.154.50:80</td></tr>
+<tr data-page-node-id="qS81DYoFt65kE43Ni9sqKs"><td data-page-node-id="CaVlQgaJ1THWVPdX3RN3c5">GET</td><td data-page-node-id="KSSyshdlmPsJGPb0Y1GoBu">/api/v1/threads/{tid}/result/{name}</td><td data-page-node-id="EVCOwBTE9q2s7qK3D8J6Ww">线程 Thread</td><td data-page-node-id="rLkIHk5peJXdidrZvZLwWL">TC-027</td><td data-page-node-id="yQQonISrcks9adFVXm7Phv">404 路由不存在 | http://47.97.154.50:8090/api</td></tr>
+<tr data-page-node-id="U275uKBe39DLufkjirswBH"><td data-page-node-id="aadGVvS0QWBs4N5IBhVuhq">GET</td><td data-page-node-id="FavQhwZtynkR3RlMFvTmHS">/api/v1/threads/{tid}/artifact/preview</td><td data-page-node-id="7grMutQqxNzPziyNhgrY55">线程 Thread</td><td data-page-node-id="yBUGFHkIh3EphMh6qfKu7p">TC-031</td><td data-page-node-id="brsrIq88Gc5HahOaqwqpbt">404 路由不存在 | http://47.97.154.50:8090/api</td></tr>
+<tr data-page-node-id="De5NUrve7pukL69BmYuRGN"><td data-page-node-id="zScO1QSqhm8hzJVA96oOW4">GET</td><td data-page-node-id="hyCxJ4yaozC2yX5D5qDBtt">/mock/state</td><td data-page-node-id="TgmfzGGA9SVpxeRWBj8qIT">审计/审核看板 Audit</td><td data-page-node-id="ytR9DGG4nT6BjJuSIFXkmZ">TC-042</td><td data-page-node-id="C1QZIDnWCVwKvnUgeYlb69">未授权却返回2xx(200) 鉴权绕过! | http://47.97.154.</td></tr>
+<tr data-page-node-id="gwBbQIYp1V2f1nniJEr2vn"><td data-page-node-id="b6cmNAToodEFCOpxQQyE4R">GET</td><td data-page-node-id="MllJaejjSAO4DJFHA4M0I8">/mock/state</td><td data-page-node-id="Efnyh34jy8Nvc14dRmfR5A">审计/审核看板 Audit</td><td data-page-node-id="3UiY6vgqE9C1D59N2a0Djy">TC-043</td><td data-page-node-id="Q339FpqMAzH84jSAkMDxM0">非法参数被接受(200) | http://47.97.154.50:8090/</td></tr>
+<tr data-page-node-id="VSgXxtEolOnMIzpAwktcGs"><td data-page-node-id="H1CkwGFW9DDS8bN251Qt9J">GET</td><td data-page-node-id="yHVAhHj8roVbFB5FtNnS9Z">/diag-log</td><td data-page-node-id="MZtUYwmezHBOZG6XmCRs9f">对话/会话 Chat</td><td data-page-node-id="CJdnxFppHAGwZfnr1O9E9p">TC-048</td><td data-page-node-id="mxcCggEve1afcGv1gqJaYH">未授权却返回2xx(200) 鉴权绕过! | http://47.97.154.</td></tr>
+<tr data-page-node-id="JxhuCyhe1xGS6muPjlE8UG"><td data-page-node-id="2mZGNO3OndVLNC6MGtcnEI">GET</td><td data-page-node-id="DI2j4oP29LT5MRw8AM1ItL">/diag-log</td><td data-page-node-id="ewrPdhaT68loNr5KVmS38L">对话/会话 Chat</td><td data-page-node-id="WyAVhzrYsFEiHlIo6J5bIi">TC-049</td><td data-page-node-id="pKN31UysgeBUVoDJeYkiZt">非法参数被接受(200) | http://47.97.154.50:8090/</td></tr>
+</table>
+
+<h2 id="conclusion" data-page-node-id="t6HNwFdBmWzEKCgkuztCsE">8 · 结论与风险</h2>
+<div class="ok" data-page-node-id="7Gqa6o0h9naG43xA2Izh0R"><b data-page-node-id="9Y8nACQzoZiTuG99TcpMK3">整体结论</b>：全代码扫描 400 测试点、400 用例、400 执行全部闭环，无遗漏无错误。对话链路 69/69、UI 导航 2/2 全通过；正常主干健康。核心风险为 <b data-page-node-id="suEbhoUbxVPN0MFmVbEUPn">GET 路由疑似未强制鉴权</b>（22 条）与 <b data-page-node-id="WjLmZNSvqeN0xTMrvQe1zd">REST 错误语义 / 弱入参校验</b>。</div>
+<ul data-page-node-id="VH8lQxbe4KjJxkRN7R1moG">
+<li data-page-node-id="r0GseH4AuQnjDGC9YBrkAC"><b data-page-node-id="7BQ532XFmxRZ1E5tjHzJWX">高风险</b>：疑似鉴权缺失 22 条——若为真实绕过，未登录用户可直读 用户/角色/账户/审计/产物 等敏感数据。建议立即核对响应体并补全全局鉴权依赖。</li>
+<li data-page-node-id="W76uAJo9qHYgAt5ScxADRD"><b data-page-node-id="tAIGySxK9hpVQcWXZld5GJ">中风险</b>：写方法弱校验 4 条（logout/abort/wps-upload）；错误 404 语义 14 条；404 路由缺失 3 条。</li>
+<li data-page-node-id="x0hrDXjIh9u0AS2yi4J3wl"><b data-page-node-id="vuCUFFhjygCQHLvD4gKL38">低风险</b>：405 跳过 145 条（方法契约问题，非功能缺陷）；500 ×1、403 ×2。</li>
+<li data-page-node-id="PFDgXe5saSfGIcmrJDVVde"><b data-page-node-id="rZMht5GQmc6bfCuRgteE1c">已知环境缺陷（历史）</b>：未登录深链 <code data-page-node-id="jAT3FpWJfNB654CtmTuICp">/pc/audit</code> 偶发空白页（D1）——本次浏览器类用例已加重载重试规避，但应修复为跳转登录页。</li>
+</ul>
+
+<h2 id="deliver" data-page-node-id="t35rzvftxESzxZ68OzwiY5">9 · 交付物清单</h2>
+<table data-page-node-id="lCTeEj7hPDyBWGGhJffM52">
+<tr data-page-node-id="JaInpohZ1fZ72Zi567nY3e"><th data-page-node-id="KWmgln5AFUpkfhQ0JKGoXb">文件</th><th data-page-node-id="EhsSXpJAtAaPMVey10JG1g">说明</th></tr>
+<tr data-page-node-id="IVWjXqc4eXOGtUaxpsGvr5"><td data-page-node-id="L3LcBSRUAHIY1bNHJRTxVo"><code data-page-node-id="IKoQksOpEjlYiTp8YdusYM">research-agent-test/test_points_new.json</code></td><td data-page-node-id="yztKfHacoUqjx4HB53snP1">Phase 1 全代码测试点（400，含 traceability）</td></tr>
+<tr data-page-node-id="5Jbu7m16Cb49iB4vAZWP2h"><td data-page-node-id="ICbA7Oxt2guvkKznSVglvt"><code data-page-node-id="0eoLhghjnxV4k4Td89zoue">research-agent-test/full_run/all_cases.json</code></td><td data-page-node-id="EGcy5UHMik6zHI2asnNn5s">Phase 2 全部用例（400，全量/新增 打标）</td></tr>
+<tr data-page-node-id="GAH7CljskBSV4Es5IopkFw"><td data-page-node-id="LFjV3jmEWYw8cPTFCzRLoN"><code data-page-node-id="UlmCMF38obYek2ECH7ntz3">research-agent-test/full_run/exec_results.json</code></td><td data-page-node-id="9ptbi3gcNrBAlFnQV50DE8">Phase 3 执行结果（400 记录）</td></tr>
+<tr data-page-node-id="ffB0DakN61dkZrx0CdtsT0"><td data-page-node-id="974WQYtts6FmS3q73XI16s"><code data-page-node-id="6n4qpOxfK0DIfFbDLAUx5E">research-agent-test/full_run/progress.log</code></td><td data-page-node-id="Sv61HAMhQhBWOr8IgXsQtL">执行进度日志（每 5 分钟一行 + ETA）</td></tr>
+<tr data-page-node-id="zo1OEX7BhEjeD3UjDumAox"><td data-page-node-id="Suay0TIsJNZEkmXQlgyKob"><code data-page-node-id="BkPU45DL4M0VCHoApKKBBc">research-agent-test/full_run/shots/</code></td><td data-page-node-id="Ji3aWebyWWLrua7dBBOeAZ">对话/UI 用例截图（71 张）</td></tr>
+<tr data-page-node-id="eY2uStguIguOttQJRHzD8Z"><td data-page-node-id="oEs7ihZDwFK14Zaw0PPZQ4"><code data-page-node-id="X7FfW3UXa3erBZRqtancRU">research-agent-test/change_summary.txt</code></td><td data-page-node-id="AUDKoyBAeSn11melkneEby">变更摘要（93 文件 / +? -?）</td></tr>
+<tr data-page-node-id="qu0w4yucUPZXduuBke5ivn"><td data-page-node-id="fzKWb3rKuRhuS9iQoQ07H8"><code data-page-node-id="Eps6DzOnKhb6Cw2T5EmJ2q">research-agent-test/full_run/run_all_cases.py</code></td><td data-page-node-id="tBTsX1gJNfbCN9z5p3qxjd">Phase 3 执行 harness（Playwright Chromium）</td></tr>
+</table>
+<div class="note" data-page-node-id="byH8ELKqvStYGgxZbDF6Fs">复用说明：测试点生成 100% 复用平台 <code data-page-node-id="KndFIVp9X0VL0YD0jbCzwW">gen_test_points.py</code> + <code data-page-node-id="12JFASNotYwN2HSKJdrQvx">qa-test-points</code> 技能；用例生成与执行 harness 为本轮新写（依据平台统一数据契约 v1.0）。账号/密码/动态口令等凭证不在报告中明文留存，<code data-page-node-id="CWcjQXrqe489AWKMyDhYl9">tokens.json</code> 仅本地执行用。</div>
+
+</main></body></html>

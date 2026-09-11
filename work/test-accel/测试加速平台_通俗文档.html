@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-page-node-id="iUD66K95EVcp98aW8t3lSJ">
+<head data-page-node-id="x2sKVU3wHTelshaP48iCbB">
+<meta charset="UTF-8" data-page-node-id="wqWPuacyWOLrsCM9wj1c3J">
+<meta name="viewport" content="width=device-width, initial-scale=1.0" data-page-node-id="g7UwfAjbuq7NNUAObW2RCX">
+<title>测试加速平台 · 通俗使用说明（面向非开发人员）</title>
+<style>
+  :root{
+    --bg:#f6f8fb; --panel:#ffffff; --ink:#1f2933; --muted:#5b6b7b;
+    --line:#e3e9f0; --brand:#2f6df0; --brand-soft:#eaf1ff;
+    --green:#1f9d6b; --green-soft:#e6f7ef; --orange:#d9780b; --orange-soft:#fdf1e3;
+    --purple:#7a4fd6; --purple-soft:#f1ebfd; --red:#d6453d; --red-soft:#fdeceb;
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    line-height:1.75; font-size:16px;
+  }
+  .wrap{display:flex; max-width:1280px; margin:0 auto;}
+  /* 左侧目录 */
+  nav{
+    position:sticky; top:0; align-self:flex-start; height:100vh; overflow:auto;
+    width:280px; flex:none; padding:28px 18px; border-right:1px solid var(--line);
+    background:var(--panel);
+  }
+  nav h2{font-size:14px; color:var(--muted); margin:0 0 12px; letter-spacing:.05em;}
+  nav a{display:block; color:var(--ink); text-decoration:none; padding:7px 10px; border-radius:8px; font-size:14px;}
+  nav a:hover{background:var(--brand-soft); color:var(--brand);}
+  nav .sub{padding-left:22px; font-size:13px; color:var(--muted);}
+  nav a.sub:hover{color:var(--brand);}
+  /* 右侧正文 */
+  main{flex:1; padding:40px 48px 120px; min-width:0;}
+  .hero{
+    background:linear-gradient(135deg,#2f6df0,#5b8def); color:#fff;
+    border-radius:16px; padding:34px 36px; margin-bottom:28px;
+  }
+  .hero h1{margin:0 0 8px; font-size:28px;}
+  .hero p{margin:6px 0 0; opacity:.95; font-size:15px;}
+  .tag{display:inline-block; background:rgba(255,255,255,.18); border-radius:999px; padding:3px 12px; font-size:13px; margin-right:8px;}
+  section{
+    background:var(--panel); border:1px solid var(--line); border-radius:14px;
+    padding:26px 30px; margin-bottom:22px;
+  }
+  section h1{font-size:23px; margin:0 0 6px; padding-bottom:10px; border-bottom:2px solid var(--brand-soft);}
+  section h2{font-size:18px; margin:26px 0 10px; color:var(--brand);}
+  section h3{font-size:16px; margin:20px 0 6px;}
+  p{margin:10px 0;}
+  ul,ol{margin:10px 0; padding-left:22px;}
+  li{margin:6px 0;}
+  .note{
+    border-left:4px solid var(--brand); background:var(--brand-soft);
+    padding:12px 16px; border-radius:0 10px 10px 0; margin:16px 0; font-size:15px;
+  }
+  .plain{
+    border-left:4px solid var(--green); background:var(--green-soft);
+    padding:12px 16px; border-radius:0 10px 10px 0; margin:14px 0;
+  }
+  .warn{
+    border-left:4px solid var(--orange); background:var(--orange-soft);
+    padding:12px 16px; border-radius:0 10px 10px 0; margin:14px 0;
+  }
+  .plain b, .note b{color:var(--ink);}
+  code, .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; background:#eef2f7; padding:1px 6px; border-radius:5px; font-size:13.5px; color:#234;}
+  table{border-collapse:collapse; width:100%; margin:14px 0; font-size:14.5px;}
+  th,td{border:1px solid var(--line); padding:9px 12px; text-align:left; vertical-align:top;}
+  th{background:#f1f5fb; font-weight:600;}
+  tr:nth-child(even) td{background:#fafcfe;}
+  /* 流程图（CSS 画的盒子与箭头） */
+  .flow{display:flex; flex-wrap:wrap; gap:10px; align-items:stretch; margin:18px 0;}
+  .flow .step{
+    flex:1 1 150px; background:#fff; border:1.5px solid var(--brand); border-radius:10px;
+    padding:12px 14px; text-align:center; min-width:140px;
+  }
+  .flow .step .n{font-size:12px; color:var(--brand); font-weight:700;}
+  .flow .step .t{font-size:14.5px; font-weight:600; margin-top:4px;}
+  .flow .step .d{font-size:12.5px; color:var(--muted); margin-top:3px;}
+  .arrow{display:flex; align-items:center; color:var(--muted); font-size:20px; padding:0 2px;}
+  .arch{display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:14px; margin:18px 0;}
+  .card{border:1px solid var(--line); border-radius:12px; padding:16px; background:#fff;}
+  .card .h{font-weight:700; color:var(--brand); margin-bottom:6px; display:flex; align-items:center; gap:8px;}
+  .card .dot{width:10px; height:10px; border-radius:50%; background:var(--brand); display:inline-block;}
+  .card.purple .h{color:var(--purple);} .card.purple .dot{background:var(--purple);}
+  .card.green .h{color:var(--green);} .card.green .dot{background:var(--green);}
+  .card.orange .h{color:var(--orange);} .card.orange .dot{background:var(--orange);}
+  .pill{display:inline-block; font-size:12.5px; padding:2px 9px; border-radius:999px; background:#eef2f7; color:var(--muted); margin:2px 3px 2px 0;}
+  .pill.g{background:var(--green-soft); color:var(--green);}
+  .pill.o{background:var(--orange-soft); color:var(--orange);}
+  .pill.p{background:var(--purple-soft); color:var(--purple);}
+  .pill.b{background:var(--brand-soft); color:var(--brand);}
+  .gloss{display:grid; grid-template-columns:1fr; gap:12px; margin:14px 0;}
+  .gitem{border:1px solid var(--line); border-radius:10px; padding:14px 16px;}
+  .gitem .term{font-weight:700; font-size:16px; color:var(--brand);}
+  .gitem .sim{color:var(--green); font-weight:600; font-size:14.5px; margin:4px 0;}
+  .footer{color:var(--muted); font-size:13px; text-align:center; padding:20px;}
+  .toc-jump{font-size:13px; color:var(--muted);}
+  @media (max-width:900px){
+    .wrap{flex-direction:column;} nav{position:static; width:100%; height:auto; border-right:none; border-bottom:1px solid var(--line);}
+    main{padding:24px;}
+  }
+</style>
+</head>
+<body data-page-node-id="NjxYFKFGobIfE0FV7C7PV2">
+<div class="wrap" data-page-node-id="EGNnGVFk2MtWeIAY2y5QLM">
+<nav data-page-node-id="OqgyJ0L7PeRHF607rgdZoJ">
+  <h2 data-page-node-id="MLQC7xZiNn6g865SbsmNBl">目录 · 点击跳读</h2>
+  <a href="#top" data-page-node-id="UYU5yBNC4yzYMnIlG3uFKR">📘 文档说明与阅读指南</a>
+  <a href="#ch1" data-page-node-id="SxeD9c0UdhR9BxvD2ONidP">第一章　平台是做什么的</a>
+  <a href="#ch2" data-page-node-id="WEL5hyhqjX163LFMbW5YJ1">第二章　整体架构长什么样</a>
+  <a href="#ch3" data-page-node-id="agufl6szPIRMDN5yuHCl0h">第三章　核心概念小词典</a>
+  <a href="#ch4" data-page-node-id="fdiCz1tBOkO8S8YhgWuqAc">第四章　功能模块一览</a>
+  <a href="#ch5" data-page-node-id="kOMYJke1e8NRdBph9DYaej">第五章　一条测试任务怎么流转</a>
+  <a href="#ch6" data-page-node-id="xKYAr4ffrWXHMZhEuwB0AW">第六章　怎么使用这个平台</a>
+  <a href="#ch7" data-page-node-id="deX7eRbmcLXooI9iaJJLjE">第七章　你提供什么 / 得到什么</a>
+  <a href="#ch8" data-page-node-id="LtZg2BYoX2TcBIytE7kLTX">第八章　"范围"和"标签"怎么理解</a>
+  <a href="#ch9" data-page-node-id="2KMKOETzkyOdBFUg4cxQmp">第九章　当前的边界与注意事项</a>
+  <a href="#ch10" data-page-node-id="dOJeEuT7i9wkoECAPMef3a">第十章　常见问题与术语对照</a>
+</nav>
+
+<main id="top" data-page-node-id="r3FmUNrAEgjtkuMaJIFUc0">
+  <div class="hero" data-page-node-id="NPkjgswlIY5FVAkXJS1Rsy">
+    <h1 data-page-node-id="x3HTXkbq5sKwYcKuf5hrbI">测试加速平台 · 通俗使用说明</h1>
+    <p data-page-node-id="uSOaLXAGolnBlqwTO2OI9o">面向非开发技术人员，用大白话讲清楚：这个平台是干什么的、由哪些部分组成、怎么用、数据怎么流转。</p>
+    <div style="margin-top:14px" data-page-node-id="6jugE1beoixYER0KWjyB5l">
+      <span class="tag" data-page-node-id="RYWQMh2CgHeE5ia91KFHuz">项目名：测试加速平台（test-accel）</span>
+      <span class="tag" data-page-node-id="B1F4RmQ6fsVEfll5T5vDrw">所属：testCodeFast 测试工程体系</span>
+      <span class="tag" data-page-node-id="efLkEerDVPD1PH1I9CS0PQ">版本：契约 v1.0</span>
+    </div>
+  </div>
+
+  <div class="note" data-page-node-id="t0iCwJUpMoslwnLmLGNHDU">
+    <b data-page-node-id="NxeDGK6xItaDaYLDcKKl0w">这份文档怎么读？</b> 全文分 10 章，可以按目录逐章点开阅读。每一章都用日常比喻解释技术概念，遇到"行话"会用
+    <span class="pill b" data-page-node-id="HtDLwg2lDXaYgI9IZxxG75">通俗说</span> 小框即时翻译。读完后，你可以基于任意一章的内容，告诉我"想改哪里、想优化哪里"，我再据此动手调整。
+  </div>
+
+  <!-- 第一章 -->
+  <section id="ch1" data-page-node-id="1S1mHzkUCVGrfKyCE0ta2u">
+    <h1 data-page-node-id="sPMnpEICf61BQL7TcHkfkx">第一章　平台是做什么的</h1>
+    <p data-page-node-id="mb1ctck4F91oaKDPADbXZF">简单来说，<b data-page-node-id="9U1mJYVPdivJ7UJn55vdqt">测试加速平台是一个"帮你自动做软件测试前期工作"的智能助手</b>。它把测试人员最花时间的几件事——读代码、想测试点、写用例、跑一遍看结果——尽可能自动化。</p>
+
+    <div class="plain" data-page-node-id="nKHIZdgK1TF3PfA1BVK6aQ">
+      <b data-page-node-id="TWJv8xiFyc8IoTKs0aHbWr">通俗说（打个比方）：</b>假设你要验收一栋新楼。传统做法是你自己拿着图纸一栋栋看、一条条记"这里要检查水电、那里要检查消防"。这个平台就像是：你给它图纸（代码），它自动把"要检查的事项清单"（测试点）列出来，再细化成"具体怎么检查"（用例），甚至能派人去现场逐项核对（执行），最后给你一份"哪些合格、哪些有问题"的验收报告。
+    </div>
+
+    <h2 data-page-node-id="16Q6TmyUcZ0SkDQMiFM9rJ">它能帮你解决什么痛点</h2>
+    <ul data-page-node-id="ME8OuF3slN7COvg7PhgLcF">
+      <li data-page-node-id="ETkudQsBpJbgJRf5Ri9UGc"><b data-page-node-id="OmnkOC71olKVcRKdOTWRXB">不用逐行读代码</b>：平台会自动扫描被测软件的源代码，找出它都有哪些功能（登录、发消息、查数据……）。</li>
+      <li data-page-node-id="dqjc1qIe2cSUzFT6JKDRL2"><b data-page-node-id="GasKSezw72Ol4r7JDrZGUx">测试点不遗漏</b>：每个功能会自动展开成多个"检查角度"（正常用、乱用、安全、边界），减少人想不全的情况。</li>
+      <li data-page-node-id="TZt08RSLiuxCleiRcA7qbl"><b data-page-node-id="AOR1Fx0M1uDpUz4DZtJYEq">用例可复用、可追溯</b>：每一条测试点都能对应回它来自哪个功能，方便日后回归和审计。</li>
+      <li data-page-node-id="tuIFFhSaevglzVzX4kUNRH"><b data-page-node-id="qMDPnl1jCWpPh3Zt2uovce">一键出报告</b>：分析、生成用例、执行、出报告可以串成一条流水线，少做重复手工活。</li>
+    </ul>
+
+    <h2 data-page-node-id="FcbS08seEzUiRiCPHqMGBG">一句话定位</h2>
+    <p data-page-node-id="5K1OOw9NYR32tgNmABd1OC"><span class="pill b" data-page-node-id="szZbN0FMs3TNLpJN8F4quG">读代码</span> → <span class="pill b" data-page-node-id="1lBx9BdhDFJJezWbYbs95f">提功能</span> → <span class="pill b" data-page-node-id="VOsM55GMWCap4fHOlcMrhi">列测试点</span> → <span class="pill b" data-page-node-id="6KxQKTykDcTus2bRM9APNL">写用例</span> → <span class="pill p" data-page-node-id="90wIVSHUQHizfPwIfa7lAR">执行验证</span> → <span class="pill g" data-page-node-id="Qvbwy9b0rQJbq46vXFgzH7">出报告</span></p>
+    <p class="toc-jump" data-page-node-id="z1QWAgk5zcZI8I6uYN4C4w">下一章看它"内部由哪些车间组成"。</p>
+  </section>
+
+  <!-- 第二章 -->
+  <section id="ch2" data-page-node-id="Zlgtjj7Okvm4tPk6w9LD1Q">
+    <h1 data-page-node-id="Z8QWVrTSXrcR1tD4eiyLcF">第二章　整体架构长什么样</h1>
+    <p data-page-node-id="43TirEaaDOzWDakzRQqZ1b">你可以把整个平台想象成<b data-page-node-id="pH8YBw7lpn2yh4XNTUMRAX">一家"测试工厂"</b>，里面有几间不同的车间，还有一个存放资料的仓库和一间出报告的办公室。</p>
+
+    <div class="arch" data-page-node-id="1YA312odzbWF81hwWeCFoD">
+      <div class="card" data-page-node-id="VVDTJnsJulQLInAwcttcuu">
+        <div class="h" data-page-node-id="fldfUO7HNzAciVLuY1FVuo"><span class="dot" data-page-node-id="QZ4TGFsLBirIyxzkzjOmdH"></span>① 入口前台（Web 服务）</div>
+        <p data-page-node-id="EHHu76BAyKXO0VE0l7Pvs8">对外提供一个统一的服务地址（默认 <code data-page-node-id="iEu7PbXxGgAEedusrm4hoL">http://本机:8000</code>）。所有"分析 / 生成 / 执行 / 报告"的操作都从这里我们下达指令。它像是工厂的"调度中心"。</p>
+        <span class="pill" data-page-node-id="7vZ9R95NauaW2JYf5gVAJ9">技术名：FastAPI 接口</span>
+      </div>
+      <div class="card purple" data-page-node-id="B6Fvo1FGNMTgbMUGo4VPhx">
+        <div class="h" data-page-node-id="O2haKpWA8R4by7AmLrxApf"><span class="dot" data-page-node-id="VGgVc5GC2vfjNIZdtDcltL"></span>② 读图车间（代码分析）</div>
+        <p data-page-node-id="D5arsuFw7aTbwXIGaoaPZt">专门"读"被测软件的源代码，自动识别它有哪些功能（接口、页面、业务函数等）。它不靠人眼，而是用程序解析代码骨架。</p>
+        <span class="pill p" data-page-node-id="3OS57fN2qLqQc3FPzz7dFr">技术名：code_analyzer</span>
+      </div>
+      <div class="card purple" data-page-node-id="xF99avMWcHyLWrCx4VPuIM">
+        <div class="h" data-page-node-id="M8BI8nm9LbOHnLe5Xo6XOa"><span class="dot" data-page-node-id="KuXWNUjDE4tjP7qUVgKNT5"></span>③ 出题车间（测试点 / 用例）</div>
+        <p data-page-node-id="5jKKLo8pG7oIWleXD44o9b">把"功能"展开成"要检查的事项"（测试点），再细化成带步骤、带优先级的"测试用例"。这是工厂的"出题组"。</p>
+        <span class="pill p" data-page-node-id="tsUt6bDxCiXIoiHOWbcoeH">技术名：_ComprehensiveBuilder / case_generator</span>
+      </div>
+      <div class="card orange" data-page-node-id="fKF0CwwL6KbgOxKuePltze">
+        <div class="h" data-page-node-id="pGnXnN30XAOi5GCUdyRn4S"><span class="dot" data-page-node-id="cHDTBbcT3ZVpShTj7mz4Ml"></span>④ 验收车间（执行器）</div>
+        <p data-page-node-id="lNRQrFBWpxbUhcQXsvVndI">把用例真正"跑"一遍：去被测系统上发请求、看返回对不对，记录每一条是通过还是失败。对应"派人去现场核对"。</p>
+        <span class="pill o" data-page-node-id="W7GEFd8Iz9HaZD2W8NJJ9O">技术名：executor</span>
+      </div>
+      <div class="card green" data-page-node-id="xsWaMEL0Hjx65xtUUgXWia">
+        <div class="h" data-page-node-id="KeFWjckIUU02aX1K9GXV5Q"><span class="dot" data-page-node-id="tosEUr5VFeUGJqyAE0aL1j"></span>⑤ 出报办公室（报告）</div>
+        <p data-page-node-id="PGDlI2aL4UjulGUcEipy1U">把执行结果汇总成报告，可看网页版，也能导出成 Excel / Word / PDF，方便分发和存档。</p>
+        <span class="pill g" data-page-node-id="bJZ9Bp8iPkAYFVD4Pry7mo">技术名：reporter / full_report / exporters</span>
+      </div>
+      <div class="card" data-page-node-id="NapAXOv0ryEagImt8j6IBr">
+        <div class="h" data-page-node-id="gPenHeuBvFVkewvB2YGsWG"><span class="dot" data-page-node-id="hEfdxE0JjT9CK92txmQ8GV"></span>⑥ 资料仓库（数据库）</div>
+        <p data-page-node-id="oIAD13QJRpXxkd51nu0gtN">一个本地的"档案柜"（单个文件数据库），存放项目信息、功能清单、用例、每次执行结果、报告等。所有车间共用它记台账。</p>
+        <span class="pill" data-page-node-id="i834RVCDdPv5jxTdvNjI5y">技术名：SQLite（test_accel.db）</span>
+      </div>
+    </div>
+
+    <div class="note" data-page-node-id="Bpwf9I6chiXhDLQcc7gCkl">
+      <b data-page-node-id="PdSrlP6lRUM6yJymub6FIR">通俗说（车间与仓库）：</b>前台接单 → 读图车间画功能图 → 出题车间列检查清单 → 验收车间现场核对 → 办公室出验收报告；中间所有图纸、清单、核对记录都放进同一个档案柜，随时可查、互不丢失。
+    </div>
+
+    <h2 data-page-node-id="yTtVGogiYxsByHBwJ5cTxp">两个"外派小组"（技能 / Skills）</h2>
+    <p data-page-node-id="7LkF9FafcaL4O4atA3hXgK">除了工厂本身，还有两个<b data-page-node-id="OgoLTnweZZQeqiqcODnLEl">可独立外派的小组</b>，专门配合平台干活，也是你（通过 AI 助手）最常用到的操作入口：</p>
+    <ul data-page-node-id="DWgeVkj3F81bxhILb5lCDs">
+      <li data-page-node-id="AJPn9m66vuSp5i9XnyKF8V"><b data-page-node-id="J9GjQcmB8lJPN3e2LNjZ0B">拉代码小组（qa-code-pull）</b>：负责把被测软件的代码"搬到"本地、并切到指定版本。搬完后还会给文件夹上"只读锁"，防止被误改。</li>
+      <li data-page-node-id="AKfRsK4LvZbW2LD9VCRADG"><b data-page-node-id="ZPb3pOTOBKsUgx0KjuWTej">出测试点小组（qa-test-points）</b>：负责在本地的代码上"读图 + 出题"，生成测试点清单（以及功能点追溯表）。它不碰代码仓库，只读取。</li>
+    </ul>
+    <p class="toc-jump" data-page-node-id="9x0QC3qpG40EqI4cxWEZ5y">下一章解释文档里反复出现的"功能点 / 测试点 / 用例"等名词。</p>
+  </section>
+
+  <!-- 第三章 -->
+  <section id="ch3" data-page-node-id="nWrvTFycU6R3xH6f30AW0C">
+    <h1 data-page-node-id="kD9KIPmtCZyn9dJfuBqZ88">第三章　核心概念小词典</h1>
+    <p data-page-node-id="tl8XKHmxUIgT2eEgVFnPOX">下面这些词会贯穿全文。每个都先用大白话讲，再给一个技术对应，方便你以后和开发对齐。</p>
+
+    <div class="gloss" data-page-node-id="Eif5m3UUElSlyDcMi7X2rU">
+      <div class="gitem" data-page-node-id="Fxqg6pxhDr9wvq0JOyiyh5">
+        <div class="term" data-page-node-id="XYGgRCHedHlZ2CCiJ7dJ4z">功能点（Functional Point，简称 FP）</div>
+        <div class="sim" data-page-node-id="xmDw0YD9g29bmKZcBOhFaE">通俗说：软件"会做的一件事"。比如"用户登录""发送聊天消息""查询余额"。</div>
+        <p data-page-node-id="BzPj0igZB5sVVYHoirEnX4">平台扫代码时自动发现的功能。分四类：<span class="pill b" data-page-node-id="PTY2jqkqP7b8XJvyQvlAji">接口</span>网页背后的服务入口、<span class="pill b" data-page-node-id="99GzoMaf6rvtUxB6jkkitj">页面</span>前台能打开的页面、<span class="pill b" data-page-node-id="H1EcvvFWFNVMJ1xWPphaJF">组件</span>页面上可点击的部件、<span class="pill b" data-page-node-id="N4NC7DPziyDF86HRIHyOHy">业务函数</span>后台核心计算逻辑。每个功能点有一个稳定编号 <code data-page-node-id="Xjc8wBFzxzBhrM8dh88FAg">fp_id</code>。</p>
+      </div>
+      <div class="gitem" data-page-node-id="8WrQEmGDMjWrg1C04M2dby">
+        <div class="term" data-page-node-id="6cu03R03FPe0zplRumxMNS">测试点（Test Point，简称 TP）</div>
+        <div class="sim" data-page-node-id="EYV69tCrw2Xw1smiSPmS95">通俗说：针对某个功能，"要核对的一件事"。比如"用对的账号能登录成功""没填密码应该被拦下"。</div>
+        <p data-page-node-id="DiY81c8EM0e8589elA3XRp">比功能点更细。一个功能点会展开成多条测试点（如正常、安全、边界等不同角度）。每个测试点带编号 <code data-page-node-id="MUS4zoPo8V8aiG4tmc21PX">TP-001…</code>，并能指回它来自哪个功能点。</p>
+      </div>
+      <div class="gitem" data-page-node-id="aDSBiYMYwj77X79hFk4KM6">
+        <div class="term" data-page-node-id="d0dgekjOnBUhCeLMbUTHQP">测试用例（Test Case，简称 case）</div>
+        <div class="sim" data-page-node-id="XSqIxQixWNgTWsI7G2MLvW">通俗说：把"要核对的事"写成"具体怎么做 + 预期结果"的操作单。</div>
+        <p data-page-node-id="70T2Ee6tHARWJ9TGBPseFS">在测试点基础上补充：前置条件、操作步骤、优先级（P0~P3）、预期结果。这是真正可以派人去执行的一张"工单"。</p>
+      </div>
+      <div class="gitem" data-page-node-id="HBnZ94ARCDyPq6h14uGqP8">
+        <div class="term" data-page-node-id="CLzvmybh7ZPGZnnWu0r6dE">范围 / 维度（Scope）</div>
+        <div class="sim" data-page-node-id="oOUa196zKfARDAIpPtzDsK">通俗说：这一轮"重点检查哪些角度"。</div>
+        <p data-page-node-id="UQEcXSkXVRWzHYRX3H4b0h">四个行为角度：<b data-page-node-id="vvdfADaGAcUE9kl3BOtVrW">正常</b>（该用时能用）、<b data-page-node-id="qZjpV3l9JfJRJVZpEz8RTu">异常</b>（出错时别崩）、<b data-page-node-id="ebryzoC7NTGMaElfv7WiSL">安全</b>（没权限别放行）、<b data-page-node-id="Wl6BIc2zUjKKzqkZ85Y7HV">边界</b>（参数乱填别出错）。另有"<b data-page-node-id="ybdAH6pKlTpG9llWbO5IvU">接口</b>"是按来源筛选（只挑"网页服务入口"类测试点）。详见第八章。</p>
+      </div>
+      <div class="gitem" data-page-node-id="hS8FkJNnFcOxkLugVeGNhr">
+        <div class="term" data-page-node-id="BGVfJzMFuKRVMeugoCtsrz">标签：全量 / 更新</div>
+        <div class="sim" data-page-node-id="viZz75FGXvZhQXThAOsIaR">通俗说：这条测试点是"整套都查"还是"只查这次改动的部分"。</div>
+        <p data-page-node-id="zHvpit2FPeD1GGyp5cAk7n"><b data-page-node-id="37ISYKeUZMk6kDaS08o0If">全量</b>=代码没动到的部分，做常规全面回归；<b data-page-node-id="jCS8AlPufgvh6PzXHNCyx2">更新</b>=底层代码这次被改动了，优先回归。标签按"改动的具体代码行"精准判定，不是整文件。</p>
+      </div>
+      <div class="gitem" data-page-node-id="8F6Op2qKWk0vyJMRBbwmmt">
+        <div class="term" data-page-node-id="v8MtQ6TptWi73fi1eLiCKC">双向追溯（Traceability）</div>
+        <div class="sim" data-page-node-id="dIWKOdpygNOy2whwHSL4If">通俗说：任何一条测试点都能查到"它来自哪个功能"，任何功能也能查到"派生了哪些测试点"。</div>
+        <p data-page-node-id="FtaC793uiKtoaG2EC3IgYi">保证"被测的功能都有测试、每条测试都有出处"，不会出现凭空多出来的测试或漏测的功能。系统里用 <code data-page-node-id="oGke6HN4BR3lxlhsrBKYhB">fp_id</code> 串联。</p>
+      </div>
+      <div class="gitem" data-page-node-id="8pIwhxPIuFpYs1rs8SFHDt">
+        <div class="term" data-page-node-id="x01G9UgMaXaYnplwt0PGuq">契约（Contract）</div>
+        <div class="sim" data-page-node-id="R4yq5hQzqcJLxTmbQaXNFj">通俗说：功能点和测试点之间"统一的身份证规则"，保证两边对得上。</div>
+        <p data-page-node-id="cb5SunFsu28jxCsTDUV3XM">规定编号怎么生成、字段怎么命名。代码不变，编号就不变，因此多次生成的结果能稳定比对、增量更新。</p>
+      </div>
+    </div>
+    <p class="toc-jump" data-page-node-id="189fsAn7j15sgcOoCkdJrJ">下一章按"用途"把平台的功能模块摊开看。</p>
+  </section>
+
+  <!-- 第四章 -->
+  <section id="ch4" data-page-node-id="OfN6zQxSI6j0vuFxUKbVPY">
+    <h1 data-page-node-id="pjR4xLanKe8Grinhxy26xS">第四章　功能模块一览</h1>
+    <p data-page-node-id="KJnYJpawwuXT9YL9qLuZz3">平台按"用途"分成以下几块能力。你可以把它当作工厂里的不同"业务窗口"。</p>
+    <table data-page-node-id="WpMQct3E5GzcRJZsf4AUSm">
+      <thead data-page-node-id="t9SFREWjZvff59r8gHiFdV"><tr data-page-node-id="0u1qyeZfsUUCW721NhKYLF"><th data-page-node-id="aCtDlESW7gCXMKX8MbfEpW">模块（窗口）</th><th data-page-node-id="xFIWq76j8o2bhEaiI8BjUo">它负责什么</th><th data-page-node-id="Y934tTRwqN7aRjDJABrAcZ">你能拿到的产出</th></tr></thead>
+      <tbody data-page-node-id="y9mtMxXEEPOAK8W6seXFJW">
+        <tr data-page-node-id="eiZ9tWGjkgC5bmAbJJB0U6"><td data-page-node-id="UiFPUI4JVNKXgcj4HfRFqS"><b data-page-node-id="kEkSHFGTWcY5pM99SHW1KA">项目管理</b></td><td data-page-node-id="QVjMtq7eCVZXBFfCcYhZYg">登记"要测哪个软件"：名字、代码地址、分支、访问地址、登录方式。</td><td data-page-node-id="ux1nm441bjTZd2LTTBNTKK">项目档案（一条记录）</td></tr>
+        <tr data-page-node-id="3zwwnS0z01StwqOo6zy4q2"><td data-page-node-id="dl9zFjVuHzbrQQCotyiLhH"><b data-page-node-id="Vyxz4fFAAAwh7jq6s6Nldv">代码分析</b></td><td data-page-node-id="QFgSrCt8dHSxOeNFR5pCUp">扫描代码，找出全部功能点（接口/页面/组件/业务函数）。</td><td data-page-node-id="tbQXroFl2AeZVP8Kjb3cXG">功能点清单（可追溯）</td></tr>
+        <tr data-page-node-id="hOpVRBIUOt3feV9MkZWJZr"><td data-page-node-id="OHVhW1TCMaoDgOlyddozkt"><b data-page-node-id="JbSXOhSxTBlYsxaDUFCelY">增量对比</b></td><td data-page-node-id="46EBuUA3CMZ8COnlTAsYBw">对比两个版本，找出"新增 / 改动 / 删除"了哪些功能。</td><td data-page-node-id="9sOaWTXhcfB9fctxqcUo9P">变更摘要 + 功能差异</td></tr>
+        <tr data-page-node-id="BtNmtRjgqssNw5k27jeMhx"><td data-page-node-id="6EjwkdVjgFoU8Mctuqh0FV"><b data-page-node-id="iMKDLIKpe4xQ2jQFeEbBuW">测试点生成</b></td><td data-page-node-id="Bon7qRms5udBkjSobRQuSB">把功能点展开成测试点，可按范围筛选，打"全量/更新"标签。</td><td data-page-node-id="ZhmsYVrUwMhkm3AEO9wFzl">测试点清单（含追溯）</td></tr>
+        <tr data-page-node-id="cxb4kJ0vwbYgBxRMhnGnnL"><td data-page-node-id="DRc6AwWi7Ic9Z1tBnANIUJ"><b data-page-node-id="tx7JwIUAwgGIxFOABKwste">用例生成</b></td><td data-page-node-id="0Tfd3QGDCQACRz29f1vKtJ">把测试点细化成带步骤、优先级的测试用例；支持人工审核。</td><td data-page-node-id="ID1oa8GaEomR4N8qtEhhy7">用例清册（Markdown/JSON）</td></tr>
+        <tr data-page-node-id="K8iMmtUCJscGq9jaIiaoWJ"><td data-page-node-id="Pp7u9meyf2DwKTYH4BsNOX"><b data-page-node-id="if4zOYXQ8WHWBTaqkkWEOa">执行</b></td><td data-page-node-id="KIyCRmnd09KpydGBoGUhpT">把用例真正跑一遍（可全量、可筛选、可后台、可中断）。</td><td data-page-node-id="Fn0V5qiUkJBG6Y7jdU5qhI">每条用例的通过/失败结果</td></tr>
+        <tr data-page-node-id="VLYQwX3afSRxtWx2OeUeoE"><td data-page-node-id="OnOfIvkDKuPDoAhPw0olOc"><b data-page-node-id="hHEizooWb8uQDrWXlUiadp">报告</b></td><td data-page-node-id="cISx3LmwbCgJqn8K7NZLGQ">汇总结果：统计、趋势、不稳定项识别、覆盖率；可导出多种格式。</td><td data-page-node-id="BB6YueXW1iLhLPvH4sJCfr">网页报告 / Excel / Word / PDF</td></tr>
+        <tr data-page-node-id="PDnzKI6Cuyf67dwNdT7mpZ"><td data-page-node-id="CSQLVhjhKynTyD6HISQKgv"><b data-page-node-id="Q8H70fEEEWE2oeeRVzwXpE">冒烟检查</b></td><td data-page-node-id="VgobSGLEdqrSDHCrTYdFoP">快速确认"被测软件有没有启动、能不能登录"，像开工前的通水通电检查。</td><td data-page-node-id="25QHmDnKYUcJN06I83iEgo">通断结论</td></tr>
+      </tbody>
+    </table>
+
+    <div class="note" data-page-node-id="NrM0FXZT8phOK0zq2TrTiP">
+      <b data-page-node-id="bywUTddFD5t3Bpwtm9l549">通俗说（模块 = 窗口）：</b>你去办事大厅，每个窗口办一类事——登记窗口（项目）、读图窗口（分析）、比对窗口（增量）、出题窗口（测试点/用例）、验收窗口（执行）、汇报窗口（报告）、巡检窗口（冒烟）。它们共享同一个档案柜（数据库），所以信息连贯。
+    </div>
+    <p class="toc-jump" data-page-node-id="Xc8e8kydZ8udAgT4rPxWWV">下一章看"一次完整测试"是怎么在这些窗口间流转的。</p>
+  </section>
+
+  <!-- 第五章 -->
+  <section id="ch5" data-page-node-id="2dJnZ8oywbt98Ex3nstk6G">
+    <h1 data-page-node-id="jFlDEv464xAltuzBs36t42">第五章　一条测试任务怎么流转（数据流转）</h1>
+    <p data-page-node-id="9eslf3EqZEEBnTupTLaZ3f">下面用一条最完整的链路，说明"<b data-page-node-id="alhcnmpQdLni1h6PEUwoW5">从一段代码</b>"到"<b data-page-node-id="YKdqIIjr7vVsSWkAl1Nafi">一份报告</b>"中间经历了什么。这就是平台的核心数据流。</p>
+
+    <div class="flow" data-page-node-id="2PPZCnPiEmkecVuSf3Sy2t">
+      <div class="step" data-page-node-id="rQMM790t4fHUlFEbBos7Gj"><div class="n" data-page-node-id="GTEk4EBiimAkFtLz9VEvPO">步骤 1</div><div class="t" data-page-node-id="dAdO7MTeeDz6BhAlDRfID3">备好代码</div><div class="d" data-page-node-id="CNgLT07OzhsCCD3dKMZkB4">拉代码小组把被测代码搬到本地并锁定版本</div></div>
+      <div class="arrow" data-page-node-id="86amgKkzTqMGCVYwcLxYGp">→</div>
+      <div class="step" data-page-node-id="l3tx1qM0JYY8nZWSifPVfN"><div class="n" data-page-node-id="6XWjUchD4nJ8r6w34JTjXH">步骤 2</div><div class="t" data-page-node-id="yTVzPmHENKQPtD43NVKcPZ">读功能</div><div class="d" data-page-node-id="iiBluZD9XLUJnXRvW7yDbC">读图车间扫描代码，得出"功能点清单"</div></div>
+      <div class="arrow" data-page-node-id="3h8aM9pMeXHHYaT42f8kAy">→</div>
+      <div class="step" data-page-node-id="BlOeFWaCdVjl0XAO2Ilx3c"><div class="n" data-page-node-id="nxbvpHENeHpgRYx9dAdFcJ">步骤 3</div><div class="t" data-page-node-id="Xbkxr0TqyMv26go9JID6sg">列测试点</div><div class="d" data-page-node-id="Oq6atkaEIsECVNHiM9Szrd">出题车间把功能点展开成"测试点"（带范围/标签）</div></div>
+      <div class="arrow" data-page-node-id="vBycz39bNgIdAyVZl0HsVa">→</div>
+      <div class="step" data-page-node-id="idQdfARmwTfIO9a4JLR6m9"><div class="n" data-page-node-id="DsaQqtDirauU9cNoQqWSvE">步骤 4</div><div class="t" data-page-node-id="EYLqpjqGXIOoGY7jDswv6A">写用例</div><div class="d" data-page-node-id="IQBxwCf08rJvTuCeNJRVlu">测试点细化成"测试用例"（步骤/优先级/预期）</div></div>
+    </div>
+    <div class="flow" data-page-node-id="8ScKC1sDIocMki90BjkJK5">
+      <div class="step" data-page-node-id="05R9Sfeskk6GRhAuMueCMd"><div class="n" data-page-node-id="nDUekbyZwn2beLbDlW5Imu">步骤 5</div><div class="t" data-page-node-id="uNB4Tpn7BrckzUAnxsYPJn">去执行</div><div class="d" data-page-node-id="CT480Gty0KTN5Za0xUVWZ1">验收车间逐条跑用例，记录通过/失败</div></div>
+      <div class="arrow" data-page-node-id="ZZgZNwWehCsXtz9Cjz3OkS">→</div>
+      <div class="step" data-page-node-id="0ujZnz7nUzyL4HGpEysiM8"><div class="n" data-page-node-id="MrVhthRbaN9Uu1M9ksvf94">步骤 6</div><div class="t" data-page-node-id="6jm4FRIy86R4SFDcKT8Y8b">出报告</div><div class="d" data-page-node-id="DGhGSZMbOsbt2UKn2vdLUf">汇报办公室汇总成验收报告</div></div>
+      <div class="arrow" data-page-node-id="zNm6jJdOtfIfuDlzVwtSve">→</div>
+      <div class="step" data-page-node-id="8OgqcTsP8oGEorUoq8MFVQ"><div class="n" data-page-node-id="GQiRpglNzV1WvmucG7WLu7">全程</div><div class="t" data-page-node-id="RxYnB7dF8K7y0IOM09JvgM">记台账</div><div class="d" data-page-node-id="KG5jaVoP4JCILZnCqvhje4">每一步结果都写入数据库，可随时回查</div></div>
+    </div>
+
+    <h2 data-page-node-id="jFtruwPpJKvWHbpyLD2xYH">每一步的"输入 → 输出"</h2>
+    <table data-page-node-id="dWNAXrOl5OLfsi8QoEb8Rs">
+      <thead data-page-node-id="RDotKBEVs9xA2lBIjVK2CL"><tr data-page-node-id="01zMEM2juuLSrYw3FmggDC"><th data-page-node-id="0dN6eYYJgdbtb30Dao7m2o">步骤</th><th data-page-node-id="Z5Brad2C0IqCXKZa2f69OJ">输入（原材料）</th><th data-page-node-id="svXXN88Ij1GCpIx3PCT8ZV">输出（产物）</th><th data-page-node-id="sWx9o4IMgySI6nwfaDOk9s">存到哪里</th></tr></thead>
+      <tbody data-page-node-id="Xr4WAiEzzCGjqmlSl2vFNX">
+        <tr data-page-node-id="aJeMHWyFUw1wucLpxXPOQa"><td data-page-node-id="UpdA5tGkwzgm9KQtEhnjkh">1 备好代码</td><td data-page-node-id="Q9d7hOLMOEkMnRXEm7deCM">代码仓库地址、目标版本</td><td data-page-node-id="H1jJrsXSRP51VSG2b53UoF">本地代码副本（只读）</td><td data-page-node-id="9qupuUNsC9S3eLK2d3TZR8">本地文件夹</td></tr>
+        <tr data-page-node-id="zor9eZrTT9cCkndrP2oFE9"><td data-page-node-id="4FLOj82zLEEu3O9cLjlhf0">2 读功能</td><td data-page-node-id="kCM4OoVnDHVZEE9765vCfS">本地代码</td><td data-page-node-id="2RbmsvHRzALuVffrZtNBax">功能点清单（含 fp_id）</td><td data-page-node-id="DDJ3RGjMlBm3rfgb53DpOc">数据库·功能点表</td></tr>
+        <tr data-page-node-id="kKlQdlTmgxxUeUJ0q0AoEt"><td data-page-node-id="moVLtRKFg48RMrF4rR9F9t">3 列测试点</td><td data-page-node-id="t4735Q4IAqZXIRBk4bFTyj">功能点 + 范围设定</td><td data-page-node-id="wTa5NxH3lgZUTRkaFmUFGD">测试点清单（含来源/标签）</td><td data-page-node-id="uNOVL07BBB1jlRFeklzK0A">测试点 JSON / 文档</td></tr>
+        <tr data-page-node-id="JYyAVv6vs9fB5BJuffCNbF"><td data-page-node-id="XTLaAcpomIspaCo7mLqxSC">4 写用例</td><td data-page-node-id="7CFeI4imtHg33ec2DYmDwh">测试点</td><td data-page-node-id="SGTSy6h14MQqYoPZesvwWm">测试用例（步骤/优先级）</td><td data-page-node-id="xmtexlLnXKIz3eAGDC7jBn">数据库·用例表 + 清册文件</td></tr>
+        <tr data-page-node-id="Gxl0NCdAq1md19CAqbZXHA"><td data-page-node-id="h6zt0OUIHWBbuBTqzwxgl3">5 去执行</td><td data-page-node-id="uS5p0MGMrEeDbk73tyPCBi">用例 + 被测系统地址</td><td data-page-node-id="VROy9HaveSUzYQ6eI3OwNm">每条用例的通过/失败</td><td data-page-node-id="ahcdID5juDj0vuHmpbqbuv">数据库·执行记录表</td></tr>
+        <tr data-page-node-id="pBMcdyh2NLbeFYUMdZLEyw"><td data-page-node-id="ZhqWZNmxE4oQKxkY6xtmBZ">6 出报告</td><td data-page-node-id="eccnHTouLmyQgxJ2bRAc53">执行记录</td><td data-page-node-id="NdOwsiIG2Bm15FjeB6Gfo0">验收报告（网页/文档）</td><td data-page-node-id="QKYO9XFmhlWNCrwbwkj8b5">报告目录 + 数据库·报告表</td></tr>
+      </tbody>
+    </table>
+
+    <div class="plain" data-page-node-id="7vK4FyFhqvkms4fNCQ9hpZ">
+      <b data-page-node-id="Kczlnnnx3eHy3xI0GUifrU">关键点（追溯不断链）：</b>因为每一步都用统一的 <code data-page-node-id="Sm1P5k2EJKKfjkgdQTvcuD">fp_id</code> 串联，所以最终报告里的"某条失败用例"，可以一路反查到"它对应的测试点 → 来自哪个功能点 → 在代码的哪个文件"。这正是"双向追溯"的价值，也是它和普通"跑一遍脚本"最大的区别。
+    </div>
+    <p class="toc-jump" data-page-node-id="yaZOxL8iC3OWNtvWugZbTJ">下一章讲"你实际该怎么操作它"。</p>
+  </section>
+
+  <!-- 第六章 -->
+  <section id="ch6" data-page-node-id="DufLW3T0gyPiXy5qU3ObeQ">
+    <h1 data-page-node-id="o8nhQ1M71XgGFW11DzbUbZ">第六章　怎么使用这个平台</h1>
+    <p data-page-node-id="oxE3pEDRZpSzehmsHYbUcy">平台目前有两种使用方式。对非开发人员，<b data-page-node-id="t8kOSB68FlwKJn38L6rgAi">方式一最省心</b>。</p>
+
+    <h2 data-page-node-id="7Df54TkBgDD7HBseRBgl2Q">方式一：通过 AI 助手（推荐，日常用法）</h2>
+    <p data-page-node-id="6wAOdU52g72jmhPvG6GYTp">你不需要自己敲命令。只要对 AI 助手说清楚意图，它会调用两个"外派小组"依次完成：</p>
+    <ol data-page-node-id="51z4bkLcoZPKb07jLAN9Y5">
+      <li data-page-node-id="nQTy08U3nBH54nYcTVIijs"><b data-page-node-id="KRiUDf3thBVMMPiqvNDJEN">先说"去把代码准备好"</b>：例如"拉取 research-agent 仓库的 test-20260907 版本"。助手会启动"拉代码小组"，把代码搬到本地并上只读锁。</li>
+      <li data-page-node-id="UGErwWEsIo4vJAIzSFmLsG"><b data-page-node-id="UECe3cCeUCDz7H5t4c9GZ4">再说"生成测试点 / 跑测试"</b>：例如"基于完整代码生成全部测试点，范围用默认"。助手会启动"出测试点小组"，产出清单和报告。</li>
+    </ol>
+    <div class="note" data-page-node-id="PES80frZKWBuDBxK4zajNk">
+      <b data-page-node-id="w798l96UZFCUvH7pRVsr23">通俗说：</b>你像在公司里对助理说"去把 X 项目的图纸拿来、列出验收清单、跑一遍出报告"，助理背后调用的是这两个自动化小组。你只管提要求和看结果。
+    </div>
+
+    <h2 data-page-node-id="8WT7UDYgB81sLjThcgVUUf">方式二：直接操作平台（技术/进阶用法）</h2>
+    <p data-page-node-id="N6X0OPSa22bUe6iyRNhwUL">平台本身是一个运行在本机的服务（默认地址 <code data-page-node-id="NGCgPmxna8UTME9gz2KFEV">http://本机:8000</code>）。启动后用"接口"（网址指令）下达任务，例如"分析项目""生成用例""执行""出报告"。这通常由开发或自动化流水线使用。</p>
+    <ul data-page-node-id="Ed77ttmi0D2bAIFS0DyaFb">
+      <li data-page-node-id="qnkS0wGPVtoZH5CoqCj45E">启动：运行平台自带的启动脚本（<code data-page-node-id="SVHsD7OEHuolb4xG40gkhK">start_platform.sh</code>），服务就在 8000 端口待命。</li>
+      <li data-page-node-id="zbPIR8xnQX4O9vIfGtzEG1">下达：通过"接口地址"触发对应动作，例如"对项目 2 执行全部用例并出报告"。</li>
+    </ul>
+
+    <h2 data-page-node-id="7GG9RhS8JSVjhcVKfq3ky7">开关与配置（在 .env 文件里）</h2>
+    <p data-page-node-id="kJ73PXqnMppxIbHEge13SC">平台有很多"总开关"，写在名为 <code data-page-node-id="xoMYAZd26ZWqNPliTw60l7">.env</code> 的配置文件里。非开发人员一般不用改，了解即可：</p>
+    <table data-page-node-id="FuzYvsGkUw3illkQkUa0Lj">
+      <thead data-page-node-id="Glz4r2g0IwD5yCx6FOidaO"><tr data-page-node-id="6TyIsz8pLLBQMC2frxrUST"><th data-page-node-id="NkOX0tpEU03vTbNaCMnXNu">开关</th><th data-page-node-id="tX0KvI7Ndgkiqn4Szszegc">默认</th><th data-page-node-id="5twUpf8mQc6RAOQeXvUTQi">意思是</th></tr></thead>
+      <tbody data-page-node-id="mRMNnUKLSvFbuMm4RH0jVF">
+        <tr data-page-node-id="hBfNHRJFLVFKb8OifHQJhA"><td data-page-node-id="v2MCxEhMHrss8f3ZuKv5Ob">人工审核门（REVIEW_GATE）</td><td data-page-node-id="xvHh35pdpTCfmr3AUf66Lm">开</td><td data-page-node-id="iERMheeD4EYtLSaHwJXnG3">生成的用例需人工点"通过"才执行；关掉则全自动跑到出报告。</td></tr>
+        <tr data-page-node-id="uI8DitubRKSN9iyDBKwLRH"><td data-page-node-id="BVn2AGAlIA53cIFhhIlGMI">AI 增强（LLM_ENHANCE）</td><td data-page-node-id="maA3ZkD77DMyMHQTBUCHbV">开</td><td data-page-node-id="Z0RO9T2VaCEUHxTGl8cWSd">读代码时是否借用 AI 补全描述；关掉则纯靠程序读结构。</td></tr>
+        <tr data-page-node-id="L0QYuvEQBl4oGMqDyWj32r"><td data-page-node-id="LVA1p1ear0FMP6TfWTSP9F">动态探测（ENABLE_DYNAMIC_PROBE）</td><td data-page-node-id="4XoDHxEtB3CBGpcs55Tn3L">关</td><td data-page-node-id="8zjb2JugN3N4k9jmMKAuV6">执行时是否真去被测系统发请求核对；关掉只做"静态判定"。</td></tr>
+        <tr data-page-node-id="C8D0eJepsNdlpecIGw6Cmi"><td data-page-node-id="H9T8v5pFEDECTeR04LvQBY">真实浏览器（ENABLE_BROWSER）</td><td data-page-node-id="xMKJWfYVCtuK03QBSgHmbU">关</td><td data-page-node-id="eiBL1uAzSdtJ1CKoxh1xjO">是否用真实浏览器验证页面；关掉则页面类只做"可达性判定"。</td></tr>
+        <tr data-page-node-id="c2rgdInMP5X3iwauK7aQ8P"><td data-page-node-id="wv6WZawqQrVABEHabwUAPE">并发度（EXEC_MAX_WORKERS）</td><td data-page-node-id="jiKBXB84Xtz0scN3jqPsK8">4</td><td data-page-node-id="62CYlrtnJMDge2uocoxTrO">同时跑几条用例，数字越大越快（但本机压力越大）。</td></tr>
+      </tbody>
+    </table>
+    <p class="toc-jump" data-page-node-id="rjkil6mX3o6OvDir1ZQSxv">下一章汇总"你提供什么、最终得到什么文件"。</p>
+  </section>
+
+  <!-- 第七章 -->
+  <section id="ch7" data-page-node-id="7WCJNpaVNr9TjFoTCUWnX2">
+    <h1 data-page-node-id="8rQck4j5lyrVaebCtUWwxk">第七章　你提供什么 / 得到什么</h1>
+
+    <h2 data-page-node-id="sjGMXvi0jt65Mhocgapxv1">你（或助手）需要提供</h2>
+    <ul data-page-node-id="aIkIZEJ8RryYyFX7h5I18X">
+      <li data-page-node-id="yiiJ5f4CMuU3zcmoimgFd1"><b data-page-node-id="OEqtJ3HrwIiX8W6Knk7uvA">被测对象</b>：软件代码仓库地址 + 要测的版本（分支/提交号）。</li>
+      <li data-page-node-id="RBo589gvk57w2tEZfSWCqY"><b data-page-node-id="4hyXqhVNtO39svSUoVvbCx">访问信息（可选）</b>：被测系统的网址、登录账号（放配置里，不写进代码）。</li>
+      <li data-page-node-id="gCA0Pyg9LRPn3mk4ui0JdX"><b data-page-node-id="OnavExHwLZBcgOGXPAYRw3">范围要求（可选）</b>：这轮重点查"正常+边界"还是"全部"，要不要只查"接口"类。</li>
+    </ul>
+
+    <h2 data-page-node-id="XIhP2f9u3sO0lhsvA15noD">平台最终产出的文件</h2>
+    <table data-page-node-id="4kaTuJyHgtMPekXoeaHxsl">
+      <thead data-page-node-id="aDV8fc9JNvYMuC7zISFALZ"><tr data-page-node-id="bxDHBRHTkCERSSWa9NwaWj"><th data-page-node-id="pykqrVl1aatYuLsGqCAEHw">产物</th><th data-page-node-id="Txm7GZCwl1b6t12EqMyzhy">内容</th><th data-page-node-id="KjG4YdGqxcEBm4HxIjlAMJ">给谁看</th></tr></thead>
+      <tbody data-page-node-id="aHSj8MQd4ZSuYZH0kK7ib3">
+        <tr data-page-node-id="jBuRfBfdLz09bbgZT65tjH"><td data-page-node-id="VODS9fqh7hAVTC9mv5AFI8"><b data-page-node-id="ChJlhtYeNXZSowL4qb0y48">测试点清单</b>（TEST_POINTS_NEW.md / .json）</td><td data-page-node-id="NF9UuMxtoJCi8l51txfW4i">逐条测试点，带"全量/更新"标签和来源功能点</td><td data-page-node-id="b26Gi1rywHvHgheUGYHrVH">测试设计人员</td></tr>
+        <tr data-page-node-id="RlJXzmCcACXD9qt4oly4jn"><td data-page-node-id="0taq2ZOGYYfzVXR6j3V14L"><b data-page-node-id="QQugHbqwCMSOCEMpA4NSys">功能点追溯表</b>（FUNCTIONAL_POINTS.md）</td><td data-page-node-id="gRldTchEbTy5G8PUOtv69j">功能点 → 测试点 的对应矩阵，证明覆盖无遗漏</td><td data-page-node-id="PFvQauWF5zF2mhG6Ufb6Eq">测试经理 / 审计</td></tr>
+        <tr data-page-node-id="3dJhFkRb3740CZLwYqDNSS"><td data-page-node-id="KDCR5of4Yko6bp47IYt8zU"><b data-page-node-id="rr62TvEEmovzA16HBmu2iD">新旧对比</b>（TEST_POINTS_COMPARE.md / .html）</td><td data-page-node-id="Ng4K6GjFZuhDR4Ne8aHgu2">这次和上次生成的差异，便于看增量</td><td data-page-node-id="4rAn3quMJ0g5nTzZfjp57m">项目相关方</td></tr>
+        <tr data-page-node-id="RTS5RODohAjTpPHFFJR350"><td data-page-node-id="zcWECR84MkvilZS1Z5hcgN"><b data-page-node-id="SVJk4TeeDqv50aOV41VpIo">用例清册</b>（TEST_CASES.md / .json）</td><td data-page-node-id="2jYjT5iZvInclDXAZkOtmT">可执行的测试用例（步骤/优先级/预期）</td><td data-page-node-id="07BaZkTQMEtuKeqaLOQEdH">执行人员</td></tr>
+        <tr data-page-node-id="H6ZeeIbPBYL1tt9KO4FKwB"><td data-page-node-id="ZoiGKLxSI7ncbdMuhkT3Dy"><b data-page-node-id="Rl3VjhcxFtJRbsC0SV27Ur">验收报告</b>（VERIFICATION_REPORT / 趋势 / 覆盖率）</td><td data-page-node-id="RNINA3yjcBEQBRfhPNmHBq">通过失败统计、结论风险、趋势图、覆盖率</td><td data-page-node-id="oySvSjkE97ypzI89qQ5Jiz">PM / 领导</td></tr>
+        <tr data-page-node-id="FWMVSDqJFX12rNAA04s6pk"><td data-page-node-id="HQQHABpWeeBRNL1CRBA3LO"><b data-page-node-id="2CDc3Ueky7wvmE71J0h1aQ">可分发报告</b>（xlsx / docx / pdf）</td><td data-page-node-id="aC7yt5ljcZjW9SLTB0q3YP">同上内容的办公格式，便于转发存档</td><td data-page-node-id="Ozf183fJIYgAU64YSQCDES">全员</td></tr>
+      </tbody>
+    </table>
+
+    <div class="plain" data-page-node-id="yMholBLg0YJeCIYWnpjkBl">
+      <b data-page-node-id="BHJ6Gz8tcT41BJK0HEYaLK">通俗说：</b>你给"图纸 + 想查的重点"，平台还你"验收清单 + 逐条核对结果 + 一份能转发的验收报告"。清单和报告都能溯源到图纸上的具体位置。
+    </div>
+    <p class="toc-jump" data-page-node-id="5XS81rv1I7IrPaISyMGCFa">下一章专门讲容易混淆的"范围"和"标签"。</p>
+  </section>
+
+  <!-- 第八章 -->
+  <section id="ch8" data-page-node-id="b6aeZpWfjfG4vEaj3CM6Iy">
+    <h1 data-page-node-id="ZW7b8QgM5UhbZzn6BvTxKG">第八章　"范围"和"标签"怎么理解</h1>
+    <p data-page-node-id="aNcwKWwW5TaeHS0x40i0h4">这两个是你在提需求时最常遇到的设定，单独讲清楚。</p>
+
+    <h2 data-page-node-id="ApwMg6ajPkqhX8nNSCy8pq">一、范围（Scope）：这轮重点查哪些"角度"</h2>
+    <p data-page-node-id="K3871ZRWagxBsRQrJYdBnC">平台把测试点按"行为角度"分成四类，可单选或多选组合：</p>
+    <table data-page-node-id="CB4rgewvUW2X8HbHztrAis">
+      <thead data-page-node-id="tB9dHd018FNTBHZ2xfMunv"><tr data-page-node-id="8DG76LDBScrEfyDzr0ybCc"><th data-page-node-id="fUZwwmskhyEvKKq723TMPJ">取值</th><th data-page-node-id="vWwu7LtKyGUEH6fdLpuJLR">查的是什么</th><th data-page-node-id="ASrStEKDccy9N0lFMLGxdd">举例</th></tr></thead>
+      <tbody data-page-node-id="ZjegI774PMA1tXfCrxabaO">
+        <tr data-page-node-id="IAnrmESbqdRNf0zuKKfvrn"><td data-page-node-id="lWcdPFKKcUNDtEuW678MlF"><span class="pill g" data-page-node-id="1JAx4L6FYUrEG1CV1yJ0EU">正常</span></td><td data-page-node-id="8eqQYKy2eGHmfguKiG6p98">功能该用时能不能用</td><td data-page-node-id="lgtmoUtTDrjreqEs8zGmKa">用对的账号能登录成功</td></tr>
+        <tr data-page-node-id="gAT8BY8MP561A7RcmKW7bA"><td data-page-node-id="jqph8qppZtku6Gw5tqPHJC"><span class="pill o" data-page-node-id="NGAqors48eLdSCbEmiGFTW">异常</span></td><td data-page-node-id="wQJzuzXOCKgVRSLNb07zew">出错时会不会崩 / 报错友不友好</td><td data-page-node-id="4frRvpL8sTukrIhH8A5E4D">查一个不存在的订单返回 404 而非崩溃</td></tr>
+        <tr data-page-node-id="AWJZrWDJmnGSn9vM8w0Rn5"><td data-page-node-id="D6CpyRLQxvFkk7aPuxQGiw"><span class="pill p" data-page-node-id="cIm5rU9Hm2zef2ufQwSsHk">安全</span></td><td data-page-node-id="E5uPYJctGHMv0HZJsOttq8">没权限会不会被拦住</td><td data-page-node-id="JV9Ej0FB3V0FwvgUfyYNAD">不带登录凭证访问被拒（401/403）</td></tr>
+        <tr data-page-node-id="o2KsSTYuOkcrxhKsnrmFi3"><td data-page-node-id="VpRpM0yODE2N1Nqt11GqUL"><span class="pill b" data-page-node-id="F2JqT434DpD3aAN9VGcpE4">边界</span></td><td data-page-node-id="bkfXVmnDb17LFGnhnaeQ7j">参数乱填 / 缺失会不会出错</td><td data-page-node-id="udPQgSLvDytIi6vSVsHWDC">必填项为空被拒（400/422）</td></tr>
+      </tbody>
+    </table>
+    <p data-page-node-id="w3NW7raEci6C9XCNeOug2R">另有 <b data-page-node-id="Ep0TutClrTaHWUFKfito4h">接口</b> 这一项，它<b data-page-node-id="VydK4gYeIttsjDc76FQlHG">不是新的角度，而是"按来源挑"</b>：只保留"网页服务入口（HTTP 接口）"这一类测试点。它可以和上面四个角度组合，比如"正常 + 接口"= 只看接口类里的正常测试点。</p>
+    <div class="warn" data-page-node-id="KDz5Smodfg2BbhS1BVuC5X">
+      <b data-page-node-id="0E1PshL1v91mqyAHj2alyN">容易误解的点：</b>"接口"不是"额外多生成一类测试点"，而是从已生成的测试点里<b data-page-node-id="5kd7lVlT8v5C6ulW6hObRv">筛出接口来源的那部分</b>。这样和你之前在线上对话环境里已经验证过的"接口用例"能对上，不重复造轮子。
+    </div>
+    <p data-page-node-id="IJouBCvCXK7CnMKzO9SZim"><b data-page-node-id="7UPvej7nWi53M5DIPblvJc">当前默认范围：正常 + 边界。</b>（即默认重点查"功能可用性"和"参数边界"，不默认查安全/异常——如需更全面就说"全部"。）</p>
+
+    <h2 data-page-node-id="cSC3F8Iorkdh9OnMSeF9sG">二、标签（Tag）：全量 / 更新</h2>
+    <table data-page-node-id="HdQZtH04Ph5fW06DMphQZM">
+      <thead data-page-node-id="FFfRuGNHCNtvfYmGrqLpyt"><tr data-page-node-id="hO9PNF3ClR4Bfbplo6E3Cp"><th data-page-node-id="htDTMGscONl409CyCSPs4M">标签</th><th data-page-node-id="A7pNEsKnRCTkPZeNq54GaH">含义</th><th data-page-node-id="LoRETgSFI8jgiX47eh6rwU">什么时候用</th></tr></thead>
+      <tbody data-page-node-id="4nRRVsnKMyRwHu4DEaxXQq">
+        <tr data-page-node-id="NfGSylomaltVE8Zkv9zDs9"><td data-page-node-id="73SeuPB5w7QDuiHazQrnkt"><span class="pill g" data-page-node-id="YiQJnosM5IuCi2zpjbKSn8">全量</span></td><td data-page-node-id="4Og2W5jPfCd1VBCZgmj8is">代码没改动的部分，做常规全面回归</td><td data-page-node-id="ddNcY0bfsCppgUP38rnUoH">每次都包含，作为基线</td></tr>
+        <tr data-page-node-id="k542SifHdeHzFDbZi1fTKC"><td data-page-node-id="bmPYZ1fFmyGnfRO9WMAOgG"><span class="pill o" data-page-node-id="8BRgNyafgcBa5USPL0xjSF">更新</span></td><td data-page-node-id="iPfQ1rVZi2EvgwKjZoVO3L">底层代码这次被改动的具体位置，优先回归</td><td data-page-node-id="ety697qnu5x5a2OvGY2eGf">对比两个版本时才会出现</td></tr>
+      </tbody>
+    </table>
+    <p data-page-node-id="5ocVfGGdh5GoGS3zaghWEN">"更新"的判定很精细：不是整文件变动就算更新，而是<b data-page-node-id="vg0vJBxpBe69o4Is25enoH">具体哪一行代码被改，只有依赖那行代码的测试点才标"更新"</b>。这样你能精准聚焦"这次改动到底影响了哪些检查项"。</p>
+    <p class="toc-jump" data-page-node-id="wjhGc97v5VwTw8ODz9EL68">下一章讲平台的"能力边界"，便于你规划优化方向。</p>
+  </section>
+
+  <!-- 第九章 -->
+  <section id="ch9" data-page-node-id="kLuPaSNG3qYNQSCuDHuEx8">
+    <h1 data-page-node-id="O97Jxyl6dCN7dGVAMqMH78">第九章　当前的边界与注意事项</h1>
+    <p data-page-node-id="EQOYc9RgouQQfo9WKaFqPo">为了让后续优化讨论更准，这里如实说明平台<b data-page-node-id="v2HCBiZkhaWYPRNwHRwR3V">现在能做什么、还不能做什么</b>。</p>
+
+    <h2 data-page-node-id="sebpHTdNxtHV8KwYQu5iMg">已具备的能力</h2>
+    <ul data-page-node-id="W1amOCjzJgBz2ugGMyMy79">
+      <li data-page-node-id="HKhLHAMFR2ZWdqRkBtsWFP">✅ 自动读代码、提取功能点（接口/页面/组件/业务函数四类的全面覆盖）。</li>
+      <li data-page-node-id="sFb69A6wxfIYuPUOQY51zT">✅ 测试点按"正常/异常/安全/边界/接口"多维度展开，覆盖率可统计。</li>
+      <li data-page-node-id="oQCX8qLFg8IFVUEvYDCIKt">✅ 测试点 ↔ 功能点双向追溯，孤儿（无出处测试点）恒为 0。</li>
+      <li data-page-node-id="ZYHez7Bv1adJJhnagPuZD4">✅ 全量 / 更新双标签、精确到代码行级别的改动识别。</li>
+      <li data-page-node-id="TEf717R9o4fSrfoPFVYYWq">✅ 用例生成、人工审核门、执行（可筛选/后台/中断）、多种格式报告。</li>
+      <li data-page-node-id="lvjfffkqtdXzqHdee8JhTr">✅ 代码仓库只读管控（拉取前锁只读、拉取时临时读写、拉完恢复只读）。</li>
+    </ul>
+
+    <h2 data-page-node-id="fhjFgz0gmYO4G5RBBoGVsJ">当前还较弱 / 待补强的地方</h2>
+    <div class="warn" data-page-node-id="yIEbI7ykkfzr27XKUvc0mC">
+      <ul data-page-node-id="RlCAVESP8fPjvY6vWOvl4i">
+        <li data-page-node-id="0W9fjzOn8wk5MCHsnqgCXZ">⚠️ <b data-page-node-id="0nEf966iZOX9HbGBv5FwEb">执行以"探活级"为主</b>：默认只做轻量核对（确认接口在、能调用），还不是完整的"真人点页面"式 UI 验证。真实浏览器验证需要开启开关并装好浏览器环境。</li>
+        <li data-page-node-id="Fqq7jRkoTDaS5T91JB2irr">⚠️ <b data-page-node-id="Diy3obLEtEW9g4beyEcyHX">没有面向人的网页界面</b>：目前平台靠"接口指令"或"AI 助手"操作，没有能给普通测试人员直接点选的图形界面（前端目录暂为空）。</li>
+        <li data-page-node-id="YyV8pgVXXVIt4X8BbNHbMd">⚠️ <b data-page-node-id="JrRrOCLGul4zacmbPqTyUM">同步执行</b>：多数操作是"下达后等结果"，要接流水线做"部署后自动触发"还需进一步异步化与调度。</li>
+        <li data-page-node-id="R5e2RifPZ0Su864mEGoCAs">⚠️ <b data-page-node-id="aV0MNxGNGt22BT2eljhAWy">鉴权/账号依赖配置</b>：要真去线上核对，需在被测系统可用、且账号信息配置正确的前提下。</li>
+        <li data-page-node-id="oRiunryBvuvyMQnkTjuJHl">⚠️ <b data-page-node-id="L0KEuqTG8gZLVHOq8HeNuM">基线版本需有效</b>：打"更新"标签依赖两个版本都能正确解析；若版本号失效，会全部标成"全量"（系统会给出醒目提醒）。</li>
+      </ul>
+    </div>
+
+    <div class="note" data-page-node-id="bCV0V5vzp8f9xxFtdmlRmL">
+      <b data-page-node-id="T9rAt0bwxQFAnaHFVETmZq">给优化讨论的提示：</b>如果你后续想"加功能 / 改体验"，上面"待补强"几乎就是候选清单。例如：① 做一个人人能点的网页界面；② 把"真人浏览器验证"默认打开；③ 接发布流水线实现"部署完自动跑一遍"。你可以指定任意一条，我们细化方案。
+    </div>
+    <p class="toc-jump" data-page-node-id="PBfbnwqbfHGccl9mlJZo4M">最后一章是常见问题与术语对照。</p>
+  </section>
+
+  <!-- 第十章 -->
+  <section id="ch10" data-page-node-id="FkBkw9Y3YQXTfQphMsCKjW">
+    <h1 data-page-node-id="JvpBaD5N5OKNkmB03N0ZzW">第十章　常见问题与术语对照</h1>
+
+    <h2 data-page-node-id="YP4udKOCBbKtQAnjNwfcM2">常见问题（FAQ）</h2>
+    <ul data-page-node-id="G4qUgjey9jgq41zHqZAEmP">
+      <li data-page-node-id="Z8Gru0xr72NhSowCc9Vn3b"><b data-page-node-id="9fpJbOX3DCLO7CUSBIwIEC">Q：我完全不会写代码，能用吗？</b><br data-page-node-id="RiYtF9os5PS30ABSBz8fFB">A：能。你通过 AI 助手用自然语言提要求即可（方式一）。助手背后调用自动化小组完成。</li>
+      <li data-page-node-id="VgbctxBDHok0JAIsrgncUx"><b data-page-node-id="B2C1Ik6Wuz7EaUff4wcQG9">Q：测试点和用例有什么区别？</b><br data-page-node-id="Rx0KR86mfkSqwtCp96REUE">A：测试点是"要核对的一件事"（想法），用例是"具体怎么做 + 预期结果"（操作单）。一个测试点通常对应一条用例。</li>
+      <li data-page-node-id="PsF7nnPFzMkkYl8rbYdJZe"><b data-page-node-id="myTecXDovEA7sSxnHGrsMy">Q：为什么有的测试标"更新"、有的标"全量"？</b><br data-page-node-id="AFWrIoPrBF5YNXJ2tGhjFo">A："更新"是这次代码改动波及的检查项，优先回归；"全量"是没改到的，做常规回归。</li>
+      <li data-page-node-id="hLqz6HMUXr6SSitCixGH0H"><b data-page-node-id="qTZUMSWimF2mackgw5EFBU">Q："接口"范围会不会多生成测试？</b><br data-page-node-id="ELAUXNvYysRKmGMqeIJta0">A：不会。它只是从已生成的测试点里筛出"网页服务入口"这一类，对应你线上已验证过的接口用例。</li>
+      <li data-page-node-id="GEUcGKJpMtlftzkSTb1GS1"><b data-page-node-id="ijlyITQCDiQEt1stsfRZ5l">Q：报告能发给不懂技术的人看吗？</b><br data-page-node-id="zMnZO8taMQHwCFPDn3kBXp">A：能。报告有网页版，也能导出 Excel / Word / PDF，含通过失败统计和结论风险，适合转发。</li>
+      <li data-page-node-id="iBiyqmGBzAzWMRoRkoHvUW"><b data-page-node-id="fhstYuOt4DLHzpqHuYlGxE">Q：如果代码仓库被改坏了怎么办？</b><br data-page-node-id="jiEGnJjNtWdDhEn3HYCLuW">A：平台在拉取代码前会给文件夹上"只读锁"，只在拉取那一刻临时放开，拉完立即恢复，降低误改风险。</li>
+    </ul>
+
+    <h2 data-page-node-id="ehBd2j4kRzeA0UrFE8jN37">术语对照表（行话 → 大白话）</h2>
+    <table data-page-node-id="vtBZI9gyDYTbRWvvDG80H6">
+      <thead data-page-node-id="kQkkuJMNFCyE8QeS71BBHf"><tr data-page-node-id="qIYtC6rNQLKJPDGAd3ziha"><th data-page-node-id="ClJG1SL5sSQ1qCtIGr7Ar5">文档里的词</th><th data-page-node-id="CvKZhrezVgmEkrjUrH8BNv">大白话</th></tr></thead>
+      <tbody data-page-node-id="qjDSB8niuthpj8LWl7nhYO">
+        <tr data-page-node-id="IZEYAuZXqkYcr5pE0NCThn"><td data-page-node-id="GvpRbHE4uehv41A7hzltWa">被测系统 / 被测仓库</td><td data-page-node-id="awoo1ousifMIuK8xAOhWhq">你要验收的那个软件及其代码</td></tr>
+        <tr data-page-node-id="VwAYouZB4kAT59BRcOM9PE"><td data-page-node-id="58Lv9PM6LWTjtIWKHTAUBS">功能点（FP）</td><td data-page-node-id="3L9AC0yUkYxLcVueB5P45E">软件"会做的一件事"</td></tr>
+        <tr data-page-node-id="oM20hZqjLIxi4d8WyTjLfd"><td data-page-node-id="YmyRXInQoZJk6WFBhHZ6b2">测试点（TP）</td><td data-page-node-id="V1oq6XvBeM7XJ7ujAHidbS">针对功能"要核对的一件事"</td></tr>
+        <tr data-page-node-id="45iPI324iSNVjlp2UUZLJb"><td data-page-node-id="YJO5uPKBo7CmqAtfnHrEcP">测试用例（case）</td><td data-page-node-id="yZzY7hJH5aM9IuICSdIvZt">带步骤和预期结果的"操作单"</td></tr>
+        <tr data-page-node-id="iEBZsb4LBSIJfFdZS0AMbZ"><td data-page-node-id="1OA7B5GYoBKnQm2GlbqHT7">范围 / 维度</td><td data-page-node-id="uaVNT8e9HYoGh6VDPSLAqN">这轮重点查哪些角度（正常/异常/安全/边界/接口）</td></tr>
+        <tr data-page-node-id="1DFUgGmuouaisnoL3Gbsox"><td data-page-node-id="cpOB4b23hfGIag3GGHo8qU">全量 / 更新</td><td data-page-node-id="sTMp9cRm5hq5qrz2mkWAPY">整套查 / 只查这次改动的部分</td></tr>
+        <tr data-page-node-id="HZGope0MghAGXsYrT6njrq"><td data-page-node-id="fIdqcNG6fdjoVhp3yslfgY">双向追溯</td><td data-page-node-id="kOcfK9oad8ocPcOo5LaOXD">测试点能查来源、功能能查派生，互相可溯源</td></tr>
+        <tr data-page-node-id="aoqkGfGTsEwKCwbDt96vCe"><td data-page-node-id="EObOlGzTeXw17joVzZrop8">契约（Contract）</td><td data-page-node-id="Fc9JCtR7QAEhonTpAqLo5v">功能点与测试点统一的"身份证规则"</td></tr>
+        <tr data-page-node-id="t04bGQeq9hVyHfzLi9Mfx4"><td data-page-node-id="P9SEvRNIUODVEYFiNVVIas">接口 / API</td><td data-page-node-id="4pDeF3aWYe2iwb8WehmtS5">软件对外提供的"服务入口"（如登录入口）</td></tr>
+        <tr data-page-node-id="Oewn85xn0A7g1y6DCPyuPO"><td data-page-node-id="quNDKjs4GQDQjPxxZw6Fsq">执行 / 跑一遍</td><td data-page-node-id="yJfRATfD1UpEVhfYkFYSsX">把用例真去被测系统上核对</td></tr>
+        <tr data-page-node-id="eukKztRkUMUjnlMQwrA6Ks"><td data-page-node-id="BdIV2G94lc25QvGeHuXQUr">报告</td><td data-page-node-id="K5ny3fAfRsQjFH9K5iakc0">汇总核对结果、给出结论的验收文档</td></tr>
+        <tr data-page-node-id="VI0mnIGpdxpCGnBNI2Chhq"><td data-page-node-id="nu4FJOtejI2z50zcJFvvvb">技能（Skill）</td><td data-page-node-id="91ZPDX0JZx3nEfKUUZTeuE">可独立外派、配合平台干活的自动化小组</td></tr>
+      </tbody>
+    </table>
+
+    <div class="plain" data-page-node-id="cotkT7I1ALWZ9QLLYvVVwT">
+      <b data-page-node-id="4kWG5Pfm0cT1TnBV9vdFb0">读到这里，你就可以基于任意一章告诉我优化想法了。</b>例如："第二章想加一个给普通人点的网页界面""第八章默认范围想改成全部""第九章想先把真人浏览器验证打开"。我会据此给出方案并落地。
+    </div>
+  </section>
+
+  <div class="footer" data-page-node-id="TOkX5fa9Z0eabnj66CGHYy">测试加速平台（test-accel）· 通俗使用说明 · 面向非开发人员 · 契约 v1.0</div>
+</main>
+</div>
+</body>
+</html>
