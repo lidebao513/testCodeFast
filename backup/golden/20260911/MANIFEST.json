@@ -1,0 +1,83 @@
+{
+  "generated_at": "2026-09-11T14:40:24",
+  "source_db": "C:\\Users\\EDY\\WorkBuddy\\testCodeFast\\work\\test-accel\\data\\test_accel.db",
+  "source_db_sha256": "1c30915b5bc5c114dbe0d5bd81f4f762f9f2953ae32bb82c366cf9f186452501",
+  "source_db_bytes": 2527232,
+  "projects": [
+    {
+      "project_id": 2,
+      "name": "research-agent",
+      "local_path": "C:\\Users\\EDY\\WorkBuddy\\testCodeFast\\work\\targets\\research-agent",
+      "files": {
+        "functional_points": "project_2/functional_points.json",
+        "test_points": "project_2/test_points.json",
+        "cases": "project_2/cases.json"
+      },
+      "counts": {
+        "functional_points": 237,
+        "test_points": 415,
+        "cases": 416
+      }
+    },
+    {
+      "project_id": 3,
+      "name": "b43-mock",
+      "local_path": "C:\\Users\\EDY\\WorkBuddy\\testCodeFast\\work\\targets\\research-agent",
+      "files": {
+        "functional_points": "project_3/functional_points.json",
+        "test_points": "project_3/test_points.json",
+        "cases": "project_3/cases.json"
+      },
+      "counts": {
+        "functional_points": 0,
+        "test_points": 0,
+        "cases": 2
+      }
+    },
+    {
+      "project_id": 4,
+      "name": "b44-browser",
+      "local_path": "C:\\Users\\EDY\\WorkBuddy\\testCodeFast\\work\\targets\\research-agent",
+      "files": {
+        "functional_points": "project_4/functional_points.json",
+        "test_points": "project_4/test_points.json",
+        "cases": "project_4/cases.json"
+      },
+      "counts": {
+        "functional_points": 0,
+        "test_points": 0,
+        "cases": 2
+      }
+    },
+    {
+      "project_id": 5,
+      "name": "b5-progress",
+      "local_path": "C:\\Users\\EDY\\WorkBuddy\\testCodeFast\\work\\test-accel",
+      "files": {
+        "functional_points": "project_5/functional_points.json",
+        "test_points": "project_5/test_points.json",
+        "cases": "project_5/cases.json"
+      },
+      "counts": {
+        "functional_points": 0,
+        "test_points": 0,
+        "cases": 60
+      }
+    },
+    {
+      "project_id": 6,
+      "name": "b5-webhook",
+      "local_path": "C:\\Users\\EDY\\WorkBuddy\\testCodeFast\\work\\test-accel",
+      "files": {
+        "functional_points": "project_6/functional_points.json",
+        "test_points": "project_6/test_points.json",
+        "cases": "project_6/cases.json"
+      },
+      "counts": {
+        "functional_points": 0,
+        "test_points": 0,
+        "cases": 60
+      }
+    }
+  ]
+}

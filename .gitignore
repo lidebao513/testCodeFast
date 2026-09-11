@@ -38,9 +38,12 @@ work/selftest_*/
 work/research-agent-test/**/*.png
 work/research-agent-test/**/*.log
 
-# ========== 本机备份区（含 DB 快照，体积大且可重建）==========
+# ========== 备份区 ==========
+# DB 快照：体积大且可从源库重建 → 只留本机，不入库
+backup/db/
 backup/*.db
-backup/*.tar.gz
+# 说明：backup/golden/（黄金样本 JSON）与 backup/skills/（技能快照 tar.gz）
+#       体积小、需要版本化追溯 → 正常入库，不在此忽略
 
 # ========== WorkBuddy 工作区数据（含会话记忆与凭据记录）==========
 .workbuddy/
