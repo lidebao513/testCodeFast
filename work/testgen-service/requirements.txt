@@ -1,0 +1,11 @@
+# ============================================================================
+# testgen-service 运行依赖
+# 说明：本服务只做「代码 -> 测试点 -> 用例」，**不需要 playwright**（执行段不在范围内）。
+#       质量工具（ruff/mypy/bandit/pytest/pytest-cov）走 QUALITY_ENV 或本机托管环境，见 scripts/gate_all.py。
+# ============================================================================
+fastapi
+uvicorn[standard]
+python-dotenv
+openai
+httpx
+requests
