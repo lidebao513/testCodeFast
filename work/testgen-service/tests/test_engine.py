@@ -159,7 +159,7 @@ def test_execution_layer_follows_verify_layer_not_http_verb(sample_repo):
 
 # ---------------------------------------------------------------- 安全维度
 def test_security_dimension_only_for_api(sample_repo):
-    """安全维度当前只在接口类功能点上展开（页面/业务函数不产出安全测试点）。
+    """安全维度只在接口类功能点上展开（页面/组件/业务函数不产出安全测试点）。
 
     这条测试把**现状**钉住：若后续要扩到 UI/业务函数，必须同步改本断言，
     避免「以为覆盖了、其实没覆盖」。
@@ -170,7 +170,56 @@ def test_security_dimension_only_for_api(sample_repo):
     )
     assert tps, "接口功能点应展开出安全测试点"
     assert {tp.method for tp in tps} <= set(HTTP_METHODS), "安全测试点全部来自 HTTP 接口"
-    assert all(tp.dimension == Dimension.AUTH_MISS.value for tp in tps)
+
+
+def test_privilege_escalation_dimension_matches_legacy(sample_repo):
+    """「越权」子维度：仅对「含路径参数 + PUT/PATCH/DELETE」的接口产出。
+
+    回归要点：legacy 有此规则（`_expand_api` 写操作补充越权维度），
+    新服务重写时整条丢失，导致安全用例只剩「鉴权缺失」一种。
+    """
+    _, result = _extract(sample_repo)
+    tps = tp_expand.expand_all(
+        result.functional_points, tp_expand.ExpandContext(scopes={TPType.SECURITY.value})
+    )
+    dims = {tp.dimension for tp in tps}
+    assert Dimension.AUTH_MISS.value in dims, "鉴权缺失维度应存在"
+    assert Dimension.PRIV_ESC.value in dims, "越权维度应存在（样例含 DELETE /invoices/{id}）"
+
+    priv = [tp for tp in tps if tp.dimension == Dimension.PRIV_ESC.value]
+    assert priv, "越权测试点不应为空"
+    assert all("{" in tp.area for tp in priv), "越权只对含路径参数的接口"
+    assert {tp.method for tp in priv} <= {"PUT", "PATCH", "DELETE"}, "越权只针对写操作"
+
+
+def test_expansion_plan_matches_legacy_parity_table():
+    """展开规则必须与 legacy 逐条对齐 —— 迁移不得静默丢维度。"""
+    cases = {
+        ("api", "GET /a"): [
+            (TPType.NORMAL.value, Dimension.AVAIL.value),
+            (TPType.SECURITY.value, Dimension.AUTH_MISS.value),
+            (TPType.BOUNDARY.value, Dimension.PARAM_ILLEGAL.value),
+        ],
+        ("api", "GET /a/{id}"): [
+            (TPType.NORMAL.value, Dimension.AVAIL.value),
+            (TPType.SECURITY.value, Dimension.AUTH_MISS.value),
+            (TPType.BOUNDARY.value, Dimension.PARAM_ILLEGAL.value),
+            (TPType.ABNORMAL.value, Dimension.RES_NOT_FOUND.value),
+        ],
+        ("api", "DELETE /a/{id}"): [
+            (TPType.NORMAL.value, Dimension.AVAIL.value),
+            (TPType.SECURITY.value, Dimension.AUTH_MISS.value),
+            (TPType.BOUNDARY.value, Dimension.PARAM_ILLEGAL.value),
+            (TPType.ABNORMAL.value, Dimension.RES_NOT_FOUND.value),
+            (TPType.SECURITY.value, Dimension.PRIV_ESC.value),
+        ],
+        ("page", "/p"): [(TPType.NORMAL.value, Dimension.PAGE_REACH.value)],
+        ("component", "X.tsx"): [(TPType.NORMAL.value, Dimension.INTERACTIVE.value)],
+        ("business", "f"): [(TPType.NORMAL.value, Dimension.BIZ_LOGIC.value)],
+    }
+    for (ftype, name), expected in cases.items():
+        fp = FunctionalPoint(fp_id="FP-p", ftype=ftype, file_path="a", name=name, title=name)
+        assert tp_expand.plan_of(fp) == expected, f"{ftype} {name} 展开规则偏离 legacy"
 
 
 def test_default_scope_excludes_security(sample_repo):
@@ -179,6 +228,30 @@ def test_default_scope_excludes_security(sample_repo):
     tps = tp_expand.expand_all(result.functional_points, tp_expand.ExpandContext())
     assert tps
     assert TPType.SECURITY.value not in {tp.category for tp in tps}
+
+
+# ---------------------------------------------------------------- 交互组件
+def test_component_extraction_requires_interaction_hook(sample_repo):
+    """含交互钩子的前端文件才算组件；只有 `<Route>` 的 App.tsx 不算。"""
+    _, result = _extract(sample_repo)
+    names = {fp.name for fp in result.functional_points if fp.ftype == FType.COMPONENT.value}
+    assert "SearchBar.tsx" in names, "含 input/button/form 的组件应被提取"
+    assert "App.tsx" not in names, "只有路由声明、无交互钩子不应算组件"
+
+
+def test_component_yields_interactive_test_point_and_ui_case(sample_repo):
+    """组件 → 「交互元素可用」测试点 → UI 层用例。"""
+    _, result = _extract(sample_repo)
+    comps = [fp for fp in result.functional_points if fp.ftype == FType.COMPONENT.value]
+    tps = tp_expand.expand_all(comps, tp_expand.ExpandContext(scopes={TPType.NORMAL.value}))
+    assert tps
+    for tp in tps:
+        assert tp.dimension == Dimension.INTERACTIVE.value
+        assert tp.verify_layer == VerifyLayer.UI.value
+        case = case_gen.build_case(tp)
+        assert case.steps[0]["action"] == "ui_probe"
+        assert case.steps[0]["kind"] == FType.UI.value
+        assert case.missing_elements() == []
 
 
 # ---------------------------------------------------------------- 编号稳定性（D-9）

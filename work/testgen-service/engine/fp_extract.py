@@ -38,6 +38,15 @@ _PAGE_PATH_RE = re.compile(r"""\bpath\s*[:=]\s*["'`](/[^"'`]*)["'`]""")
 # 前端组件名：name: 'Xxx'
 _PAGE_NAME_RE = re.compile(r"""\bname\s*[:=]\s*["'`]([A-Za-z_][\w-]*)["'`]""")
 
+# 交互钩子：出现即视为「关键交互组件」（兼容 React JSX 与 Vue 模板）
+_UI_HOOK_RE = re.compile(
+    r"(onClick\s*=|onChange\s*=|onSubmit\s*=|@click|v-on:|"
+    r"<button|<input|<form|<select|<textarea|el-button|type=[\"']file)",
+    re.IGNORECASE,
+)
+# 组件来源扩展名：.vue 为 legacy 原有；.tsx/.jsx 是 React 主战场，legacy 未覆盖
+_COMPONENT_EXTS: tuple[str, ...] = (".tsx", ".jsx", ".vue")
+
 _SKIP_FUNC_PREFIXES: tuple[str, ...] = ("_", "test_")
 
 
@@ -304,12 +313,35 @@ def _extract_pages(sf: SourceFile) -> list[FunctionalPoint]:
     return out
 
 
+def _extract_components(sf: SourceFile) -> list[FunctionalPoint]:
+    """关键交互组件（启发式：含按钮/表单/上传/输入等交互钩子）。
+
+    与 legacy 的差异（有意扩展）：legacy 只认 `.vue`，React 仓库（.tsx/.jsx）
+    一个组件都提不出来 → UI 层只剩「页面可达」。这里把 React 一并纳入。
+    """
+    if sf.is_noise or sf.ext not in _COMPONENT_EXTS or not _UI_HOOK_RE.search(sf.text):
+        return []
+    return [
+        FunctionalPoint(
+            fp_id=fp_id_of(FType.COMPONENT.value, sf.rel, sf.name),
+            ftype=FType.COMPONENT.value,
+            file_path=sf.rel,
+            name=sf.name,
+            title=f"{module_of(sf.rel)} · 交互组件{sf.name}",
+            module=module_of(sf.rel),
+            semantic=f"含交互钩子的组件 {sf.rel}",
+            description=f"{sf.rel}",
+        )
+    ]
+
+
 # ---------------------------------------------------------------- 对外入口
 def extract_functional_points(
     files: dict[str, SourceFile],
     *,
     include_business: bool = True,
     extract_pages: bool = True,
+    extract_components: bool = True,
 ) -> ExtractResult:
     """从已扫描文件集中提取功能点（同文件只解析一次 AST）。"""
     result = ExtractResult()
@@ -327,8 +359,11 @@ def extract_functional_points(
                 if not include_business:
                     fns = [f for f in fns if f.ftype == FType.API.value]
                 result.functional_points.extend(fns)
-            elif extract_pages and sf.ext in FRONTEND_EXTS:
-                result.functional_points.extend(_extract_pages(sf))
+            elif sf.ext in FRONTEND_EXTS:
+                if extract_pages:
+                    result.functional_points.extend(_extract_pages(sf))
+                if extract_components:
+                    result.functional_points.extend(_extract_components(sf))
         except (SyntaxError, ValueError, AttributeError) as exc:
             result.errors.append(f"{rel}: {type(exc).__name__}: {exc}")
     return result

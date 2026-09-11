@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 
 from core.contracts import FunctionalPoint, TestPoint, tp_id_of, verify_layer_of_ftype
@@ -17,8 +18,11 @@ from core.enums import Dimension, FType, MethodMarker, Tag, TPType
 from engine.fp_extract import expect_of
 
 
-# 需要「异常」维度的方法：写操作失败路径必须验证
-_WRITE_METHODS: tuple[str, ...] = ("POST", "PUT", "PATCH", "DELETE")
+# 路径参数（如 `/invoices/{invoice_id}`）
+_PATH_PARAM_RE = re.compile(r"\{[^}]+\}")
+
+# 「越权」维度只针对**修改他人资源**的操作（与 legacy 一致）
+_PRIV_ESC_METHODS: tuple[str, ...] = ("PUT", "PATCH", "DELETE")
 
 # 非 HTTP 来源 → method 字段标记（契约：PAGE/UI/FUNC，见 enums.MethodMarker）
 _MARKER_BY_FTYPE: dict[str, str] = {
@@ -26,13 +30,6 @@ _MARKER_BY_FTYPE: dict[str, str] = {
     FType.UI.value: MethodMarker.UI.value,
     FType.COMPONENT.value: MethodMarker.UI.value,
     FType.BUSINESS.value: MethodMarker.FUNC.value,
-}
-
-# 维度 → 子维度（dimension）
-_DIMENSION_BY_CATEGORY: dict[str, str] = {
-    TPType.ABNORMAL.value: Dimension.RES_NOT_FOUND.value,
-    TPType.SECURITY.value: Dimension.AUTH_MISS.value,
-    TPType.BOUNDARY.value: Dimension.PARAM_ILLEGAL.value,
 }
 
 _SEMANTIC_ACTION: dict[str, str] = {
@@ -54,10 +51,27 @@ _CANONICAL_ORDER: tuple[str, ...] = (
     TPType.BOUNDARY.value,
 )
 
+# 「行为维度 × 子维度」在规范顺序中的槽位：
+# 「安全」维度下同时存在「鉴权缺失」与「越权」两条，需靠槽位区分（否则 tp_id 撞号）。
+_DIMENSION_SLOTS: dict[str, dict[str, int]] = {
+    TPType.NORMAL.value: {
+        Dimension.AVAIL.value: 0,
+        Dimension.BIZ_LOGIC.value: 0,
+        Dimension.PAGE_REACH.value: 0,
+        Dimension.INTERACTIVE.value: 0,
+    },
+    TPType.ABNORMAL.value: {Dimension.RES_NOT_FOUND.value: 0},
+    TPType.SECURITY.value: {Dimension.AUTH_MISS.value: 0, Dimension.PRIV_ESC.value: 1},
+    TPType.BOUNDARY.value: {Dimension.PARAM_ILLEGAL.value: 0},
+}
+_ORDINAL_STRIDE = 10
 
-def _ordinal_of(category: str) -> int:
-    """维度在规范顺序中的固定位置（与请求范围无关，保证 tp_id 稳定）。"""
-    return _CANONICAL_ORDER.index(category) if category in _CANONICAL_ORDER else 0
+
+def _ordinal_of(category: str, dimension: str) -> int:
+    """(维度, 子维度) 在规范顺序中的固定位置（与请求范围无关，保证 tp_id 稳定）。"""
+    base = _CANONICAL_ORDER.index(category) if category in _CANONICAL_ORDER else 0
+    slot = _DIMENSION_SLOTS.get(category, {}).get(dimension, 0)
+    return base * _ORDINAL_STRIDE + slot
 
 
 @dataclass
@@ -93,17 +107,7 @@ def _area_of(fp: FunctionalPoint) -> str:
     return fp.name
 
 
-def _dimension_of(category: str, fp: FunctionalPoint) -> str:
-    if category == TPType.NORMAL.value:
-        if fp.ftype == FType.BUSINESS.value:
-            return Dimension.BIZ_LOGIC.value
-        if fp.ftype == FType.PAGE.value:
-            return Dimension.PAGE_REACH.value
-        return Dimension.AVAIL.value
-    return _DIMENSION_BY_CATEGORY.get(category, Dimension.AVAIL.value)
-
-
-def _expect_of(fp: FunctionalPoint, category: str) -> str:
+def _expect_of(fp: FunctionalPoint, category: str, dimension: str = "") -> str:
     """按维度给出可判定的预期结果文案。"""
     if category == TPType.NORMAL.value:
         return expect_of(fp.ftype, fp.name, _method_of(fp))
@@ -112,6 +116,8 @@ def _expect_of(fp: FunctionalPoint, category: str) -> str:
             "返回 4xx（资源不存在 404 / 状态非法 409），响应体为结构化错误信息，服务不抛未捕获异常"
         )
     if category == TPType.SECURITY.value:
+        if dimension == Dimension.PRIV_ESC.value:
+            return "以他人身份/越权凭证操作该资源 → 403，且不产生越权修改"
         return "未携带或携带无效凭证时返回 401/403，且不泄露资源内容（越权访问同样被拒）"
     return "参数缺失或越界时返回 400/422，校验信息明确指出非法字段"
 
@@ -120,20 +126,49 @@ def _semantic_of(fp: FunctionalPoint, category: str) -> str:
     return f"{_SEMANTIC_ACTION[category]}：{fp.title}"
 
 
-def dimensions_of(fp: FunctionalPoint) -> list[str]:
-    """某条功能点应展开出哪些行为维度（规则表，确定性）。"""
-    cats = [TPType.NORMAL.value]
+def plan_of(fp: FunctionalPoint) -> list[tuple[str, str]]:
+    """功能点 → [(行为维度, 子维度)]，**与 legacy 展开规则逐条对齐**（P1 契约冻结）。
+
+    对齐表（顺序即产出顺序，也是 tp_id 序号的规范顺序）：
+
+    | 来源      | 维度 | 子维度         | 条件                        |
+    |-----------|------|----------------|-----------------------------|
+    | api       | 正常 | 可用性         | 全部                        |
+    | api       | 安全 | 鉴权缺失       | 全部                        |
+    | api       | 边界 | 参数非法       | 全部                        |
+    | api       | 异常 | 资源不存在     | 含路径参数 `{id}`           |
+    | api       | 安全 | 越权           | 含 `{id}` 且方法为 PUT/PATCH/DELETE |
+    | page      | 正常 | 页面可达       | 全部                        |
+    | component | 正常 | 交互元素可用   | 全部                        |
+    | business  | 正常 | 业务逻辑可用   | 全部                        |
+
+    两条与 legacy 的有意差异（均已在代码注释说明）：
+    - `component` 的来源扩展名加入 `.tsx/.jsx`（legacy 只认 `.vue`，React 仓一个都提不出来）；
+    - 不再给 `page` 派生「边界」维度（页面无参数校验语义，属噪声）。
+    """
     if fp.ftype == FType.API.value:
         method = _method_of(fp)
-        has_path_param = "{" in fp.name
-        cats.append(TPType.SECURITY.value)
-        if has_path_param or method in _WRITE_METHODS:
-            cats.append(TPType.ABNORMAL.value)
-        if has_path_param:
-            cats.append(TPType.BOUNDARY.value)
-    elif fp.ftype == FType.PAGE.value:
-        cats.append(TPType.BOUNDARY.value)
-    return cats
+        has_id = bool(_PATH_PARAM_RE.search(fp.name))
+        plan = [
+            (TPType.NORMAL.value, Dimension.AVAIL.value),
+            (TPType.SECURITY.value, Dimension.AUTH_MISS.value),
+            (TPType.BOUNDARY.value, Dimension.PARAM_ILLEGAL.value),
+        ]
+        if has_id:
+            plan.append((TPType.ABNORMAL.value, Dimension.RES_NOT_FOUND.value))
+        if has_id and method in _PRIV_ESC_METHODS:
+            plan.append((TPType.SECURITY.value, Dimension.PRIV_ESC.value))
+        return plan
+    if fp.ftype == FType.PAGE.value:
+        return [(TPType.NORMAL.value, Dimension.PAGE_REACH.value)]
+    if fp.ftype == FType.COMPONENT.value:
+        return [(TPType.NORMAL.value, Dimension.INTERACTIVE.value)]
+    return [(TPType.NORMAL.value, Dimension.BIZ_LOGIC.value)]
+
+
+def dimensions_of(fp: FunctionalPoint) -> list[str]:
+    """（兼容视图）某条功能点会展开出哪些行为维度。"""
+    return [category for category, _ in plan_of(fp)]
 
 
 def expand_functional_point(
@@ -148,10 +183,9 @@ def expand_functional_point(
     area = _area_of(fp)
     out: list[TestPoint] = []
     produced = 0
-    for category in dimensions_of(fp):
+    for category, dimension in plan_of(fp):
         if category not in ctx.scopes:
             continue
-        dimension = _dimension_of(category, fp)
         out.append(
             TestPoint(
                 tp_id=tp_id_of(
@@ -161,7 +195,7 @@ def expand_functional_point(
                     method=method,
                     dimension=dimension,
                     # 固定序号：与请求范围无关，保证「同一份代码，编号不变」
-                    ordinal=ordinal_base + _ordinal_of(category),
+                    ordinal=ordinal_base + _ordinal_of(category, dimension),
                 ),
                 fp_contract_id=fp.fp_id,
                 category=category,
@@ -171,7 +205,7 @@ def expand_functional_point(
                 source=fp.file_path,
                 method=method,
                 area=area,
-                expect=_expect_of(fp, category),
+                expect=_expect_of(fp, category, dimension),
                 dimension=dimension,
                 tag=tag or ctx.default_tag,
                 review_status=ctx.review_status,

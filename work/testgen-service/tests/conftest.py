@@ -71,6 +71,11 @@ def sample_repo(tmp_path):
         '    """创建账单。"""\n'
         "    return payload\n"
         "\n"
+        '\n@router.delete("/invoices/{invoice_id}")\n'
+        "def delete_invoice(invoice_id: str):\n"
+        '    """删除账单。"""\n'
+        "    return {}\n"
+        "\n"
         "\ndef calculate_total(items):\n"
         '    """计算账单总额。"""\n'
         "    return sum(items)\n",
@@ -91,6 +96,18 @@ def sample_repo(tmp_path):
         '      <Route path="/pc/chat" element={<PcChatPage />} />\n'
         '      <Route path="/pc/tasks" element={<PcTasksPage />} />\n'
         "    </Routes>\n"
+        "  )\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    # 交互组件（含交互钩子）→ 应有 UI 层「交互元素可用」测试点
+    (src / "web" / "SearchBar.tsx").write_text(
+        "export default function SearchBar({ onSearch }: { onSearch: (q: string) => void }) {\n"
+        "  return (\n"
+        "    <form onSubmit={(e) => { e.preventDefault(); onSearch('') }}>\n"
+        '      <input type="text" onChange={(e) => onSearch(e.target.value)} />\n'
+        '      <button type="submit">搜索</button>\n'
+        "    </form>\n"
         "  )\n"
         "}\n",
         encoding="utf-8",

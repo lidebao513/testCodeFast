@@ -101,9 +101,10 @@ def attach_evidence(tps: list[TestPoint], fps: list[FunctionalPoint]) -> None:
 def rule_enrich(tps: list[TestPoint], fps: list[FunctionalPoint]) -> list[TestPoint]:
     """规则增强：补证据；对**接口类**的「边界」测试点补一条「参数缺失」凑对用例。
 
-    只对 HTTP 接口凑对：页面路由/业务函数没有「路径参数校验」语义，
-    给它们补「缺少参数返回 400/422」会生成一批**无意义用例**（实测真实仓库上 60 条页面路由
-    各被补了一条此类用例），且这类用例在执行期必然无从判定。
+    只对**带路径参数的 HTTP 接口**凑对：
+    - 页面路由/业务函数没有「路径参数校验」语义，给它们补「缺少参数返回 400/422」
+      会生成一批**无意义用例**（实测真实仓库上 60 条页面路由各被补了一条）；
+    - 无路径参数的接口，其「参数缺失」已在基础「边界」用例的预期里覆盖，再补一条属重复。
     """
     attach_evidence(tps, fps)
     known = {f.fp_id for f in fps}
@@ -111,7 +112,7 @@ def rule_enrich(tps: list[TestPoint], fps: list[FunctionalPoint]) -> list[TestPo
     for tp in tps:
         if tp.category != TPType.BOUNDARY.value or tp.fp_contract_id not in known:
             continue
-        if not is_http_method(tp.method):
+        if not is_http_method(tp.method) or "{" not in tp.area:
             continue
         if "参数缺失" in tp.title:
             continue
