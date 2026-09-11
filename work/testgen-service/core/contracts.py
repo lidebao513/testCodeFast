@@ -92,6 +92,18 @@ def normalize_test_type(value: str | None) -> str:
     return _TEST_TYPE_ALIASES.get(value, Tag.FULL.value)
 
 
+def tp_id_variant(tp_id: str, variant: str) -> str:
+    """在同一测试点下派生「变体」编号，**保持 `TP-` + 8 位十六进制的格式不变**。
+
+    为什么需要：规则引擎会对边界测试点凑对出「参数缺失」变体。早期实现直接做字符串
+    拼接（`tp_id + "-M"`），产出 `TP-1a2b3c4d-M` —— 长度与格式都不符合契约，
+    任何按 `^TP-[0-9a-f]{8}$` 校验的消费方都会拒收（契约缺陷 D-10）。
+    """
+    key = f"{tp_id}|{variant}"
+    digest = hashlib.md5(key.encode("utf-8")).hexdigest()[:8]  # nosec B324  # 非安全用途：仅生成稳定 ID 指纹
+    return "TP-" + digest
+
+
 # ============================================================================
 # 三层产物
 # ============================================================================

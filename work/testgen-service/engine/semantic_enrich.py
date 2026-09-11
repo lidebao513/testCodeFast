@@ -22,8 +22,14 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
-from core.contracts import FunctionalPoint, TestPoint, tp_id_of, verify_layer_of_ftype
-from core.enums import TPType
+from core.contracts import (
+    FunctionalPoint,
+    TestPoint,
+    tp_id_of,
+    tp_id_variant,
+    verify_layer_of_ftype,
+)
+from core.enums import TPType, is_http_method
 from core.errors import LLMError
 from core.log import get_logger
 
@@ -93,18 +99,25 @@ def attach_evidence(tps: list[TestPoint], fps: list[FunctionalPoint]) -> None:
 
 
 def rule_enrich(tps: list[TestPoint], fps: list[FunctionalPoint]) -> list[TestPoint]:
-    """规则增强：补证据；对「边界」维度补一条参数缺失的凑对用例。"""
+    """规则增强：补证据；对**接口类**的「边界」测试点补一条「参数缺失」凑对用例。
+
+    只对 HTTP 接口凑对：页面路由/业务函数没有「路径参数校验」语义，
+    给它们补「缺少参数返回 400/422」会生成一批**无意义用例**（实测真实仓库上 60 条页面路由
+    各被补了一条此类用例），且这类用例在执行期必然无从判定。
+    """
     attach_evidence(tps, fps)
     known = {f.fp_id for f in fps}
     extra: list[TestPoint] = []
     for tp in tps:
         if tp.category != TPType.BOUNDARY.value or tp.fp_contract_id not in known:
             continue
+        if not is_http_method(tp.method):
+            continue
         if "参数缺失" in tp.title:
             continue
         extra.append(
             TestPoint(
-                tp_id=tp.tp_id + "-M",
+                tp_id=tp_id_variant(tp.tp_id, "missing-param"),
                 fp_contract_id=tp.fp_contract_id,
                 category=TPType.BOUNDARY.value,
                 module=tp.module,

@@ -1,11 +1,12 @@
 """编排测试：全量跑通、幂等对账、增量标签、产物落盘、防幻觉校验层。"""
 
 import json
+import re
 from pathlib import Path
 
 from core import store
 from core.contracts import FunctionalPoint
-from core.enums import FType, Tag, TPType
+from core.enums import FType, Tag, TPType, is_http_method
 from engine import pipeline, semantic_enrich
 from output.writer import OutputWriter
 
@@ -88,6 +89,29 @@ def test_evidence_attached_by_rule_engine(fresh_db, sample_repo):
     assert all(tp.evidence for tp in result.test_points), "每条测试点都应有证据引用"
     assert all(tp.origin == "rule" for tp in result.test_points)
     assert all(tp.confidence == 1.0 for tp in result.test_points)
+
+
+def test_all_ids_keep_contract_format(fresh_db, sample_repo):
+    """所有产出编号必须严格符合契约格式（含规则凑对产生的变体）。
+
+    回归要点：边界凑对曾用 `tp.tp_id + "-M"` 字符串拼接，产出 `TP-xxxxxxxx-M`，
+    长度与格式都不符契约（D-10），任何按 `^TP-[0-9a-f]{8}$` 校验的下游都会整体拒收。
+    """
+    result = _run(sample_repo, scopes={TPType.NORMAL.value, TPType.BOUNDARY.value})
+    fp_re = re.compile(r"^FP-[0-9a-f]{8}$")
+    tp_re = re.compile(r"^TP-[0-9a-f]{8}$")
+    assert result.functional_points
+    assert result.test_points
+    assert [fp.fp_id for fp in result.functional_points if not fp_re.match(fp.fp_id)] == []
+    assert [tp.tp_id for tp in result.test_points if not tp_re.match(tp.tp_id)] == []
+
+
+def test_boundary_pair_only_for_http_interfaces(fresh_db, sample_repo):
+    """边界凑对只对接口类生效——页面路由没有「路径参数缺失」语义。"""
+    result = _run(sample_repo, scopes={TPType.NORMAL.value, TPType.BOUNDARY.value})
+    paired = [tp for tp in result.test_points if "参数缺失" in tp.title]
+    assert paired, "接口边界测试点应凑对出「参数缺失」用例"
+    assert all(is_http_method(tp.method) for tp in paired), "非 HTTP 来源不得凑对"
 
 
 def test_outputs_written(fresh_db, sample_repo):

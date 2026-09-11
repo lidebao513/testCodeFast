@@ -13,8 +13,14 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from core.contracts import CaseSpec, TestPoint, precondition_of, priority_of
-from core.enums import HTTP_METHODS, FType, MethodMarker, TPType
+from core.contracts import (
+    CaseSpec,
+    TestPoint,
+    precondition_of,
+    priority_of,
+    verify_layer_of_ftype,
+)
+from core.enums import HTTP_METHODS, FType, MethodMarker, TPType, VerifyLayer
 
 
 _KIND_BY_MARKER = {
@@ -74,14 +80,24 @@ def build_case(tp: Any, fp_row_id: int | None = None) -> CaseSpec:
     fp_contract_id = str(_get(tp, "fp_contract_id"))
     expect = str(_get(tp, "expect"))
     title_text = str(_get(tp, "title")) or tp_id
+    # 测试点标题通常已自带 `[维度]` 前缀，此处只在缺失时补，避免出现 `[安全] [安全] …`
+    prefix = f"[{category}]"
+    title = title_text if title_text.startswith(prefix) else f"{prefix} {title_text}"
 
     is_api, kind = _method_kind(method)
     ctype = FType.API.value if is_api else "e2e"
     precondition = precondition_of(category)
 
+    # 执行层（接口 / UI）以测试点自带的 verify_layer 为准；缺失时按 method 标记回退推导。
+    # 不能再用「是否 HTTP 动词」当判据：后端业务函数（method=FUNC）不是 HTTP 接口，
+    # 但它属于**接口层**，早期实现会把它派成 ui_probe → 执行器去拉浏览器打开一个函数。
+    layer = str(_get(tp, "verify_layer")) or verify_layer_of_ftype(kind or FType.API.value)
+    is_ui_layer = layer == VerifyLayer.UI.value
+
     steps = [
         {
-            "action": "http_probe" if is_api else "ui_probe",
+            "action": "ui_probe" if is_ui_layer else "http_probe",
+            "layer": layer,  # 契约「只增不破」：新增可选字段，供下游按执行层分组
             "kind": kind,
             "tp_id": tp_id,
             "fp_id": fp_contract_id,
@@ -97,7 +113,7 @@ def build_case(tp: Any, fp_row_id: int | None = None) -> CaseSpec:
 
     return CaseSpec(
         tc_no=tp_id,
-        title=f"[{category}] {title_text}",
+        title=title,
         ctype=ctype,
         steps=steps,
         module=str(_get(tp, "module")),

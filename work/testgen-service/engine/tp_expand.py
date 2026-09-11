@@ -42,6 +42,23 @@ _SEMANTIC_ACTION: dict[str, str] = {
     TPType.BOUNDARY.value: "验证参数边界与非法输入",
 }
 
+# 维度规范顺序（与 enums.TPType 声明顺序一致）。
+# 用途：生成 tp_id 的 ordinal 时取**规范顺序里的固定位置**，而不是循环下标。
+# 为什么必须这样：循环下标是**过滤后**的序号，用户这次只要「正常+异常」、
+# 下次加上「安全」，同一条『异常』测试点的序号就会从 1 变 2 → tp_id 漂移 →
+# 旧用例被判 obsolete、新建一条，人工审核结论与执行历史全部断链（契约缺陷 D-9）。
+_CANONICAL_ORDER: tuple[str, ...] = (
+    TPType.NORMAL.value,
+    TPType.ABNORMAL.value,
+    TPType.SECURITY.value,
+    TPType.BOUNDARY.value,
+)
+
+
+def _ordinal_of(category: str) -> int:
+    """维度在规范顺序中的固定位置（与请求范围无关，保证 tp_id 稳定）。"""
+    return _CANONICAL_ORDER.index(category) if category in _CANONICAL_ORDER else 0
+
 
 @dataclass
 class ExpandContext:
@@ -130,7 +147,7 @@ def expand_functional_point(
     method = _tp_method(fp)
     area = _area_of(fp)
     out: list[TestPoint] = []
-    idx = 0
+    produced = 0
     for category in dimensions_of(fp):
         if category not in ctx.scopes:
             continue
@@ -143,7 +160,8 @@ def expand_functional_point(
                     area=area,
                     method=method,
                     dimension=dimension,
-                    ordinal=ordinal_base + idx,
+                    # 固定序号：与请求范围无关，保证「同一份代码，编号不变」
+                    ordinal=ordinal_base + _ordinal_of(category),
                 ),
                 fp_contract_id=fp.fp_id,
                 category=category,
@@ -160,8 +178,8 @@ def expand_functional_point(
                 verify_layer=verify_layer_of_ftype(fp.ftype),
             )
         )
-        idx += 1
-        if idx >= ctx.max_per_fp:
+        produced += 1
+        if produced >= ctx.max_per_fp:
             break
     return out
 

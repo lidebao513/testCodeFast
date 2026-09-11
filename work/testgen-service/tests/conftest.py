@@ -79,6 +79,22 @@ def sample_repo(tmp_path):
     (src / "routes.js").write_text(
         "export default [{ path: '/dashboard', name: 'Dashboard' }]\n", encoding="utf-8"
     )
+    # React 页面层（JSX `<Route path="...">`）：用于守护「前端文件必须被扫描到」这条底线。
+    # 曾因扫描器扩展名白名单缺 .tsx，真实仓库上 147 个 .tsx 整层不可见 → UI 层功能点恒为 0。
+    (src / "web").mkdir()
+    (src / "web" / "App.tsx").write_text(
+        "import { Route, Routes } from 'react-router'\n"
+        "\n"
+        "export default function App() {\n"
+        "  return (\n"
+        "    <Routes>\n"
+        '      <Route path="/pc/chat" element={<PcChatPage />} />\n'
+        '      <Route path="/pc/tasks" element={<PcTasksPage />} />\n'
+        "    </Routes>\n"
+        "  )\n"
+        "}\n",
+        encoding="utf-8",
+    )
     return src
 
 

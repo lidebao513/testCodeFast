@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 
 from core.contracts import FunctionalPoint, fp_id_of
 from core.enums import FType
-from engine.scan import SourceFile
+from engine.scan import FRONTEND_EXTS, SourceFile
 
 
 # FastAPI / Flask 风格的路由装饰器名
@@ -278,7 +278,7 @@ def _extract_api_and_business(sf: SourceFile, tree: ast.Module) -> list[Function
 
 
 def _extract_pages(sf: SourceFile) -> list[FunctionalPoint]:
-    """前端路由提取（基于 path 声明；仅对含 frontend 语义的文件启用）。"""
+    """前端路由提取（基于 path 声明，识别 `path: '/x'` 与 JSX `path="/x"`）。"""
     if sf.is_noise:
         return []
     out: list[FunctionalPoint] = []
@@ -327,7 +327,7 @@ def extract_functional_points(
                 if not include_business:
                     fns = [f for f in fns if f.ftype == FType.API.value]
                 result.functional_points.extend(fns)
-            elif extract_pages and sf.ext in (".js", ".ts", ".vue", ".jsx", ".tsx"):
+            elif extract_pages and sf.ext in FRONTEND_EXTS:
                 result.functional_points.extend(_extract_pages(sf))
         except (SyntaxError, ValueError, AttributeError) as exc:
             result.errors.append(f"{rel}: {type(exc).__name__}: {exc}")

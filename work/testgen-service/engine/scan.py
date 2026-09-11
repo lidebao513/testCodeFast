@@ -37,6 +37,13 @@ DEFAULT_EXCLUDE_DIRS: frozenset[str] = frozenset(
 NOISE_FILE_PREFIXES: tuple[str, ...] = ("test_", "conftest", "selftest_", "verify_")
 NOISE_DIR_PARTS: tuple[str, ...] = ("tests", "test", "docs", "examples", "migrations")
 
+# ---------------------------------------------------------------- 扩展名（单一真值）
+# 前端类扩展名：**扫描器与 fp_extract 必须共用同一份**，否则会出现
+# 「文件没被扫到 → 前端功能点恒为 0」的静默丢层（真实仓库上曾丢掉 147 个 .tsx）。
+FRONTEND_EXTS: tuple[str, ...] = (".js", ".ts", ".tsx", ".jsx", ".vue")
+# 全量扫描扩展名
+SOURCE_EXTS: tuple[str, ...] = (".py", *FRONTEND_EXTS, ".html")
+
 
 @dataclass
 class SourceFile:
@@ -86,7 +93,7 @@ class Scanner:
         self,
         root: str | Path,
         *,
-        exts: tuple[str, ...] = (".py", ".js", ".ts", ".vue", ".html"),
+        exts: tuple[str, ...] = SOURCE_EXTS,
         exclude_dirs: frozenset[str] = DEFAULT_EXCLUDE_DIRS,
         max_bytes: int = 2_000_000,
     ) -> None:
