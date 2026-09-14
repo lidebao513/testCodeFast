@@ -131,6 +131,7 @@ class Settings:
     # 凭证：只从环境变量读取，绝不入库/入日志/入产物（见模块 docstring 红线）
     runtime_login_user: str = ""
     runtime_login_password: str = ""
+    runtime_login_otp: str = ""  # 动态口令 / 一次性验证码（不入库 / 不入日志）
     runtime_auth_token: str = ""  # 值取自 runtime_auth_token_env 指向的环境变量
     runtime_auth_token_env: str = "RUNTIME_AUTH_TOKEN"  # 令牌来源环境变量名（不入库）
     executor_enabled: bool = False  # P3：用例执行器（接口探活 / 浏览器交互）
@@ -177,6 +178,7 @@ class Settings:
             "runtime_login_configured": bool(
                 self.runtime_login_user and self.runtime_login_password
             ),
+            "runtime_otp_configured": bool(self.runtime_login_otp),
             "runtime_token_configured": bool(self.runtime_auth_token),
         }
 
@@ -258,6 +260,7 @@ def load_settings(env: dict[str, str] | None = None) -> Settings:
         runtime_max_pages=_as_int(g("RUNTIME_MAX_PAGES"), 60, "RUNTIME_MAX_PAGES"),
         runtime_login_user=(g("RUNTIME_LOGIN_USER") or "").strip(),
         runtime_login_password=g("RUNTIME_LOGIN_PASSWORD") or "",
+        runtime_login_otp=g("RUNTIME_LOGIN_OTP") or "",
         runtime_auth_token=g(token_env_name) or "",
         runtime_auth_token_env=token_env_name,
         executor_enabled=_as_bool(g("EXECUTOR_ENABLED"), False),

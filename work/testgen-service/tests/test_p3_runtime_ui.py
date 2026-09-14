@@ -20,6 +20,8 @@ from urllib.parse import urlparse
 import pytest
 
 from core.config import load_settings
+from core.contracts import FunctionalPoint
+from core.enums import Dimension, FType
 from core.errors import ConfigError, EngineError
 from engine import runtime_ui
 from engine.runtime_ui import (
@@ -30,6 +32,7 @@ from engine.runtime_ui import (
 
 
 _SECRET_PASSWORD = "S3cret-PW-xyz"
+_OTP_CODE = "123456"  # 测试用假动态口令（真实口令绝不入库）
 
 
 # ============================================================================
@@ -558,3 +561,369 @@ def test_repo_has_no_plaintext_password_in_tracked_files() -> None:
         if "venv" in path.parts:
             continue
         assert needle not in path.read_text(encoding="utf-8", errors="ignore")
+
+
+# ============================================================================
+# M3.3 三字段登录（账号 / 密码 / 动态口令）
+# ============================================================================
+class _StubOtpLoginPage(_StubLoginPage):
+    """登录页带动态口令框（福享 Agent 形态：账号 + 密码 + 动态口令（6 位））。"""
+
+    def __init__(self, **kw: object) -> None:
+        super().__init__(**kw)  # type: ignore[arg-type]
+        self.otp = _StubElement()
+
+    def query_selector(self, selector: str) -> _StubElement | None:
+        if selector in runtime_ui._OTP_SELECTORS:
+            return self.otp if "otp" in self.present else None
+        return super().query_selector(selector)
+
+
+def test_login_fills_three_fields_including_otp() -> None:
+    result = runtime_ui.RuntimeUiResult(base_url="http://srv")
+    page = _StubOtpLoginPage(present=("user", "pwd", "otp", "submit"))
+    opts = _opts(login_password=_SECRET_PASSWORD, login_otp=_OTP_CODE)
+    assert runtime_ui._login(page, opts, result) is True
+    assert page.user.value == "u"
+    assert page.pwd.value == _SECRET_PASSWORD
+    assert page.otp.value == _OTP_CODE
+    assert page.submit.clicks == 1
+    joined = " ".join(result.notes)
+    assert _OTP_CODE not in joined  # 红线：动态口令不回显
+    assert _SECRET_PASSWORD not in joined
+
+
+def test_login_leaves_otp_empty_when_not_configured() -> None:
+    result = runtime_ui.RuntimeUiResult(base_url="http://srv")
+    page = _StubOtpLoginPage(present=("user", "pwd", "otp", "submit"))
+    runtime_ui._login(page, _opts(login_password=_SECRET_PASSWORD), result)
+    assert page.otp.value is None
+
+
+def test_fill_otp_if_present_returns_false_without_field() -> None:
+    page = _StubOtpLoginPage(present=("user", "pwd", "submit"))
+    assert runtime_ui._fill_otp_if_present(page, _opts(login_otp=_OTP_CODE)) is False
+
+
+def test_login_second_step_otp_submits_again() -> None:
+    """两屏登录：首屏无口令框，首屏提交后才出现 → 触发二次提交。"""
+
+    class _TwoStepPage(_StubLoginPage):
+        def __init__(self) -> None:
+            super().__init__(present=("user", "pwd", "submit"))
+            self.otp = _StubElement()
+
+        def query_selector(self, selector: str) -> _StubElement | None:
+            if selector in runtime_ui._OTP_SELECTORS:
+                return self.otp if self.submitted else None
+            if selector in _PASSWORD_SELECTORS:
+                if not self.submitted:
+                    return self.pwd
+                # 第二次提交后才离开登录页（否则触发二次提交）
+                return None if self.submit.clicks >= 2 else self.pwd
+            return super().query_selector(selector)
+
+    result = runtime_ui.RuntimeUiResult(base_url="http://srv")
+    page = _TwoStepPage()
+    opts = _opts(login_password=_SECRET_PASSWORD, login_otp=_OTP_CODE)
+    assert runtime_ui._login(page, opts, result) is True
+    assert page.otp.value == _OTP_CODE
+    assert page.submit.clicks == 2
+    assert any("二次验证" in n for n in result.notes)
+
+
+def test_login_waits_for_late_rendered_spa_form() -> None:
+    """实测回归：SPA 首屏是客户端异步渲染。
+
+    `page.goto(..., domcontentloaded)` 返回时 React 往往**还没渲染出登录表单**；
+    若此时就去查控件，会把登录页误判成「公开页」而跳过登录（实测目标站即如此）。
+    本条锁死「先等表单就绪，再判定有无密码框」。
+    """
+
+    class _LateFormPage(_StubLoginPage):
+        def __init__(self) -> None:
+            super().__init__(present=("user", "pwd", "submit"))
+            self.ready = False
+
+        def wait_for_selector(self, selector: str, timeout: int | None = None) -> object:
+            self.ready = True
+            return object()
+
+        def query_selector(self, selector: str) -> _StubElement | None:
+            if not self.ready:  # 渲染完成前任何控件都查不到
+                return None
+            return super().query_selector(selector)
+
+    result = runtime_ui.RuntimeUiResult(base_url="http://srv")
+    page = _LateFormPage()
+    assert runtime_ui._login(page, _opts(login_password=_SECRET_PASSWORD), result) is True
+    assert any("表单登录成功" in n for n in result.notes)
+
+
+def test_password_selector_covers_spa_text_masked_forms() -> None:
+    """SPA 常把密码框做成 type=text + 遮罩，placeholder 兜底不可退化。"""
+    assert any("placeholder" in s and "密码" in s for s in _PASSWORD_SELECTORS)
+
+
+# ============================================================================
+# M3.3 路由来源（新增「菜单点击发现」档）与 SPA 菜单点击发现
+# ============================================================================
+def test_resolve_routes_menu_outranks_static() -> None:
+    opts = _opts(routes=["/explicit"], max_pages=10)
+    got = runtime_ui._resolve_routes(opts, ["/static"], ["/home"], ["/menu", "/static"])
+    assert got == ["/explicit", "/menu", "/static", "/home"]
+
+
+class _StubNavHandle:
+    """模拟一个导航项：可自带 href、也可让点击「无效」（复现 SPA 占位 href）。"""
+
+    def __init__(
+        self,
+        page: _StubMenuPage,
+        target: str,
+        href: str | None = None,
+        click_noop: bool = False,
+    ) -> None:
+        self._page = page
+        self._target = target
+        self._href = href
+        self._click_noop = click_noop
+
+    def is_visible(self) -> bool:
+        return True
+
+    def get_attribute(self, name: str) -> str | None:
+        return self._href if name == "href" else None
+
+    def click(self, timeout: int | None = None, no_wait_after: bool = False) -> None:
+        if not self._click_noop:
+            self._page.url = "http://srv" + self._target
+
+
+class _StubMenuPage:
+    """模拟「点菜单即跳路由」的 SPA 页（整站无 `<a href>`）。
+
+    `_rendered` 复刻真实 SPA 行为：`goto(domcontentloaded)` 返回时导航**尚未挂载**，
+    只有 `wait_for_selector` 被调用后才「出现」——漏掉这一步会让菜单发现静默 0 条。
+    `click_noop=True` 模拟「href 是占位符且点击不改变 URL」的退化场景。
+    """
+
+    def __init__(
+        self,
+        targets: list[str],
+        start: str = "http://srv/",
+        *,
+        hrefs: dict[str, str] | None = None,
+        click_noop: bool = False,
+    ) -> None:
+        self.url = start
+        self._targets = targets
+        self._hrefs = hrefs or {}
+        self._click_noop = click_noop
+        self.goto_calls: list[str] = []
+        self._rendered = True  # 初始视为已渲染（调用方通常已抓过落地页）
+
+    def goto(self, url: str, wait_until: str | None = None, timeout: int | None = None) -> None:
+        self.goto_calls.append(url)
+        self.url = url
+        self._rendered = False  # 重新打开＝需要重新等渲染
+
+    def wait_for_selector(self, selector: str, timeout: int | None = None) -> object:
+        self._rendered = True
+        return object()
+
+    def eval_on_selector_all(self, selector: str, script: str) -> list[str]:
+        # 该桩同时服务「取导航文本清单」：未渲染＝返回空表
+        return list(self._targets) if self._rendered else []
+
+    def query_selector_all(self, selector: str) -> list[_StubNavHandle]:
+        if not self._rendered:
+            return []  # 未渲染＝抓不到任何导航项（复现真实环境的 0 路由缺陷）
+        return [
+            _StubNavHandle(self, t, self._hrefs.get(t), self._click_noop) for t in self._targets
+        ]
+
+    def wait_for_function(
+        self, script: str, arg: object | None = None, timeout: int | None = None
+    ) -> None:
+        return None
+
+    def wait_for_timeout(self, ms: int) -> None:
+        return None
+
+
+class _StubMenuContext:
+    """最小浏览器上下文桩：仅支持 `page` 监听（新标签页路由兜底）。"""
+
+    def __init__(self) -> None:
+        self.listeners: dict[str, object] = {}
+
+    def on(self, event: str, handler: object) -> None:
+        self.listeners[event] = handler
+
+    def remove_listener(self, event: str, handler: object) -> None:
+        self.listeners.pop(event, None)
+
+
+def test_discover_menu_routes_collects_changed_paths() -> None:
+    result = runtime_ui.RuntimeUiResult(base_url="http://srv")
+    page = _StubMenuPage(["/a", "/b", "/a"])  # 第三条与首条重复 → 只记一次
+    got = runtime_ui._discover_menu_routes(page, _StubMenuContext(), _opts(max_pages=10), result)
+    assert got == ["/a", "/b"]
+    assert result.notes and "菜单点击发现路由 2 条" in result.notes[0]
+    assert page.goto_calls[-1] == "http://srv/"  # 收尾回起点
+
+
+def test_discover_menu_routes_requires_render_wait() -> None:
+    """锁死 SPA 渲染竞态——真实环境「菜单发现路由 0 条」的根因之一。
+
+    `goto(domcontentloaded)` 返回时菜单还没挂载；不等渲染就 `query_selector_all`
+    只会拿到空表并静默放弃。
+    """
+
+    class _NeverRendered(_StubMenuPage):
+        def wait_for_selector(self, selector: str, timeout: int | None = None) -> object:
+            return object()  # 假装等到了，实际仍不渲染
+
+    result = runtime_ui.RuntimeUiResult(base_url="http://srv")
+    ok_page = _StubMenuPage(["/a"])
+    assert runtime_ui._discover_menu_routes(ok_page, _StubMenuContext(), _opts(), result) == ["/a"]
+
+    stale = _NeverRendered(["/a"])
+    stale._rendered = False
+    assert runtime_ui._discover_menu_routes(stale, _StubMenuContext(), _opts(), result) == []
+
+
+def test_discover_menu_routes_clicks_even_when_href_is_placeholder() -> None:
+    """真实环境根因之二：SPA 的菜单 `href` 常是占位值（或全部指向首页）。
+
+    若实现「优先读 href」，这些项会被判成「与起点同路由」而全部丢弃 → 静默 0 条。
+    本条锁死「点击优先」：只要点击能跳转，就必须发现路由。
+    """
+    result = runtime_ui.RuntimeUiResult(base_url="http://srv")
+    page = _StubMenuPage(["/a", "/b"], hrefs={"/a": "/", "/b": "/"})  # href 全是首页占位
+    got = runtime_ui._discover_menu_routes(page, _StubMenuContext(), _opts(), result)
+    assert got == ["/a", "/b"]
+
+
+def test_discover_menu_routes_falls_back_to_href_when_click_is_noop() -> None:
+    """点击不改变 URL 时（如整页刷新被拦截），退回用 href 取路由。"""
+    result = runtime_ui.RuntimeUiResult(base_url="http://srv")
+    page = _StubMenuPage(["/a"], hrefs={"/a": "/a"}, click_noop=True)
+    got = runtime_ui._discover_menu_routes(page, _StubMenuContext(), _opts(), result)
+    assert got == ["/a"]
+
+
+def test_discover_menu_routes_can_be_disabled() -> None:
+    result = runtime_ui.RuntimeUiResult(base_url="http://srv")
+    page = _StubMenuPage(["/a"])
+    got = runtime_ui._discover_menu_routes(
+        page, _StubMenuContext(), _opts(discover_by_menu=False), result
+    )
+    assert got == []
+
+
+def test_normalize_route_rejects_static_assets() -> None:
+    """下载 / 前端产物不是页面——真实环境首页「下载客户端」链接曾被当成假页面。"""
+    base = "http://srv/"
+    assert runtime_ui._normalize_route("/downloads/app-win.zip", base) is None
+    assert runtime_ui._normalize_route("/assets/logo.png", base) is None
+    assert runtime_ui._normalize_route("/doc/guide.pdf", base) is None
+    assert runtime_ui._normalize_route("/pc/tasks", base) == "/pc/tasks"
+
+
+# ============================================================================
+# M3.4 运行时发现 → 功能点（to_functional_points）与合并去重
+# ============================================================================
+def _ui_pages() -> list[runtime_ui.UiPage]:
+    return [
+        runtime_ui.UiPage(
+            url="http://srv/pc/tasks",
+            path="/pc/tasks",
+            title="任务列表",
+            elements=[runtime_ui.UiElement(selector="#q", kind="input", text="查询", visible=True)],
+        ),
+        runtime_ui.UiPage(
+            url="http://srv/blank",
+            path="/blank",
+            title="空页",
+            elements=[
+                runtime_ui.UiElement(selector="#h", kind="button", text="隐藏", visible=False)
+            ],
+        ),
+        runtime_ui.UiPage(url="http://srv/dead", path="/dead", reachable=False),
+    ]
+
+
+def test_to_functional_points_emits_page_and_component() -> None:
+    result = runtime_ui.RuntimeUiResult(base_url="http://srv", pages=_ui_pages())
+    fps = runtime_ui.to_functional_points(result)
+    keys = {(fp.ftype, fp.name) for fp in fps}
+    assert (FType.PAGE.value, "/pc/tasks") in keys
+    assert (FType.COMPONENT.value, "/pc/tasks") in keys
+    # 无「可见」元素的页面只产 page，不产 component
+    assert (FType.PAGE.value, "/blank") in keys
+    assert (FType.COMPONENT.value, "/blank") not in keys
+    # 不可达页不产功能点
+    assert not any(fp.name == "/dead" for fp in fps)
+    page_fp = next(fp for fp in fps if fp.ftype == FType.PAGE.value and fp.name == "/pc/tasks")
+    assert page_fp.module == "pc"
+    assert page_fp.file_path == "runtime:http://srv/pc/tasks"
+    assert page_fp.fp_id.startswith("FP-")
+
+
+def test_to_functional_points_ids_are_stable_and_unique() -> None:
+    result = runtime_ui.RuntimeUiResult(base_url="http://srv", pages=_ui_pages())
+    first = [fp.fp_id for fp in runtime_ui.to_functional_points(result)]
+    second = [fp.fp_id for fp in runtime_ui.to_functional_points(result)]
+    assert first == second
+    assert len(first) == len(set(first))
+
+
+def test_to_functional_points_feed_existing_expansion_rules() -> None:
+    """运行时 FP 必须能被既有展开规则直接消费（不新造维度）。"""
+    from engine import tp_expand
+
+    result = runtime_ui.RuntimeUiResult(base_url="http://srv", pages=_ui_pages())
+    dims: dict[str, set[str]] = {}
+    for fp in runtime_ui.to_functional_points(result):
+        dims.setdefault(fp.ftype, set()).update(d for _, d in tp_expand.plan_of(fp))
+    assert Dimension.PAGE_REACH.value in dims[FType.PAGE.value]
+    assert Dimension.INTERACTIVE.value in dims[FType.COMPONENT.value]
+
+
+def test_merge_runtime_fps_runtime_wins_on_same_key() -> None:
+    from engine.pipeline import _merge_runtime_fps
+
+    static = [
+        FunctionalPoint(
+            fp_id="FP-s1", ftype="page", file_path="src/a.tsx", name="/pc/tasks", title="静态"
+        ),
+        FunctionalPoint(
+            fp_id="FP-s2", ftype="api", file_path="src/api.py", name="GET /x", title="接口"
+        ),
+    ]
+    runtime = [
+        FunctionalPoint(
+            fp_id="FP-r1",
+            ftype="page",
+            file_path="runtime:http://srv/pc/tasks",
+            name="/pc/tasks",
+            title="运行时",
+        ),
+        FunctionalPoint(
+            fp_id="FP-r2",
+            ftype="page",
+            file_path="runtime:http://srv/new",
+            name="/new",
+            title="新页",
+        ),
+    ]
+    merged, stats = _merge_runtime_fps(static, runtime)
+    keys = [(fp.ftype, fp.name) for fp in merged]
+    assert stats == {"added": 1, "replaced": 1}
+    assert len(merged) == 3
+    assert keys.count(("page", "/pc/tasks")) == 1
+    assert next(fp for fp in merged if fp.name == "/pc/tasks").title == "运行时"  # 运行时优先
+    assert ("api", "GET /x") in keys  # 仅静态有的保留
+    assert ("page", "/new") in keys  # 仅运行时有的追加

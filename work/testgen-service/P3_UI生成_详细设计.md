@@ -1,6 +1,6 @@
 # P3 详细设计 · 用「测试地址 + 账号密码」经 UI 层生成测试用例
 
-> 状态：**M3.1–M3.2 已实现并验证**；M3.3（受保护页端到端验收）、M3.4（并入主链路）、M3.5（降级）待做。
+> 状态：**M3.1–M3.4 已实现并真实验证**；仅 M3.5（requests 降级）待做。
 > 关联：`P1-P3实现方案.md` §3（P3 运行时 UI 发现）、`engine/runtime_ui.py`（真实实现，见 §12 里程碑状态）。
 > 设计基线：沿用既有「UI 优先」机制（`LAYER_STRATEGY=ui_first` + 用例 `coverage_role` 字段），
 > 运行时发现的 UI 功能点与静态提取的功能点**汇入同一条主链路**，按名称去重、按 UI 优先排序。
@@ -13,15 +13,25 @@
 |---|---|---|
 | **M3.1** 配置与凭证模型 + 惰性导入探测 | ✅ 已实现 | `core/config.py` 新增 9 个 P3 配置项；`public_dict` 凭证只输出 `*_configured` 布尔；`_has_playwright()` 探测；`options_from_settings()` 映射 |
 | **M3.2** `_login` + `_collect_page` + 路由优先级 | ✅ 已实现 | `engine/runtime_ui.py` 真实实现（登录/抓页/路由/控制台错误）；`tools/run_runtime_ui.py` 可执行入口 |
-| **M3.3** 表单登录通路 + 受保护页发现 | 🟡 代码就绪、fixture 已验证 | `_login` 已实现；本地 fixture（登录页 + 受保护页）端到端通过；真实环境人工抽检待做 |
-| **M3.4** `_to_functional_points` + pipeline 合并去重 | ⬜ 未做 | pipeline 已接线（`stage_runtime_ui` 真实调用），但发现结果**尚未并入功能点集合** |
-| **M3.5** requests 降级 + 文档/技能同步 | ⬜ 未做 | `RuntimeUiOptions.degraded` 为占位字段 |
+| **M3.3** 三字段登录 + SPA 菜单点击路由发现 + 受保护页遍历 | ✅ 已实现并**真实验证** | `_login` 支持「账号 + 密码 + 动态口令」及两屏二次验证；`_probe_menu_routes` **单会话**逐项点击发现 SPA 路由（按「文本 → 索引」重定位）。真实环境 `47.97.154.50:8090` 实测：**15 条登录后路由 / 16 个可达页面 / 659 个元素 / 0 控制台错误** |
+| **M3.4** `to_functional_points` + pipeline 合并去重 | ✅ 已实现并**真实验证** | `runtime_ui.to_functional_points` 产出 UI 功能点（page + component）；`pipeline._merge_runtime_fps` 按 `(ftype, name)` 与静态功能点合并去重（**运行时优先**），并在 `stage_tag` **之前**并入 `functional_points` → 参与测试点展开与用例生成 |
+| **M3.5** requests 降级 + 文档/技能同步 | ⬜ 未做 | `RuntimeUiOptions.degraded` 为占位字段；未装 Playwright 时当前为「给出安装指引并跳过」 |
 
 **已落地的事实（可直接引用）**：
 - 依赖：`playwright` 走 `[project.optional-dependencies].runtime`，主链路默认不装，代码内惰性导入；
 - 凭证红线已用测试锁死：`test_public_dict_hides_password_and_token`、`test_repo_has_no_plaintext_password_in_tracked_files`；
 - 路由同源过滤 / 去重 / 上限、登录失败分类、控制台错误切片均有单测；
 - 真浏览器端到端用本地 `http.server` 迷你站点验证（登录页 → 受保护页），无需外部环境。
+
+**⚠️ SPA 实战三条血泪教训（真实环境实测，每条都会让「菜单发现路由」静默变成 0 条）**：
+
+| # | 现象 | 根因 | 正确做法 |
+|---|---|---|---|
+| 1 | 菜单点击发现路由 **0 条** | 旧的「每项 `goto` 重开页面再抓句柄」——`domcontentloaded` 返回时 React 还没挂载菜单，句柄为空直接 break | **单会话**逐项点击；菜单在 SPA 外壳里跨路由常驻，按「文本 → 索引」重定位即可 |
+| 2 | 同上，且耗时异常 | 等导航挂载的预算给太紧（8s），而首批菜单**要等后端接口返回**才渲染 | 预算放宽（现 12s）；「等不到」与「本页确实没有导航」要能区分 |
+| 3 | 有 href 却抓不到路由 | 误以为 `href` 就是路由——SPA 里它可能是占位值或全部同值 | **点击优先**取路由，`href` 仅作兜底；点击无效时才回退读 `href` |
+
+> 另外：首页「下载客户端」链接（`/downloads/xxx-win.zip`）会被 `nav a` 命中，且被 SPA 兜底路由渲染成与首页同构的**假页面**——已按静态资源扩展名过滤（`_looks_like_asset`）。
 
 ---
 

@@ -321,11 +321,41 @@ def stage_runtime_ui(
     )
     result.runtime_ui = found
     result.notes.extend(f"运行时 UI：{n}" for n in found.notes)
-    result.notes.append("运行时 UI 功能点尚未并入主链路（待 M3.4 合并去重）")
     result.counts["runtime_ui_pages"] = len(found.pages)
     result.counts["runtime_ui_reachable"] = sum(1 for p in found.pages if p.reachable)
     result.counts["runtime_ui_elements"] = len(found.elements)
+    result.counts["runtime_ui_routes"] = len(found.discovered_routes)
     return found
+
+
+def _merge_runtime_fps(
+    static_fps: list[FunctionalPoint], runtime_fps: list[FunctionalPoint]
+) -> tuple[list[FunctionalPoint], dict[str, int]]:
+    """把运行时发现的 UI 功能点并入静态功能点集合（M3.4）。
+
+    去重键 = `(ftype, name)` **而非** `fp_id`：静态与运行时的 `file_path` 不同
+    （静态是真实源码路径，运行时是 `runtime:<url>`），`fp_id` 必然不同，
+    但语义上是同一个 UI 面（如同一路径 `/pc/tasks`）——只有按 (ftype, name) 才能正确判重。
+    冲突时**运行时优先**（运行时是线上真实可达面，静态可能过时）。
+    返回 (合并后的集合, 统计)。
+    """
+    stats = {"added": 0, "replaced": 0}
+    index: dict[tuple[str, str], int] = {}
+    merged: list[FunctionalPoint] = []
+    for fp in static_fps:
+        index[(fp.ftype, fp.name)] = len(merged)
+        merged.append(fp)
+    for fp in runtime_fps:
+        key = (fp.ftype, fp.name)
+        pos = index.get(key)
+        if pos is None:
+            index[key] = len(merged)
+            merged.append(fp)
+            stats["added"] += 1
+        else:
+            merged[pos] = fp
+            stats["replaced"] += 1
+    return merged, stats
 
 
 def stage_execute(
@@ -439,11 +469,25 @@ def run_pipeline(
     files = stage_scan(opts, result, progress)
     result.functional_points = stage_extract(opts, result, files, progress)
     # P3：运行时 UI 发现（默认关闭）。失败只记错误、不阻断主链路（设计 §10）。
+    # M3.4：发现成功后把 UI 功能点**并入静态功能点集合**——必须在 stage_tag 之前，
+    # 否则运行时补入的页面不参与测试点展开与用例生成。
     if s.runtime_ui_enabled:
         try:
-            stage_runtime_ui(opts, result, progress)
+            found = stage_runtime_ui(opts, result, progress)
         except EngineError as exc:
+            found = None
             result.errors.append(f"运行时 UI 发现失败：{exc.message}")
+        if found is not None:
+            merged, stats = _merge_runtime_fps(
+                result.functional_points, runtime_ui.to_functional_points(found)
+            )
+            result.functional_points = merged
+            result.counts["functional_points"] = len(merged)
+            result.counts["runtime_ui_fp_added"] = stats["added"]
+            result.counts["runtime_ui_fp_replaced"] = stats["replaced"]
+            result.notes.append(
+                f"运行时补入 {stats['added']} 条 UI 功能点（覆盖静态同名 {stats['replaced']} 条）"
+            )
     _, tag_by_fp = stage_tag(opts, result, result.functional_points, progress)
     tps = stage_test_points(opts, result, result.functional_points, tag_by_fp, progress)
     result.test_points = stage_enrich(opts, result, tps, result.functional_points, progress)

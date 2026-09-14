@@ -7,8 +7,9 @@
         venv/Scripts/python.exe tools/run_runtime_ui.py --pretty
 
 参数可覆盖环境变量（仅限本机临时调试；会出现在命令历史里）：
-    --url / --login-url / --user / --password / --route（可重复）/ --max-pages
-    --headful（有头模式，便于肉眼观察） / --no-login（强制匿名） / --out <文件>
+    --url / --login-url / --user / --password / --otp / --route（可重复）/ --max-pages
+    --headful（有头模式，便于肉眼观察） / --no-menu（关闭菜单点击路由发现）
+    / --no-login（强制匿名） / --out <文件>
 
 约定：stdout 只输出 JSON 结果；日志走 stderr。
 """
@@ -37,10 +38,12 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     p.add_argument("--login-url", default="", help="登录页地址；默认与 --url 相同")
     p.add_argument("--user", default="", help="登录账号（建议改用 RUNTIME_LOGIN_USER）")
     p.add_argument("--password", default="", help="登录密码（建议改用 RUNTIME_LOGIN_PASSWORD）")
+    p.add_argument("--otp", default="", help="动态口令/一次性验证码（建议改用 RUNTIME_LOGIN_OTP）")
     p.add_argument("--route", action="append", default=[], help="显式路由，可重复；优先级最高")
     p.add_argument("--max-pages", type=int, default=0, help="遍历页面上限（0=用配置默认）")
     p.add_argument("--timeout", type=int, default=0, help="单页超时秒数（0=用配置默认）")
     p.add_argument("--headful", action="store_true", help="有头模式（调试用）")
+    p.add_argument("--no-menu", action="store_true", help="不做菜单点击路由发现（SPA 兜底）")
     p.add_argument("--no-login", action="store_true", help="强制匿名访问，不提交登录表单")
     p.add_argument("--pretty", action="store_true", help="美化 JSON 输出")
     p.add_argument("--out", default="", help="同时把 JSON 写入该文件（仓库外路径）")
@@ -48,30 +51,33 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
 
 
 def _build_options(args: argparse.Namespace) -> runtime_ui.RuntimeUiOptions:
+    """把命令行参数覆盖到配置选项上（表驱动，避免长串 if 分支）。"""
     opts = runtime_ui.options_from_settings(load_settings())
-    if args.url:
-        opts.base_url = args.url
-    if args.login_url:
-        opts.login_url = args.login_url
-    if args.user:
-        opts.login_user = args.user
-    if args.password:
-        opts.login_password = args.password
+    overrides: list[tuple[bool, str, object]] = [
+        (bool(args.url), "base_url", args.url),
+        (bool(args.login_url), "login_url", args.login_url),
+        (bool(args.user), "login_user", args.user),
+        (bool(args.password), "login_password", args.password),
+        (bool(args.otp), "login_otp", args.otp),
+        (bool(args.no_menu), "discover_by_menu", False),
+        (bool(args.headful), "headless", False),
+        (args.max_pages > 0, "max_pages", args.max_pages),
+        (args.timeout > 0, "timeout", args.timeout),
+    ]
+    for active, name, value in overrides:
+        if active:
+            setattr(opts, name, value)
     if args.no_login:
         opts.login_user = ""
         opts.login_password = ""
+        opts.login_otp = ""
     if args.route:
         opts.routes = [*args.route, *opts.routes]
-    if args.max_pages > 0:
-        opts.max_pages = args.max_pages
-    if args.timeout > 0:
-        opts.timeout = args.timeout
-    if args.headful:
-        opts.headless = False
     return opts
 
 
 def _summarize(result: runtime_ui.RuntimeUiResult) -> dict[str, object]:
+    fps = runtime_ui.to_functional_points(result)
     return {
         "base_url": result.base_url,
         "logged_in": result.logged_in,
@@ -80,8 +86,14 @@ def _summarize(result: runtime_ui.RuntimeUiResult) -> dict[str, object]:
             "pages": len(result.pages),
             "reachable": sum(1 for p in result.pages if p.reachable),
             "elements": len(result.elements),
+            "routes": len(result.discovered_routes),
+            "functional_points": len(fps),
             "console_errors": len(result.console_errors),
         },
+        "discovered_routes": result.discovered_routes,
+        "functional_points": [
+            {"fp_id": fp.fp_id, "ftype": fp.ftype, "name": fp.name, "title": fp.title} for fp in fps
+        ],
         "pages": [
             {
                 "path": page.path,
