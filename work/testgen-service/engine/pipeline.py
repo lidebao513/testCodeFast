@@ -44,6 +44,7 @@ class PipelineOptions:
     mode: str = "full"  # full | incremental
     base: str | None = None
     target: str | None = None
+    prd_source: str = ""  # P2：PRD 文件路径（启用 PRD 通道时读取）
     scopes: set[str] = field(default_factory=lambda: {TPType.NORMAL.value, TPType.BOUNDARY.value})
     review_status: str = "pending"
     include_business: bool = True
@@ -73,6 +74,7 @@ class PipelineResult:
     functional_points: list[FunctionalPoint] = field(default_factory=list, repr=False)
     test_points: list[TestPoint] = field(default_factory=list, repr=False)
     cases: list[CaseSpec] = field(default_factory=list, repr=False)
+    prd_doc: Any = None  # P2：解析后的 PRD（PrdDoc），未启用为 None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -228,6 +230,29 @@ def stage_enrich(
 
 
 # ============================================================================
+# 阶段 5.5（P2 接入骨架）：PRD 通道 + LLM 用例设计
+# ============================================================================
+def stage_prd_ingest(
+    opts: PipelineOptions,
+    result: PipelineResult,
+    progress: ProgressFn | None,
+) -> Any | None:
+    """P2 接入点：解析 PRD 并与功能点对齐（当前为骨架，返回 None）。"""
+    _emit(progress, "prd_ingest", source=opts.prd_source)
+    return None
+
+
+def stage_llm_design(
+    opts: PipelineOptions,
+    result: PipelineResult,
+    progress: ProgressFn | None,
+) -> list[CaseSpec]:
+    """P2 接入点：基于功能点 + PRD 上下文设计用例（当前为骨架，原样返回）。"""
+    _emit(progress, "llm_design", enabled=True)
+    return result.cases
+
+
+# ============================================================================
 # 阶段 6：用例生成
 # ============================================================================
 def stage_cases(
@@ -326,6 +351,11 @@ def run_pipeline(
     tps = stage_test_points(opts, result, result.functional_points, tag_by_fp, progress)
     result.test_points = stage_enrich(opts, result, tps, result.functional_points, progress)
     result.cases = stage_cases(result, result.test_points, progress)
+    s = get_settings()
+    if s.prd_enabled and opts.prd_source:
+        result.prd_doc = stage_prd_ingest(opts, result, progress)
+    if s.llm_design_enabled:
+        result.cases = stage_llm_design(opts, result, progress)
     stage_persist(opts, result, progress)
 
     _emit(progress, "done", **result.counts)

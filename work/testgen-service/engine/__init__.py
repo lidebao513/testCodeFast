@@ -20,8 +20,12 @@ from __future__ import annotations
 __all__ = [
     "case_gen",
     "diff_tag",
+    "executor",
     "fp_extract",
+    "llm_design",
     "pipeline",
+    "prd_ingest",
+    "runtime_ui",
     "scan",
     "semantic_enrich",
     "tp_expand",

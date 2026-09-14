@@ -168,6 +168,13 @@ BUSINESS_EXTRACT_LOOSE = "loose"
 BUSINESS_EXTRACT_CHOICES = (BUSINESS_EXTRACT_STRICT, BUSINESS_EXTRACT_LOOSE)
 
 
+# ============================ P2 · PRD 通道 / LLM 用例设计 ============================
+# PRD 来源格式（单一真值）：markdown=需求文档；openapi=OpenAPI 规格；auto=按扩展名推断。
+PRD_FORMAT_MARKDOWN = "markdown"
+PRD_FORMAT_OPENAPI = "openapi"
+PRD_FORMAT_AUTO = "auto"
+PRD_FORMAT_CHOICES = (PRD_FORMAT_MARKDOWN, PRD_FORMAT_OPENAPI, PRD_FORMAT_AUTO)
+
 # ============================ 范围常量（Scope · 唯一真值） ============================
 # 行为维度全集（顺序即展示顺序）
 ALL_TP_TYPES = [t.value for t in TPType]

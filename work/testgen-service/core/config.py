@@ -106,6 +106,11 @@ class Settings:
         default_factory=lambda: ["tools", "agents", "mcp_servers", "workspace/skills"]
     )
 
+    # P2：PRD 通道（需求文档 / OpenAPI 作为用例设计的补充来源）
+    prd_enabled: bool = False
+    prd_dir: Path = field(default_factory=lambda: PROJECT_ROOT / "prd")
+    llm_design_enabled: bool = False  # 在语义增强之外，叠加 LLM 用例设计
+
     # 鉴权：为空表示不校验（仅限内网/开发）
     auth_token: str = ""
 
@@ -147,6 +152,7 @@ def load_settings(env: dict[str, str] | None = None) -> Settings:
     def g(key: str) -> str | None:
         return env.get(key)
 
+    prd_dir_env = g("PRD_DIR")
     s = Settings(
         app_env=_as_choice(g("APP_ENV"), "dev", "APP_ENV", ("dev", "test", "prod")),
         host=g("HOST") or "127.0.0.1",
@@ -165,6 +171,9 @@ def load_settings(env: dict[str, str] | None = None) -> Settings:
         llm_model=g("LLM_MODEL") or "",
         llm_api_key=g("LLM_API_KEY") or "",
         llm_timeout=_as_int(g("LLM_TIMEOUT"), 60, "LLM_TIMEOUT"),
+        prd_enabled=_as_bool(g("PRD_ENABLED"), False),
+        prd_dir=(Path(prd_dir_env).expanduser().resolve() if prd_dir_env else PROJECT_ROOT / "prd"),
+        llm_design_enabled=_as_bool(g("LLM_DESIGN_ENABLED"), False),
         auth_token=g("AUTH_TOKEN") or "",
         business_extract_mode=_as_choice(
             g("BUSINESS_EXTRACT_MODE"),
