@@ -5,6 +5,7 @@
     python -m cli.main pipeline --auto-input "<一段混排文本>"
     python -m cli.main parse-input "<一段混排文本>"
     python -m cli.main analyze  --path <dir>
+    python -m cli.main runs     --project <项目ID> [--batch <批次号>]
     python -m cli.main serve    [--host H] [--port P]
 
 设计约定：
@@ -21,9 +22,11 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from core import store
 from core.auto_input import AutoInputResult, parse_auto_input
 from core.config import get_settings
 from core.db import init_db
@@ -101,6 +104,11 @@ def _build_parser() -> argparse.ArgumentParser:
 
     ana = sub.add_parser("analyze", help="只做扫描 + 功能点提取")
     ana.add_argument("--path", required=True)
+
+    runs = sub.add_parser("runs", help="查询执行留痕（批次 / 逐条结论）")
+    runs.add_argument("--project", type=int, required=True, help="项目 ID")
+    runs.add_argument("--batch", default="", help="批次号；给出则额外输出该批次的逐条结论")
+    runs.add_argument("--limit", type=int, default=50, help="批次 / 记录条数上限")
 
     srv = sub.add_parser("serve", help="启动 HTTP 服务")
     srv.add_argument("--host", default=None)
@@ -249,6 +257,21 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_runs(args: argparse.Namespace) -> int:
+    """查询执行留痕（F12）：批次列表 + 可选单批次逐条结论。"""
+    batches = store.list_run_batches(args.project, limit=args.limit)
+    payload: dict[str, Any] = {
+        "project_id": args.project,
+        "batches": batches,
+        "latest": batches[0] if batches else None,
+    }
+    if args.batch:
+        payload["batch"] = store.get_run_batch(args.batch)
+        payload["runs"] = store.list_runs(args.project, batch_id=args.batch, limit=args.limit)
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0
+
+
 def _cmd_serve(args: argparse.Namespace) -> int:
     import uvicorn
 
@@ -262,22 +285,24 @@ def _cmd_serve(args: argparse.Namespace) -> int:
     return 0
 
 
+# 子命令 → 处理函数（表驱动：新增子命令只加一行，避免 main() 里堆 return 分支）
+_COMMANDS: dict[str, Callable[[argparse.Namespace], int]] = {
+    "pipeline": _cmd_pipeline,
+    "parse-input": _cmd_parse_input,
+    "analyze": _cmd_analyze,
+    "runs": _cmd_runs,
+    "serve": _cmd_serve,
+}
+
+
 def main(argv: list[str] | None = None) -> int:
     setup_logging()
     args = _build_parser().parse_args(argv)
     try:
-        if args.cmd == "pipeline":
-            return _cmd_pipeline(args)
-        if args.cmd == "parse-input":
-            return _cmd_parse_input(args)
-        if args.cmd == "analyze":
-            return _cmd_analyze(args)
-        if args.cmd == "serve":
-            return _cmd_serve(args)
+        return _COMMANDS[args.cmd](args)
     except AppError as exc:
         print(f"[error] {exc.code}: {exc.message}", file=sys.stderr)
         return 2
-    return 0
 
 
 if __name__ == "__main__":

@@ -26,7 +26,7 @@ from core.config import get_settings
 from core.contracts import CONTRACT_VERSION
 from core.db import connect, init_db
 from core.enums import ALL_TP_TYPES, MODE_FULL, PullStatus
-from core.errors import AppError, UnauthorizedError, ValidationError
+from core.errors import AppError, NotFoundError, UnauthorizedError, ValidationError
 from core.log import get_logger, log_extra, set_request_id
 from engine import pipeline
 from output.writer import OutputWriter
@@ -306,6 +306,26 @@ def get_cases(pid: int, include_obsolete: bool = False) -> dict[str, Any]:
 @app.get("/api/v1/projects/{pid}/traceability", dependencies=[Depends(require_auth)])
 def get_traceability(pid: int) -> dict[str, Any]:
     return {"project_id": pid, "traceability": store.traceability(pid)}
+
+
+@app.get("/api/v1/projects/{pid}/runs", dependencies=[Depends(require_auth)])
+def get_runs(pid: int, limit: int = 50) -> dict[str, Any]:
+    """执行批次列表（F12 留痕）：最新在前，含状态分布与批次终态。"""
+    batches = store.list_run_batches(pid, limit=limit)
+    return {"project_id": pid, "batches": batches, "latest": batches[0] if batches else None}
+
+
+@app.get("/api/v1/projects/{pid}/runs/{batch_id}", dependencies=[Depends(require_auth)])
+def get_run_detail(pid: int, batch_id: str, limit: int = 500) -> dict[str, Any]:
+    """单批次详情：批次终态 + 逐条执行结论（`cases.last_result` 的来源）。"""
+    batch = store.get_run_batch(batch_id)
+    if batch is None or int(batch.get("project_id") or 0) != pid:
+        raise NotFoundError(f"执行批次不存在：{batch_id}")
+    return {
+        "project_id": pid,
+        "batch": batch,
+        "runs": store.list_runs(pid, batch_id=batch_id, limit=limit),
+    }
 
 
 @app.get("/api/v1/workspaces", dependencies=[Depends(require_auth)])

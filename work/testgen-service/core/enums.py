@@ -101,7 +101,12 @@ _HTTP_VERB_SET = frozenset(HTTP_METHODS)
 
 # ============================ 执行状态（runs.status） ============================
 class ExecStatus(Enum):
-    """单条用例执行结论（写 runs.status，并冗余 cases.last_result）。"""
+    """单条用例执行结论（**逐条**写 `runs.status`，并冗余到 `cases.last_result`）。
+
+    留痕分层（F12）：单条结论落 `runs`（每批 N 行），批次终态落 `run_batches`（每批 1 行）。
+    `cases.last_result` 只存本枚举取值（短字符串），供列表页快速查看；
+    富信息（证据 / 原因）在 `runs.detail`，**不污染用例生命周期状态** `cases.status`。
+    """
 
     PASS = "pass"
     FAIL = "fail"
@@ -111,6 +116,22 @@ class ExecStatus(Enum):
     BLOCKED_AUTH = "blocked_auth"  # 鉴权缺失被拦截（反向断言命中）
     BLOCKED_REVIEW = "blocked_review"  # 未通过人工审核，跳过
     CANCELLED = "cancelled"  # 执行被中断
+
+
+# ============================ 执行批次终态（run_batches.state） ============================
+class RunBatchState(Enum):
+    """一次「批量执行」的批次终态（写 `run_batches.state`）。
+
+    与 `ExecStatus`（单条用例结论）不同粒度：批次只关心「这一轮有没有跑完」。
+    - COMPLETED：本批次所有用例都已执行并写下结论（含 pass/fail/error/skipped，均属已判定）；
+    - FAILED：执行基础设施失败（如未装 requests / 会话建立失败），**未产出任何单条结论**；
+    - RUNNING / INTERRUPTED：为渐进式进度持久化与「进程重启恢复」预留（属 F17 服务化范围）。
+    """
+
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    INTERRUPTED = "interrupted"
 
 
 # ============================ 用例生命周期状态（cases.status） ============================

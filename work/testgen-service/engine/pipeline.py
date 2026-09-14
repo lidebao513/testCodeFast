@@ -1,6 +1,7 @@
 """引擎 · 编排（pipeline）：把六个模块串成一条可复现的流水线。
 
-    扫描 → 功能点提取 → 差异打标 → 测试点展开 → 语义增强 → 用例生成 → 落库
+    扫描 → 功能点提取 → 差异打标 → 测试点展开 → 语义增强 → 用例生成
+         →（可选）用例执行 → 落库（含执行留痕 F12）
 
 设计要点：
 - **每个阶段一个函数**：输入输出都是显式数据，便于单测与影子双跑比对；
@@ -8,6 +9,8 @@
 - 任一阶段失败都带上下文抛出（`EngineError`），不吞异常。
 - **可选扩展阶段（P2/P3）默认关闭**：由 Settings 的 flag 守卫；其中 P3 运行时
   UI 发现失败**只记错误不阻断主链路**（见 `P3_UI生成_详细设计.md` §10）。
+- **所有数据库写入集中在 `stage_persist`**：执行结论（F12）必须等用例对账完成后再落库，
+  否则首次运行没有 `cases` 行可回填 `last_result`。
 
 两条入口（A1 · 见 `两条生成流程_链路梳理与补齐方案.md`）
 ---------------------------------------------------------
@@ -25,15 +28,17 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
+from uuid import uuid4
 
 from core import store
 from core.config import get_settings
 from core.contracts import CaseSpec, FunctionalPoint, TestPoint
 from core.db import init_db
-from core.enums import DEFAULT_SCOPE, FType, Tag, VerifyLayer
+from core.enums import DEFAULT_SCOPE, FType, RunBatchState, Tag, VerifyLayer
 from core.errors import EngineError, WorkspaceEscapeBlocked
 from core.log import get_logger, log_extra
 from engine import (
@@ -117,6 +122,7 @@ class PipelineResult:
     project_id: int | None = None
     mode: str = "full"
     source_kind: str = ""  # code / url / code+url（本次用了哪条入口）
+    run_batch_id: str = ""  # F12：本次执行批次号（未执行则为空）
     counts: dict[str, int] = field(default_factory=dict)
     scope_summary: dict[str, int] = field(default_factory=dict)
     tag_summary: dict[str, int] = field(default_factory=dict)
@@ -137,6 +143,7 @@ class PipelineResult:
             "project_id": self.project_id,
             "mode": self.mode,
             "source_kind": self.source_kind,
+            "run_batch_id": self.run_batch_id,
             "counts": self.counts,
             "scope_summary": self.scope_summary,
             "tag_summary": self.tag_summary,
@@ -151,6 +158,19 @@ class PipelineResult:
 def _emit(progress: ProgressFn | None, stage: str, **info: Any) -> None:
     if progress:
         progress(stage, info)
+
+
+def _now_iso() -> str:
+    return datetime.now().isoformat(timespec="seconds")
+
+
+def _new_batch_id() -> str:
+    """执行批次号：`RUN-<yyyymmdd-HHMMSS>-<6位随机>`。
+
+    批次是**事件**（不是产物），因此用时间 + 随机后缀而非内容指纹——
+    同一秒内连跑两次也必须能区分开，否则历史会互相覆盖。
+    """
+    return f"RUN-{datetime.now().strftime('%Y%m%d-%H%M%S')}-{uuid4().hex[:6]}"
 
 
 def _count_by(items: list[Any], key: Callable[[Any], str]) -> dict[str, int]:
@@ -477,25 +497,68 @@ def stage_execute(
 
     地址与凭证取「请求级 > 环境变量」同一套优先级：接口层执行用的是**被测服务地址**
     （`RUNTIME_BASE_URL`），不是登录页——登录页是浏览器通道才需要的概念。
+
+    F12：本阶段只**产出**执行结论（含批次号与起止时间）并挂到 `result.execution`；
+    真正落库在 `stage_persist`——必须等用例对账完成、`cases` 行就位后才能回填 `last_result`，
+    否则首次运行「无处可写」。执行基础设施失败（如未装 requests）也会留下 `failed` 批次，**不静默**。
     """
     s = get_settings()
     _emit(progress, "execute", cases=len(result.cases))
+    batch_id = _new_batch_id()
+    result.run_batch_id = batch_id
+    started = _now_iso()
     exec_options = executor.ExecutorOptions(
         base_url=opts.target_req.exec_url or runtime_options.base_url,
         auth_token=runtime_options.auth_token or s.runtime_auth_token,
         timeout=runtime_options.timeout,
         allow_write=bool(opts.target_req.allow_write or s.executor_allow_write),
     )
-    summary = executor.execute_all(result.cases, exec_options)
+    try:
+        summary = executor.execute_all(result.cases, exec_options)
+    except EngineError as exc:
+        # 批次留痕：执行没跑起来也要可见（state=failed），否则「开关开了却什么都没发生」
+        result.execution = _failed_execution(batch_id, len(result.cases), started, exc.message)
+        result.notes.append(f"执行批次 {batch_id} 标记为 failed：{exc.message}")
+        raise
+    summary.update(
+        {
+            "batch_id": batch_id,
+            "state": RunBatchState.COMPLETED.value,
+            "started_at": started,
+            "finished_at": _now_iso(),
+        }
+    )
     result.execution = summary
     for key in ("total", "executed", "pass", "fail", "error", "skipped"):
         result.counts[f"exec_{key}"] = int(summary.get(key, 0))
     result.notes.append(
-        f"执行结论：共 {summary['total']} 条，已执行 {summary['executed']} 条"
+        f"执行结论（批次 {batch_id}）：共 {summary['total']} 条，已执行 {summary['executed']} 条"
         f"（通过 {summary['pass']} / 失败 {summary['fail']} / 异常 {summary['error']}），"
         f"跳过 {summary['skipped']} 条（UI 层待实现、非 HTTP 来源或写操作未放行）"
     )
     return summary
+
+
+def _failed_execution(batch_id: str, total: int, started: str, error: str) -> dict[str, Any]:
+    """执行基础设施失败时的批次留痕（没有任何单条结论，但批次必须可见）。
+
+    注意键名：`error` 是**计数**（与 `executor.summarize` 同名），批次级错误文案用
+    `batch_error`——两者同名会互相覆盖，是最隐蔽的一类「数据看起来对但其实错」。
+    """
+    return {
+        "batch_id": batch_id,
+        "state": RunBatchState.FAILED.value,
+        "batch_error": error,
+        "results": [],
+        "total": total,
+        "executed": 0,
+        "pass": 0,
+        "fail": 0,
+        "error": 0,
+        "skipped": 0,
+        "started_at": started,
+        "finished_at": _now_iso(),
+    }
 
 
 # ============================================================================
@@ -550,12 +613,35 @@ def _persist_without_db(
     result.traceability = case_gen.coverage_of(cases, tps)
 
 
+def _persist_execution(pid: int, result: PipelineResult, conn: Any) -> None:
+    """F12：把执行结论落库（逐条 `runs` + 回填 `cases.last_result` + 批次 `run_batches`）。
+
+    必须在 `reconcile_cases` **之后**调用——`cases` 行要先就位，`last_result` 才有对象可回填。
+    未执行（`result.execution` 为空）时什么都不做。
+    """
+    if not result.execution:
+        return
+    stats = store.record_execution(
+        pid,
+        result.execution,
+        mode=result.mode,
+        source_kind=result.source_kind,
+        conn=conn,
+    )
+    if not stats["batches"]:
+        return
+    result.notes.append(
+        f"执行留痕：批次 {result.run_batch_id} 写入 {stats['runs']} 条 runs，"
+        f"回填 {stats['cases']} 条 cases.last_result"
+    )
+
+
 def stage_persist(
     opts: PipelineOptions,
     result: PipelineResult,
     progress: ProgressFn | None,
 ) -> None:
-    """落库：读取 `result` 上已挂载的三层产物。"""
+    """落库：读取 `result` 上已挂载的三层产物（功能点 / 测试点 / 用例）+ 执行留痕。"""
     fps = result.functional_points
     tps = result.test_points
     cases = result.cases
@@ -574,6 +660,7 @@ def stage_persist(
             case.fp_row_id = fp_rows.get(case.fp_contract_id)
         result.case_stats = store.reconcile_cases(pid, cases, conn=conn)
         result.traceability = store.traceability(pid, conn=conn)
+        _persist_execution(pid, result, conn)
         store.log_change(
             pid,
             "pipeline",
@@ -662,6 +749,8 @@ def run_pipeline(
     if s.llm_design_enabled:
         result.cases = stage_llm_design(opts, result, progress)
     # A3：用例执行（默认关闭）。接口层真实执行；UI 层为桩并会如实标记 skipped。
+    # F12：即便执行基础设施失败（stage_execute 抛 EngineError），`result.execution` 已记下
+    # 一个 failed 批次 → 仍会被 stage_persist 落库，保证「跑过/没跑起来」都留痕。
     if s.executor_enabled or opts.target_req.execute:
         try:
             stage_execute(opts, result, progress, runtime_options)

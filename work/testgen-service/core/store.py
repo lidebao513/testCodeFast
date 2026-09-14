@@ -2,19 +2,21 @@
 
 - 全部走参数化查询；
 - 多步写入使用事务（`with conn:` 自动提交/回滚）；
-- 用例对账（幂等）在此实现：生成 → 更新 → 复用 → 废弃，键为 `tp_id`。
+- 用例对账（幂等）在此实现：生成 → 更新 → 复用 → 废弃，键为 `tp_id`；
+- 执行留痕（F12）在此实现：逐条 `runs` + 批次 `run_batches`，并回填 `cases.last_result`。
 """
 
 from __future__ import annotations
 
 import json
 import sqlite3
+from collections.abc import Mapping
 from datetime import datetime
 from typing import Any
 
 from core.contracts import CaseSpec, FunctionalPoint, TestPoint
 from core.db import connect, init_db
-from core.enums import CaseLifecycleStatus
+from core.enums import CaseLifecycleStatus, RunBatchState
 from core.errors import ContractViolation
 
 
@@ -413,6 +415,248 @@ def case_stats(pid: int, conn: sqlite3.Connection | None = None) -> dict[str, An
             )
         }
         return {"by_status": by_status, "by_priority": by_priority}
+    finally:
+        if own:
+            conn.close()
+
+
+# ============================================================================
+# 执行留痕（F12）：runs（逐条）+ run_batches（逐批）
+# ============================================================================
+# 参与批次汇总的计数键（与 executor.summarize 的输出同名）
+_RUN_COUNT_KEYS: tuple[str, ...] = ("total", "executed", "pass", "fail", "error", "skipped")
+
+
+def _first_note(notes: Any) -> str:
+    """取结论首条备注作为 `runs.detail`（人类可读的一句话）。"""
+    if isinstance(notes, (list, tuple)) and notes:
+        return str(notes[0])
+    return ""
+
+
+def record_execution(
+    pid: int,
+    summary: Mapping[str, Any],
+    *,
+    mode: str = "",
+    source_kind: str = "",
+    conn: sqlite3.Connection | None = None,
+) -> dict[str, int]:
+    """把**一次执行**的结论落库（F12），返回写入统计 `{"runs", "cases", "batches"}`。
+
+    `summary` 为执行器汇总 + 批次元信息，约定字段：
+      - `batch_id`：批次号（**必需**）。缺失即视为「本次没有执行」，直接不写——
+        宁可不写，也不留一条没有批次号的孤儿记录；
+      - `state`：批次终态（`RunBatchState` 取值，缺省 `completed`）；
+      - `results`：逐条结论 `[{tc_no, status, notes, duration_ms}, ...]`；
+      - `total/executed/pass/fail/error/skipped`：汇总计数（`error` 是**计数**，不是文案）；
+      - `batch_error`：批次级错误文案（基础设施失败时才有，**不可与计数 `error` 同名**）；
+      - `started_at/finished_at`：批次起止时间（缺省以当前时间兜底）。
+
+    三件事在**同一事务**内完成：
+      1. 逐条写 `runs`（`case_id` 关联用例行、`tp_id` 冗余便于追溯）；
+      2. 回填 `cases.last_result`（按 `tp_id` 定位；契约约定 `tc_no == tp_id`）；
+      3. upsert `run_batches`（批次终态 + 状态分布）。
+
+    幂等：同一 `batch_id` 重复落库会**先清后写**，不累积重复行。
+    **只写 `cases.last_result`，绝不改 `cases.status`**——生命周期状态与执行结论解耦，
+    否则「重新生成用例」会把执行结论当成生命周期值误读。
+    """
+    own = conn is None
+    conn = conn or connect()
+    if own:
+        init_db(conn)
+    try:
+        batch_id = str(summary.get("batch_id") or "").strip()
+        if not batch_id:
+            return {"runs": 0, "cases": 0, "batches": 0}
+
+        results = [r for r in (summary.get("results") or []) if isinstance(r, Mapping)]
+        now = _now()
+        started = str(summary.get("started_at") or now)
+        finished = str(summary.get("finished_at") or now)
+        state = str(summary.get("state") or RunBatchState.COMPLETED.value)
+        error = str(summary.get("batch_error") or "")
+        counts = {k: int(summary.get(k, 0) or 0) for k in _RUN_COUNT_KEYS}
+
+        status_counts: dict[str, int] = {}
+        rows: list[tuple[Any, ...]] = []
+        backfilled = 0
+        with conn:
+            conn.execute("DELETE FROM runs WHERE project_id = ? AND batch_id = ?", (pid, batch_id))
+            case_rows = {
+                str(r["tp_id"]): int(r["id"])
+                for r in conn.execute(
+                    "SELECT id, tp_id FROM cases WHERE project_id = ? AND tp_id IS NOT NULL",
+                    (pid,),
+                )
+            }
+            for item in results:
+                tp_id = str(item.get("tc_no") or "")
+                status = str(item.get("status") or "")
+                status_counts[status] = status_counts.get(status, 0) + 1
+                rows.append(
+                    (
+                        pid,
+                        batch_id,
+                        case_rows.get(tp_id),
+                        tp_id,
+                        status,
+                        _first_note(item.get("notes")),
+                        int(item.get("duration_ms") or 0),
+                        str(item.get("screenshot_path") or ""),
+                        str(item.get("log_path") or ""),
+                        mode,
+                        source_kind,
+                        now,
+                    )
+                )
+                if tp_id:
+                    cursor = conn.execute(
+                        "UPDATE cases SET last_result = ? WHERE project_id = ? AND tp_id = ?",
+                        (status, pid, tp_id),
+                    )
+                    backfilled += int(cursor.rowcount or 0)
+            conn.executemany(
+                "INSERT INTO runs(project_id, batch_id, case_id, tp_id, status, detail,"
+                " duration_ms, screenshot_path, log_path, mode, source_kind, created_at)"
+                " VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+                rows,
+            )
+            _upsert_run_batch(
+                conn,
+                batch_id=batch_id,
+                pid=pid,
+                mode=mode,
+                source_kind=source_kind,
+                counts=counts,
+                done=len(rows),
+                status_counts=status_counts,
+                state=state,
+                started=started,
+                finished=finished,
+                error=error,
+                updated=now,
+            )
+        return {"runs": len(rows), "cases": backfilled, "batches": 1}
+    finally:
+        if own:
+            conn.close()
+
+
+def _upsert_run_batch(  # noqa: PLR0913 - 批次字段本就多，显式关键字参数比包成字典更直观
+    conn: sqlite3.Connection,
+    *,
+    batch_id: str,
+    pid: int,
+    mode: str,
+    source_kind: str,
+    counts: dict[str, int],
+    done: int,
+    status_counts: dict[str, int],
+    state: str,
+    started: str,
+    finished: str,
+    error: str,
+    updated: str,
+) -> None:
+    """写入/覆盖批次终态（同 `batch_id` 重跑即覆盖，保证幂等）。"""
+    conn.execute(
+        "INSERT INTO run_batches(batch_id, project_id, mode, source_kind, total, done,"
+        " status_counts, state, started_at, finished_at, error, filters, webhook_url, updated_at)"
+        " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+        " ON CONFLICT(batch_id) DO UPDATE SET"
+        " project_id=excluded.project_id, mode=excluded.mode,"
+        " source_kind=excluded.source_kind, total=excluded.total, done=excluded.done,"
+        " status_counts=excluded.status_counts, state=excluded.state,"
+        " started_at=excluded.started_at, finished_at=excluded.finished_at,"
+        " error=excluded.error, updated_at=excluded.updated_at",
+        (
+            batch_id,
+            pid,
+            mode,
+            source_kind,
+            counts["total"],
+            done,
+            _dumps(status_counts),
+            state,
+            started,
+            finished,
+            error,
+            "{}",
+            "",
+            updated,
+        ),
+    )
+
+
+def list_run_batches(
+    pid: int, *, limit: int = 50, conn: sqlite3.Connection | None = None
+) -> list[dict[str, Any]]:
+    """按项目列出执行批次（最新在前）；`status_counts` 已解析为 dict。"""
+    own = conn is None
+    conn = conn or connect()
+    try:
+        rows = [
+            dict(r)
+            for r in conn.execute(
+                "SELECT * FROM run_batches WHERE project_id = ?"
+                " ORDER BY COALESCE(finished_at, started_at, updated_at) DESC, batch_id DESC"
+                " LIMIT ?",
+                (pid, max(1, int(limit))),
+            )
+        ]
+        for row in rows:
+            row["status_counts"] = _loads(row.get("status_counts"), {})
+        return rows
+    finally:
+        if own:
+            conn.close()
+
+
+def get_run_batch(
+    batch_id: str, *, conn: sqlite3.Connection | None = None
+) -> dict[str, Any] | None:
+    """按批次号取单个批次；不存在返回 None。"""
+    own = conn is None
+    conn = conn or connect()
+    try:
+        row = conn.execute("SELECT * FROM run_batches WHERE batch_id = ?", (batch_id,)).fetchone()
+        if not row:
+            return None
+        out = dict(row)
+        out["status_counts"] = _loads(out.get("status_counts"), {})
+        return out
+    finally:
+        if own:
+            conn.close()
+
+
+def latest_run_batch(pid: int, *, conn: sqlite3.Connection | None = None) -> dict[str, Any] | None:
+    """取项目最近一次执行批次（无则 None）。"""
+    batches = list_run_batches(pid, limit=1, conn=conn)
+    return batches[0] if batches else None
+
+
+def list_runs(
+    pid: int,
+    *,
+    batch_id: str = "",
+    limit: int = 200,
+    conn: sqlite3.Connection | None = None,
+) -> list[dict[str, Any]]:
+    """列出逐条执行结论；给了 `batch_id` 则只取该批次。"""
+    own = conn is None
+    conn = conn or connect()
+    try:
+        sql = "SELECT * FROM runs WHERE project_id = ?"
+        params: list[Any] = [pid]
+        if batch_id:
+            sql += " AND batch_id = ?"
+            params.append(batch_id)
+        sql += " ORDER BY id LIMIT ?"
+        params.append(max(1, int(limit)))
+        return [dict(r) for r in conn.execute(sql, tuple(params))]
     finally:
         if own:
             conn.close()

@@ -3,10 +3,12 @@
 设计定位：把生成的用例真正跑起来。接口层用例走 `requests` 探活 + 状态断言；
 UI 层用例走 Playwright 真实交互。
 
-落库现状（**如实说明，避免跟着文档踩空**）：执行结论当前只挂在内存结果
-（`PipelineResult.execution` / `counts["exec_*"]`）与运行备注上；
-`cases.last_result` 与 `runs` 表的**回填尚未实现**（属 F12），
-执行完的结果不会留痕、无法做历史对比与趋势。
+落库现状（**如实说明，避免跟着文档踩空**）：本模块**只产出执行结论**（内存 +
+`PipelineResult.execution` / `counts["exec_*"]`），**不直接写库**；
+留痕由 `core.store.record_execution` 在流水线 `stage_persist`（用例对账**之后**）落库——
+逐条写 `runs`、回填 `cases.last_result`、并 upsert 批次 `run_batches`（F12，已实现）。
+这样分层的原因：执行是运行期活动，落库是存储职责；且必须等用例对账完成、`cases` 行就位后
+才能回填 `last_result`，否则首次运行会「无处可写」。
 
 A3 当前范围（本轮交付，见 `两条生成流程_链路梳理与补齐方案.md`）
 -----------------------------------------------------------------
@@ -25,6 +27,7 @@ A3 当前范围（本轮交付，见 `两条生成流程_链路梳理与补齐�
 from __future__ import annotations
 
 import re
+import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
@@ -85,6 +88,7 @@ class ExecutionResult:
     status: str = ExecStatus.SKIPPED.value
     step_results: list[StepResult] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
+    duration_ms: int = 0  # 本次执行耗时（毫秒）；落 runs.duration_ms 供报告/趋势使用
 
     def ok(self) -> bool:
         """是否「已执行且通过」（skipped 不算通过）。"""
@@ -97,6 +101,7 @@ class ExecutionResult:
             "ok": self.ok(),
             "step_results": [s.to_dict() for s in self.step_results],
             "notes": self.notes,
+            "duration_ms": self.duration_ms,
         }
 
 
@@ -214,8 +219,17 @@ def execute_case(
     """执行单条用例（按 `steps[0].layer` 选择接口 / UI 通道）。
 
     `session` 可注入（测试用假会话）；为 None 时自建 requests 会话。
+    统一在此处测量耗时（落 `runs.duration_ms`），分派逻辑在 `_dispatch`。
     """
     opts = options or ExecutorOptions()
+    started = time.monotonic()
+    result = _dispatch(case, opts, session)
+    result.duration_ms = int((time.monotonic() - started) * 1000)
+    return result
+
+
+def _dispatch(case: CaseSpec, opts: ExecutorOptions, session: Any) -> ExecutionResult:
+    """按执行层分派：接口层真发请求，其余如实 skipped（绝不伪装通过）。"""
     step = case.steps[0] if case.steps else {}
     layer = str(step.get("layer") or "")
     if layer != VerifyLayer.INTERFACE.value:

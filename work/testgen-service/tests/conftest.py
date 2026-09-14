@@ -36,6 +36,9 @@ def fresh_db():
     get_settings().ensure_dirs()
     conn = connect()
     init_db(conn)
+    # F12 新增表同样要清：否则不同用例的批次（如固定 batch_id）会互相串味
+    conn.execute("DELETE FROM runs")
+    conn.execute("DELETE FROM run_batches")
     conn.execute("DELETE FROM cases")
     conn.execute("DELETE FROM test_points")
     conn.execute("DELETE FROM functional_points")

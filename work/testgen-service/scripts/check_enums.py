@@ -50,6 +50,7 @@ from core.enums import (
     MethodMarker,
     PullStatus,
     ReviewStatus,
+    RunBatchState,
     Tag,
     TPType,
     VerifyLayer,
@@ -69,6 +70,7 @@ for _e in (
     CaseLifecycleStatus,
     ReviewStatus,
     PullStatus,
+    RunBatchState,
 ):
     for _m in _e:
         _LITERALS.add(_m.value)
@@ -196,6 +198,7 @@ def reverse_check():
         CaseLifecycleStatus,
         ReviewStatus,
         PullStatus,
+        RunBatchState,
     ]
     blobs = {}
     for path in _iter_source_py():

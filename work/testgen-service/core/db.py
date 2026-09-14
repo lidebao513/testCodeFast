@@ -100,6 +100,47 @@ SCHEMA: tuple[str, ...] = (
         created_at  TEXT
     )
     """,
+    # F12 执行留痕：逐条结论（legacy 列名对齐 + 只增列）
+    # `case_id` 指向 cases.id（不加外键约束：用例可能被对账作废/重建，历史留痕须保留）；
+    # `tp_id` 为冗余业务键，便于无需 join 即可按测试点追溯执行历史。
+    """
+    CREATE TABLE IF NOT EXISTS runs (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        project_id      INTEGER NOT NULL,
+        batch_id        TEXT,
+        case_id         INTEGER,
+        tp_id           TEXT,
+        status          TEXT,
+        detail          TEXT,
+        duration_ms     INTEGER DEFAULT 0,
+        screenshot_path TEXT,
+        log_path        TEXT,
+        mode            TEXT,
+        source_kind     TEXT,
+        created_at      TEXT
+    )
+    """,
+    # F12 执行留痕：批次终态（legacy 列名对齐 + 只增列）
+    # total/done/status_counts/state/started_at/finished_at 与 legacy 同名；
+    # filters/webhook_url 为 F17（服务化：异步 + webhook）预留，当前留空。
+    """
+    CREATE TABLE IF NOT EXISTS run_batches (
+        batch_id      TEXT PRIMARY KEY,
+        project_id    INTEGER NOT NULL,
+        mode          TEXT,
+        source_kind   TEXT,
+        total         INTEGER DEFAULT 0,
+        done          INTEGER DEFAULT 0,
+        status_counts TEXT DEFAULT '{}',
+        state         TEXT,
+        started_at    TEXT,
+        finished_at   TEXT,
+        error         TEXT,
+        filters       TEXT,
+        webhook_url   TEXT,
+        updated_at    TEXT
+    )
+    """,
     """
     CREATE TABLE IF NOT EXISTS schema_meta (
         key   TEXT PRIMARY KEY,
@@ -107,6 +148,9 @@ SCHEMA: tuple[str, ...] = (
     )
     """,
 )
+
+# schema 版本：新增 runs / run_batches（F12 执行留痕）→ 1 → 2
+SCHEMA_VERSION = "2"
 
 INDEXES: tuple[str, ...] = (
     "CREATE INDEX IF NOT EXISTS idx_fp_project ON functional_points(project_id)",
@@ -127,6 +171,11 @@ INDEXES: tuple[str, ...] = (
     " ON test_points(project_id, tp_id) WHERE tp_id IS NOT NULL",
     "CREATE UNIQUE INDEX IF NOT EXISTS uq_cases_project_tp_id"
     " ON cases(project_id, tp_id) WHERE tp_id IS NOT NULL",
+    # F12：执行留痕查询索引（按项目列批次、按批次取逐条、按用例追溯历史）
+    "CREATE INDEX IF NOT EXISTS idx_runs_project ON runs(project_id)",
+    "CREATE INDEX IF NOT EXISTS idx_runs_batch ON runs(batch_id)",
+    "CREATE INDEX IF NOT EXISTS idx_runs_case ON runs(case_id)",
+    "CREATE INDEX IF NOT EXISTS idx_run_batches_project ON run_batches(project_id)",
 )
 
 # v1.1 预留列（只加不改）
@@ -166,7 +215,10 @@ def init_db(conn: sqlite3.Connection | None = None) -> None:
             cur.execute(ddl)
         for table, column, coltype in _ADDITIVE_COLUMNS:
             ensure_column(conn, table, column, coltype)
-        cur.execute("INSERT OR REPLACE INTO schema_meta(key, value) VALUES('schema_version', '1')")
+        cur.execute(
+            "INSERT OR REPLACE INTO schema_meta(key, value) VALUES('schema_version', ?)",
+            (SCHEMA_VERSION,),
+        )
         conn.commit()
     finally:
         if own:
