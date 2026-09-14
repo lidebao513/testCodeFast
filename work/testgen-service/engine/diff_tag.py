@@ -4,10 +4,21 @@
   - 全量通道：不做 diff，所有测试点标 `全量`；
   - 增量通道：`git diff base..target` → 变更文件集 + hunk 行区间 → 命中即标 `更新`。
 
+两种增量基准形态：
+  - **双 ref**：`base..target`，两个 ref 都必须能解析为 commit（真·版本对比）；
+  - **工作树**（`target=WORKTREE`）：`git diff base`，比较 base 与**当前工作区**
+    （含未提交改动）——这正是「拿到一份代码、只想知道相对基线改了什么」的常用形态，
+    无需先把改动提交出来。行号取自工作区，与扫描的源码天然对齐。
+
 安全约束（沿用 legacy 的实战教训）：
   - 先做**仓库可用性校验**：若 `.git` 向上逃逸到祖先仓库（孤儿 `.git` 目录），
     一律阻断，避免 `git -C <target>` 误伤本项目仓库、或拿到错误的 diff；
   - git 调用一律走参数列表（不经 shell），并设超时。
+
+诚实约束（F7）：
+  本模块**只负责如实报错**：`base/target` 明确给出却不可解析时抛 `ValueError`，
+  由调用方决定是否降级——历史上这里曾静默降级为全量，导致所有「更新」标签失真
+  且无任何告警（失效的 `test-20260906/07` ref 就是这类）。
 """
 
 from __future__ import annotations
@@ -26,6 +37,15 @@ _GIT_TIMEOUT = 60
 # @@ -old_start,old_len +new_start,new_len @@
 _HUNK_RE = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
 _DIFF_FILE_RE = re.compile(r"^\+\+\+ b/(.+)$")
+
+# 工作树哨兵：`--target WORKTREE` 表示「不与某个 commit 比，而与当前工作区比」。
+# 这是唯一被 accept 的非 ref 取值——其余无法解析的 target 一律报错，不再静默降级。
+WORKTREE_TARGET = "WORKTREE"
+
+
+def is_worktree_target(target: str | None) -> bool:
+    """`target` 是否为工作树哨兵（大小写不敏感）。"""
+    return (target or "").strip().upper() == WORKTREE_TARGET
 
 
 def run_git(
@@ -88,10 +108,15 @@ def refs_available(repo: str | Path, *refs: str) -> bool:
     return True
 
 
-def compute_changed_files(repo: str | Path, base: str, target: str) -> set[str]:
-    """返回变更文件集合（正斜杠相对路径）。"""
+def _diff_range(base: str, target: str | None) -> str:
+    """构造 git diff 的版本区间：`base..target`，或 `base`（与工作区比较）。"""
+    return f"{base}..{target}" if target else base
+
+
+def compute_changed_files(repo: str | Path, base: str, target: str | None = None) -> set[str]:
+    """返回变更文件集合（正斜杠相对路径）；`target=None` 表示与工作区比较。"""
     try:
-        cp = run_git(repo, ["diff", "--name-only", f"{base}..{target}"])
+        cp = run_git(repo, ["diff", "--name-only", _diff_range(base, target)])
     except (OSError, subprocess.SubprocessError):
         return set()
     if cp.returncode != 0:
@@ -100,11 +125,11 @@ def compute_changed_files(repo: str | Path, base: str, target: str) -> set[str]:
 
 
 def compute_diff_hunks(
-    repo: str | Path, base: str, target: str
+    repo: str | Path, base: str, target: str | None = None
 ) -> dict[str, list[tuple[int, int]]]:
-    """返回 {相对路径: [(新文件起始行, 行数), ...]}。"""
+    """返回 {相对路径: [(新文件起始行, 行数), ...]}；`target=None` 表示与工作区比较。"""
     try:
-        cp = run_git(repo, ["diff", "-U0", f"{base}..{target}"])
+        cp = run_git(repo, ["diff", "-U0", _diff_range(base, target)])
     except (OSError, subprocess.SubprocessError):
         return {}
     if cp.returncode != 0:
@@ -174,14 +199,23 @@ def tag_of_symbol(rel: str, start_line: int, end_line: int, ctx: DiffContext) ->
 def build_context(repo: str | Path, base: str | None, target: str | None) -> DiffContext:
     """构造差异上下文（含安全校验）。
 
-    - base/target 为空 → 全量通道（返回空上下文）
-    - 仓库逃逸 → 抛 RepoEscapeBlockedError
-    - ref 不可解析 → 抛 ValueError（调用方决定是否降级全量）
+    - base/target 任一为空 → 全量通道（返回空上下文，调用方据此标『全量』）
+    - 仓库逃逸 → 抛 WorkspaceEscapeBlocked
+    - **target = WORKTREE** → 与当前工作区比较（只校验 base）
+    - ref 不可解析 → 抛 ValueError（**调用方须显式处理，不得静默降级**）
     """
     if not base or not target:
         return DiffContext()
     if repo_escape_blocked(repo):
         raise WorkspaceEscapeBlocked(f"{repo} 的 git 顶层逃逸到祖先目录，已阻断")
+    if is_worktree_target(target):
+        if not refs_available(repo, base):
+            raise ValueError(f"基线 ref 不可解析：{base}（工作树模式只校验基线）")
+        return DiffContext(
+            changed_files=compute_changed_files(repo, base, None),
+            hunks=compute_diff_hunks(repo, base, None),
+            aligned=True,  # 行号取自当前工作区，与被扫描的源码天然对齐
+        )
     if not refs_available(repo, base, target):
         raise ValueError(f"ref 不可解析：{base} / {target}")
     return DiffContext(

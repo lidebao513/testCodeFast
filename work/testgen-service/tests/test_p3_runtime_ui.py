@@ -921,7 +921,9 @@ def test_merge_runtime_fps_runtime_wins_on_same_key() -> None:
     ]
     merged, stats = _merge_runtime_fps(static, runtime)
     keys = [(fp.ftype, fp.name) for fp in merged]
-    assert stats == {"added": 1, "replaced": 1}
+    assert stats["added"] == 1
+    assert stats["replaced"] == 1
+    assert stats["deduped"] == 0
     assert len(merged) == 3
     assert keys.count(("page", "/pc/tasks")) == 1
     assert next(fp for fp in merged if fp.name == "/pc/tasks").title == "运行时"  # 运行时优先

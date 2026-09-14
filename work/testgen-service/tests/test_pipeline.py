@@ -4,10 +4,14 @@ import json
 import re
 from pathlib import Path
 
+import pytest
+
 from core import store
+from core.config import get_settings
 from core.contracts import FunctionalPoint
 from core.enums import FType, Tag, TPType, is_http_method
-from engine import pipeline, semantic_enrich
+from core.errors import EngineError
+from engine import diff_tag, pipeline, semantic_enrich
 from output.writer import OutputWriter
 
 
@@ -77,11 +81,54 @@ def test_incremental_mode_tags_update(fresh_db, git_repo):
     assert result.tag_summary.get(Tag.FULL.value, 0) > 0, "未变更文件仍应保留『全量』测试点"
 
 
-def test_incremental_bad_ref_degrades_to_full(fresh_db, git_repo):
-    result = _run(git_repo, mode="incremental", base="nope", target="nope2")
-    assert any("降级为全量" in n for n in result.notes)
+def test_incremental_bad_ref_raises_instead_of_silent_full(fresh_db, git_repo):
+    """F7 回归：显式给出却不可解析的 ref **必须报错**，不得静默降级为全量。
+
+    历史缺陷：`except (ValueError, OSError)` 后降级为全量继续跑，于是「全部功能点都被
+    标成全量」这个明显错误的结果**静默**流到下游（失效的 `test-20260906/07` 就是这类）。
+    """
+    with pytest.raises(EngineError) as exc:
+        _run(git_repo, mode="incremental", base="nope", target="nope2")
+    message = str(exc.value)
+    assert "基线不可解析" in message
+    assert "git rev-parse --verify" in message  # 报错必须给出可执行的修法
+
+
+def test_incremental_without_base_is_loud_but_not_fatal(fresh_db, git_repo):
+    """仅「未指定」基线时才降级为全量，且必须在备注里说清楚为什么。"""
+    result = _run(git_repo, mode="incremental")
+    assert any("未指定基线" in n for n in result.notes), result.notes
     assert result.tag_summary.get(Tag.UPDATE.value, 0) == 0
     assert result.counts["test_points"] > 0
+
+
+def test_incremental_worktree_target_compares_working_tree(fresh_db, git_repo):
+    """`--target WORKTREE`：与当前工作区比较（未提交改动也应标『更新』）。"""
+    api = git_repo / "billing" / "api.py"
+    api.write_text(
+        api.read_text(encoding="utf-8")
+        + '\n\n@router.get("/uncommitted")\n'
+        + "def uncommitted_probe():\n"
+        + '    """未提交的新接口。"""\n'
+        + "    return {}\n",
+        encoding="utf-8",
+    )
+    result = _run(git_repo, mode="incremental", base="HEAD", target=diff_tag.WORKTREE_TARGET)
+    assert any("增量通道" in n for n in result.notes), result.notes
+    assert not any("未指定基线" in n for n in result.notes)
+    assert result.tag_summary.get(Tag.UPDATE.value, 0) > 0
+
+
+def test_llm_design_enabled_reports_unimplemented(fresh_db, sample_repo):
+    """F10a：「配了以为生效」必须被消除——开关打开但能力未实现时明确上报。"""
+    get_settings().llm_design_enabled = True
+    result = _run(sample_repo)
+
+    joined = " ".join(result.errors)
+    assert "LLM 用例设计" in joined, result.errors
+    assert "尚未实现" in joined
+    assert "未新增任何 LLM 用例" in joined  # 必须说清「没生效」，而不是让人以为生效了
+    assert result.counts["cases"] == result.counts["test_points"], "不得凭空多出用例"
 
 
 def test_evidence_attached_by_rule_engine(fresh_db, sample_repo):

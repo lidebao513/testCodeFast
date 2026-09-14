@@ -28,6 +28,46 @@ def test_scan_skips_excluded_dirs(tmp_path):
     assert not any(p.startswith("node_modules") for p in files)
 
 
+def test_scan_skips_pytest_temp_artifacts(tmp_path):
+    """回归：`.pytest_tmp`（pytest `--basetemp`）里装着上一轮测试的夹具仓库副本，不是被测源码。
+
+    真机自测暴露：扫本服务自身时它被当成源码扫进来，产出大量「幽灵功能点」
+    （`.pytest_tmp/<case>/sample_app/billing/api.py`），并让语义去重凭空收敛 351 条
+    ——数字被污染而不自知。
+    """
+    (tmp_path / "app").mkdir()
+    (tmp_path / "app" / "main.py").write_text("x = 1\n", encoding="utf-8")
+    ghost = tmp_path / ".pytest_tmp" / "test_case0" / "sample_app" / "billing"
+    ghost.mkdir(parents=True)
+    (ghost / "api.py").write_text("y = 1\n", encoding="utf-8")
+
+    files = scan.Scanner(tmp_path).index()
+    assert "app/main.py" in files
+    assert not any(".pytest_tmp" in rel for rel in files), sorted(files)
+
+
+def test_scan_is_not_fooled_by_ancestor_dir_names(tmp_path):
+    """回归：排除规则按「相对仓库根」判定，不看绝对路径。
+
+    早期实现用 `p.parts`（绝对路径）匹配排除目录，于是**只要仓库位于名为
+    `build/ dist/ env/ .pytest_tmp/` 的目录下，整个仓库都会被当成排除目录 →
+    扫描结果静默变 0 文件**（与「漏 .tsx 导致前端整层不可见」同一类静默丢层）。
+    """
+    root = tmp_path / "build" / "sample_app"  # 祖先目录名恰好是排除名
+    (root / "billing").mkdir(parents=True)
+    (root / "billing" / "api.py").write_text("x = 1\n", encoding="utf-8")
+
+    files = scan.Scanner(root).index()
+    assert "billing/api.py" in files, "祖先目录名不得导致整仓被排除"
+
+    # 但仓库**内部**的同名目录仍必须排除（相对路径判定）
+    (root / "build").mkdir()
+    (root / "build" / "gen.py").write_text("y = 1\n", encoding="utf-8")
+    inside = scan.Scanner(root).index()
+    assert "billing/api.py" in inside
+    assert not any(rel.startswith("build/") for rel in inside), sorted(inside)
+
+
 def test_scan_marks_noise(sample_repo):
     files = scan.Scanner(sample_repo).index()
     assert files["billing/api.py"].is_noise is False

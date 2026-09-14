@@ -36,7 +36,7 @@ from core.enums import (
 )
 from core.errors import AppError
 from core.log import setup_logging
-from engine import pipeline
+from engine import diff_tag, pipeline
 from engine.scan import Scanner
 from output.writer import OutputWriter
 
@@ -50,7 +50,11 @@ def _build_parser() -> argparse.ArgumentParser:
     pipe.add_argument("--name", default="", help="项目名（缺省用目录名或被测主机名）")
     pipe.add_argument("--mode", default=None, choices=list(MODE_CHOICES))
     pipe.add_argument("--base", default=None, help="增量模式基线 ref")
-    pipe.add_argument("--target", default=None, help="增量模式目标 ref")
+    pipe.add_argument(
+        "--target",
+        default=None,
+        help=f"增量模式目标 ref；给 {diff_tag.WORKTREE_TARGET} 表示与当前工作区比较（无需提交）",
+    )
     pipe.add_argument(
         "--scopes",
         default=None,

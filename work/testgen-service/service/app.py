@@ -253,19 +253,35 @@ class AnalyzeRequest(BaseModel):
 
 @app.post("/api/v1/analyze", dependencies=[Depends(require_auth)])
 def analyze(req: AnalyzeRequest) -> dict[str, Any]:
-    """只做「扫描 + 功能点提取」，不生成测试点与用例。"""
-    from engine import fp_extract, scan  # 局部导入：避免服务壳顶部依赖过重
+    """只做「扫描 + 功能点提取」，不生成测试点与用例。
+
+    应用与流水线**同一套**功能点语义合并口径（F5），否则同一份代码经 `/analyze`
+    与 `/pipeline` 会得到两个不同的功能点数——那是最难排查的一类「数字不一致」。
+    """
+    from engine import fp_extract, fp_merge, scan  # 局部导入：避免服务壳顶部依赖过重
 
     scanner = scan.Scanner(req.local_path)
     files = scanner.index()
     extracted = fp_extract.extract_functional_points(
         files, include_business=req.include_business, extract_pages=req.extract_pages
     )
+    fps = extracted.functional_points
+    merge_stats: dict[str, Any] = {"deduped": 0}
+    if settings.fp_semantic_merge:
+        fps, merge_stats = fp_merge.dedupe_functional_points(fps)
+    counts: dict[str, int] = {}
+    for fp in fps:
+        counts[fp.ftype] = counts.get(fp.ftype, 0) + 1
     return {
         "files": len(files),
-        "counts": extracted.counts,
+        "counts": counts,
+        "fp_semantic_merge": {
+            "rule_version": fp_merge.MERGE_RULE_VERSION,
+            "deduped": int(merge_stats.get("deduped", 0)),
+            "examples": list(merge_stats.get("examples") or []),
+        },
         "errors": extracted.errors[:20],
-        "functional_points": [fp.to_dict() for fp in extracted.functional_points[:500]],
+        "functional_points": [fp.to_dict() for fp in fps[:500]],
     }
 
 

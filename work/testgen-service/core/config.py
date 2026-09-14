@@ -112,6 +112,10 @@ class Settings:
         default_factory=lambda: ["tools", "agents", "mcp_servers", "workspace/skills"]
     )
 
+    # F5：功能点语义合并（口径见 engine/fp_merge.py）。开=同一语义的多条功能点收敛为一条，
+    # 避免「真实后端 + mock server / 静态 + 运行时」重复计数；关=保留全部原始功能点（对照用）。
+    fp_semantic_merge: bool = True
+
     # P2：PRD 通道（需求文档 / OpenAPI 作为用例设计的补充来源）
     prd_enabled: bool = False
     prd_dir: Path = field(default_factory=lambda: PROJECT_ROOT / "prd")
@@ -164,6 +168,7 @@ class Settings:
             "auth_enabled": bool(self.auth_token),
             "business_extract_mode": self.business_extract_mode,
             "business_include_dirs": self.business_include_dirs,
+            "fp_semantic_merge": self.fp_semantic_merge,
             # P2
             "prd_enabled": self.prd_enabled,
             "prd_dir": str(self.prd_dir),
@@ -276,6 +281,7 @@ def load_settings(env: dict[str, str] | None = None) -> Settings:
             "BUSINESS_EXTRACT_MODE",
             BUSINESS_EXTRACT_CHOICES,
         ),
+        fp_semantic_merge=_as_bool(g("FP_SEMANTIC_MERGE"), True),
         business_include_dirs=_split_list(
             g("BUSINESS_INCLUDE_DIRS"),
             ["tools", "agents", "mcp_servers", "workspace/skills"],

@@ -13,7 +13,8 @@
 ---------------------------------------------------------
 1. **代码通道**：`local_path` 指向被测代码目录 → 静态扫描 → 功能点 → 测试点 → 用例；
 2. **地址通道**：`target.base_url` + 账号密码 → 运行时 UI 发现 → 功能点 → 测试点 → 用例。
-   两者可**同时提供**：地址通道发现的功能点按 `(ftype, name)` 并入静态集合（运行时优先），
+   两者可**同时提供**：地址通道发现的功能点按**语义等价**（层类型对齐 + 路径归一，
+   口径见 `engine/fp_merge.py`）并入静态集合（运行时优先），
    用例正文由 A2 用真实路由 / 元素 / 控制台基线富化。
 
    `local_path` 因此改为**可选**：既没有代码目录、也没开运行时发现时，入口直接报错
@@ -40,6 +41,8 @@ from engine import (
     diff_tag,
     executor,
     fp_extract,
+    fp_merge,
+    llm_design,
     prd_ingest,
     runtime_ui,
     scan,
@@ -210,30 +213,60 @@ def stage_extract(
         business_extract_mode=cfg.business_extract_mode,
         business_include_dirs=cfg.business_include_dirs,
     )
-    result.counts["functional_points"] = len(extracted.functional_points)
+    fps = extracted.functional_points
+    # F5：同源去重（真实后端 vs mock server 这类「同一路由声明两遍」）。
+    # 必须在测试点展开之前完成——否则重复功能点会各自展开测试点与用例（重复计数）。
+    if cfg.fp_semantic_merge:
+        fps, merge_stats = fp_merge.dedupe_functional_points(fps)
+        result.counts["fp_merged"] = int(merge_stats["deduped"])
+        line = fp_merge.summary_line(merge_stats, "同源功能点语义去重")
+        if line:
+            result.notes.append(line)
+    result.counts["functional_points"] = len(fps)
     result.errors.extend(extracted.errors[:20])
-    return extracted.functional_points
+    return fps
 
 
 # ============================================================================
 # 阶段 3：差异打标
 # ============================================================================
 def _build_diff_context(opts: PipelineOptions) -> tuple[diff_tag.DiffContext, list[str]]:
-    """构造差异上下文；异常一律**降级为全量**并记录，不阻断主链路。"""
+    """构造差异上下文；**只在「未指定基线」时**才降级为全量并记录。
+
+    F7：`base/target` 明确给出却不可解析（ref 失效、不是本仓库对象、git 执行失败）
+    必须**立刻报错**。原实现在此处 `except (ValueError, OSError)` 后降级为全量继续跑，
+    于是「所有功能点都被标成全量」这一明显错误的结果会**静默**流到下游——
+    历史上 `test-20260906/07` 两个 ref 失效正是这样被吞掉的。
+    """
     notes: list[str] = []
     if not opts.is_incremental:
         notes.append("全量通道：不做 diff，全部标为『全量』")
+        return diff_tag.DiffContext(), notes
+    if not opts.base or not opts.target:
+        notes.append(
+            "增量通道未指定基线：无法计算变更集，本次所有功能点均标『全量』"
+            "（如需增量请显式给出 --base 与 --target，或 --target "
+            f"{diff_tag.WORKTREE_TARGET} 与工作区比较）"
+        )
         return diff_tag.DiffContext(), notes
     try:
         ctx = diff_tag.build_context(opts.local_path, opts.base, opts.target)
     except WorkspaceEscapeBlocked as exc:
         raise EngineError(f"增量通道被阻断：{exc.message}") from exc
-    except (ValueError, OSError) as exc:
-        notes.append(f"增量通道不可用（{exc}），已降级为全量")
-        return diff_tag.DiffContext(), notes
+    except ValueError as exc:
+        raise EngineError(
+            f"增量通道基线不可解析：{exc}。已显式给出 --base/--target 就必须能解析——"
+            "此处静默降级为全量会让『更新』标签全部失真且无告警。"
+            "请核对 ref（git rev-parse --verify <ref>），"
+            f"或用 --target {diff_tag.WORKTREE_TARGET} 比较当前工作区。"
+        ) from exc
+    except OSError as exc:
+        raise EngineError(f"增量通道不可用（git 执行失败）：{exc}") from exc
     notes.append(
         f"增量通道：变更文件 {len(ctx.changed_files)} 个，hunk 覆盖 {len(ctx.hunks)} 个文件"
     )
+    if not ctx.is_incremental:
+        notes.append("增量通道：基线到目标之间**无差异**（变更文件 0 个）")
     return ctx, notes
 
 
@@ -331,9 +364,27 @@ def stage_llm_design(
     result: PipelineResult,
     progress: ProgressFn | None,
 ) -> list[CaseSpec]:
-    """P2 接入点：基于功能点 + PRD 上下文设计用例（当前为骨架，原样返回）。"""
+    """P2 接入点：基于功能点 + PRD 上下文设计用例（F10a）。
+
+    原实现命中开关后**原样返回**：不报错、不产用例、不写备注——于是
+    `LLM_DESIGN_ENABLED=on` 成了一条「配了以为生效」的静默陷阱，使用者会把
+    规则模板产物误当成 LLM 增强结果。现在改为**如实上报**：能力未就绪时写进
+    `result.errors`，明确说明「本次未新增任何 LLM 用例」。
+    """
     _emit(progress, "llm_design", enabled=True)
-    return result.cases
+    try:
+        designed = llm_design.design_cases(
+            result.functional_points, result.test_points, result.prd_doc
+        )
+    except NotImplementedError as exc:
+        result.errors.append(
+            "LLM 用例设计开关已打开，但该能力尚未实现（engine/llm_design.py::design_cases）："
+            f"{exc}；本次未新增任何 LLM 用例，用例集仍为规则模板产物（{len(result.cases)} 条）"
+        )
+        return result.cases
+    # 能力就绪后在此把设计结果并入用例集；当前实现为桩，正常走不到这里。
+    result.counts["llm_design_cases"] = len(designed.cases)
+    return [*result.cases, *designed.cases]
 
 
 # ============================================================================
@@ -402,32 +453,18 @@ def stage_runtime_ui(
 
 def _merge_runtime_fps(
     static_fps: list[FunctionalPoint], runtime_fps: list[FunctionalPoint]
-) -> tuple[list[FunctionalPoint], dict[str, int]]:
-    """把运行时发现的 UI 功能点并入静态功能点集合（M3.4）。
+) -> tuple[list[FunctionalPoint], dict[str, Any]]:
+    """把运行时发现的 UI 功能点并入静态功能点集合（M3.4 + F5）。
 
-    去重键 = `(ftype, name)` **而非** `fp_id`：静态与运行时的 `file_path` 不同
-    （静态是真实源码路径，运行时是 `runtime:<url>`），`fp_id` 必然不同，
-    但语义上是同一个 UI 面（如同一路径 `/pc/tasks`）——只有按 (ftype, name) 才能正确判重。
-    冲突时**运行时优先**（运行时是线上真实可达面，静态可能过时）。
-    返回 (合并后的集合, 统计)。
+    去重键**不是** `fp_id`：静态与运行时的 `file_path` 不同（静态是真实源码路径，
+    运行时是 `runtime:<url>`），`fp_id` 必然不同，但语义上是同一个 UI 面
+    （如同一路径 `/pc/tasks`）——只有按「层类型对齐 + 名称归一」才能正确判重。
+
+    判定与保留规则见 `engine/fp_merge.py`（口径 v1.0）：同族内按归一化名称判等价，
+    冲突时**运行时优先**（线上真实可达面 > 静态源码，静态可能过时）；
+    解析不出语义键的项（component / business）原样保留，绝不误并。
     """
-    stats = {"added": 0, "replaced": 0}
-    index: dict[tuple[str, str], int] = {}
-    merged: list[FunctionalPoint] = []
-    for fp in static_fps:
-        index[(fp.ftype, fp.name)] = len(merged)
-        merged.append(fp)
-    for fp in runtime_fps:
-        key = (fp.ftype, fp.name)
-        pos = index.get(key)
-        if pos is None:
-            index[key] = len(merged)
-            merged.append(fp)
-            stats["added"] += 1
-        else:
-            merged[pos] = fp
-            stats["replaced"] += 1
-    return merged, stats
+    return fp_merge.merge_functional_points(static_fps, runtime_fps)
 
 
 def stage_execute(
@@ -604,11 +641,16 @@ def run_pipeline(
             )
             result.functional_points = merged
             result.counts["functional_points"] = len(merged)
-            result.counts["runtime_ui_fp_added"] = stats["added"]
-            result.counts["runtime_ui_fp_replaced"] = stats["replaced"]
+            result.counts["runtime_ui_fp_added"] = int(stats["added"])
+            result.counts["runtime_ui_fp_replaced"] = int(stats["replaced"])
+            result.counts["runtime_ui_fp_deduped"] = int(stats["deduped"])
             result.notes.append(
-                f"运行时补入 {stats['added']} 条 UI 功能点（覆盖静态同名 {stats['replaced']} 条）"
+                f"运行时补入 {stats['added']} 条 UI 功能点"
+                f"（覆盖静态同名 {stats['replaced']} 条，语义收敛重复 {stats['deduped']} 条）"
             )
+            examples = list(stats.get("examples") or [])
+            if examples:
+                result.notes.append("语义合并明细（示例）：" + "；".join(examples))
     _, tag_by_fp = stage_tag(opts, result, result.functional_points, progress)
     tps = stage_test_points(opts, result, result.functional_points, tag_by_fp, progress)
     result.test_points = stage_enrich(opts, result, tps, result.functional_points, progress)

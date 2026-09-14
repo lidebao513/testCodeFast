@@ -30,6 +30,17 @@ DEFAULT_EXCLUDE_DIRS: frozenset[str] = frozenset(
         "dist",
         "build",
         "site-packages",
+        # 测试/工具产生的临时目录：**.pytest_tmp 必须排除**。
+        # 它是本项目的 pytest `--basetemp`（见 pyproject `addopts`），里面装着**上一轮测试
+        # 生成的夹具仓库副本**（含 .py 源码）。真机自测暴露：扫本服务自身时它被当成源码，
+        # 产出大量「幽灵功能点」（如 `.pytest_tmp/<case>/sample_app/billing/api.py`），
+        # 并让语义去重凭空收敛 351 条——数字全被污染而不自知。
+        ".pytest_tmp",
+        ".tmp",
+        ".cache",
+        ".tox",
+        ".nox",
+        "htmlcov",
         # 非业务审计/快照工具目录：research-agent 仓库根自带 `audit_safeguard/`，
         # 其内部 `snapshot/audit_safeguard/...` 是整个产品代码的**整仓副本**，
         # 若不排除会被重复扫描，产生约 176 个重复功能点 / ~213 条重复用例。
@@ -124,7 +135,13 @@ class Scanner:
         self.max_bytes = max_bytes
 
     def iter_files(self) -> Iterator[SourceFile]:
-        """按稳定顺序产出文件（排序保证跨运行结果一致）。"""
+        """按稳定顺序产出文件（排序保证跨运行结果一致）。
+
+        **排除规则按「相对仓库根的目录名」判定**，不看绝对路径。
+        为什么必须如此：早期实现用 `p.parts`（绝对路径）匹配，于是只要仓库本身位于某个
+        叫 `build/ dist/ env/ .pytest_tmp/` 的目录下，整个仓库都会被判为「排除目录」
+        → 扫描结果**静默变 0 文件**（与「漏 .tsx 导致前端整层不可见」同一类静默丢层）。
+        """
         if not self.root.is_dir():
             return
         paths: list[Path] = []
@@ -133,7 +150,7 @@ class Scanner:
                 continue
             if p.suffix.lower() not in self.exts:
                 continue
-            if any(seg in self.exclude_dirs for seg in p.parts):
+            if any(seg in self.exclude_dirs for seg in self.rel_dir_parts(p)):
                 continue
             try:
                 if p.stat().st_size > self.max_bytes:
@@ -148,6 +165,13 @@ class Scanner:
             except OSError:
                 continue
             yield SourceFile(rel=self.rel_of(p), abspath=p, text=text)
+
+    def rel_dir_parts(self, path: Path) -> tuple[str, ...]:
+        """路径**相对仓库根**的目录片段（不含文件名）；不在根内则退回绝对片段。"""
+        try:
+            return path.relative_to(self.root).parts[:-1]
+        except ValueError:
+            return path.parts[:-1]
 
     def rel_of(self, path: Path) -> str:
         """转成相对仓库根的正斜杠路径（与 git diff 路径形态一致）。"""

@@ -131,10 +131,14 @@ class ReviewStatus(Enum):
 
 # ============================ 拉取状态（pull） ============================
 class PullStatus(Enum):
-    """拉取代码的结果状态（与 scripts/pull_code.py::PullStatus 逐值一致）。
+    """拉取代码的结果状态（**外部前置契约**，取值与技能 `qa-code-pull` 的
+    `pull_code.py` 约定一致）。
 
-    scripts/pull_code.py 为独立脚本（运行时零耦合、不 import backend），其内部
-    维护同值本地枚举；两侧一致性由 tests/test_pull_code.py 守护。
+    归属说明（修正原失实 docstring）：取码能力**不在本服务内**——`scripts/pull_code.py`
+    与 `tests/test_pull_code.py` 均不属于 testgen-service（服务内不存在这两个文件，
+    原先声称「由测试守护」会误导接手人）。本枚举在服务内的唯一用途是
+    `/health` 的存活状态串（`PullStatus.OK`）；真正的取码由外部技能完成并把
+    代码落到 `--path`。F1 将决定是把它内聚成服务能力，还是明确标注为外部契约。
     """
 
     OK = "ok"
