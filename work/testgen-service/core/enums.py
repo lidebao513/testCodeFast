@@ -175,6 +175,11 @@ PRD_FORMAT_OPENAPI = "openapi"
 PRD_FORMAT_AUTO = "auto"
 PRD_FORMAT_CHOICES = (PRD_FORMAT_MARKDOWN, PRD_FORMAT_OPENAPI, PRD_FORMAT_AUTO)
 
+# ============================ P3 · 运行时浏览器 UI 发现 ============================
+# 运行时 UI 发现模式（单一真值）；当前仅 playwright 一种实现，预留扩展。
+RUNTIME_UI_PLAYWRIGHT = "playwright"
+RUNTIME_UI_MODE_CHOICES = (RUNTIME_UI_PLAYWRIGHT,)
+
 # ============================ 范围常量（Scope · 唯一真值） ============================
 # 行为维度全集（顺序即展示顺序）
 ALL_TP_TYPES = [t.value for t in TPType]

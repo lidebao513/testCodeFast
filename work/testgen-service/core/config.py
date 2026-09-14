@@ -111,6 +111,13 @@ class Settings:
     prd_dir: Path = field(default_factory=lambda: PROJECT_ROOT / "prd")
     llm_design_enabled: bool = False  # 在语义增强之外，叠加 LLM 用例设计
 
+    # P3：运行时浏览器 UI 发现 / 执行（默认关闭：本服务仍以代码静态分析为主）
+    runtime_ui_enabled: bool = False
+    playwright_headless: bool = True
+    runtime_base_url: str = ""  # 被测环境地址（由用户提供，经 .env 注入）
+    runtime_auth_token_env: str = "RUNTIME_AUTH_TOKEN"  # 凭证取自此环境变量（不入库）
+    executor_enabled: bool = False  # P3：用例执行器（接口探活 / 浏览器交互）
+
     # 鉴权：为空表示不校验（仅限内网/开发）
     auth_token: str = ""
 
@@ -174,6 +181,7 @@ def load_settings(env: dict[str, str] | None = None) -> Settings:
         prd_enabled=_as_bool(g("PRD_ENABLED"), False),
         prd_dir=(Path(prd_dir_env).expanduser().resolve() if prd_dir_env else PROJECT_ROOT / "prd"),
         llm_design_enabled=_as_bool(g("LLM_DESIGN_ENABLED"), False),
+        executor_enabled=_as_bool(g("EXECUTOR_ENABLED"), False),
         auth_token=g("AUTH_TOKEN") or "",
         business_extract_mode=_as_choice(
             g("BUSINESS_EXTRACT_MODE"),

@@ -253,6 +253,37 @@ def stage_llm_design(
 
 
 # ============================================================================
+# 阶段 5.7（P3 接入骨架）：运行时 UI 发现 + 用例执行
+# ============================================================================
+def stage_runtime_ui(
+    opts: PipelineOptions,
+    result: PipelineResult,
+    progress: ProgressFn | None,
+) -> Any | None:
+    """P3 接入点：运行时浏览器 UI 发现（当前为骨架，返回 None）。
+
+    后续实现惰性导入 Playwright，由 runtime_ui.discover_ui 驱动；
+    结果反向补全 / 校验 UI 测试点。启用 runtime_ui_enabled 即触发本钩子。
+    """
+    _emit(progress, "runtime_ui", enabled=True)
+    return None
+
+
+def stage_execute(
+    opts: PipelineOptions,
+    result: PipelineResult,
+    progress: ProgressFn | None,
+) -> Any | None:
+    """P3 接入点：执行生成的用例（当前为骨架，返回 None）。
+
+    后续实现由 executor.execute_case 分派 requests / Playwright；
+    执行结果回填 cases.last_result 与 runs。启用 executor_enabled 即触发本钩子。
+    """
+    _emit(progress, "execute", enabled=True)
+    return None
+
+
+# ============================================================================
 # 阶段 6：用例生成
 # ============================================================================
 def stage_cases(
@@ -356,6 +387,12 @@ def run_pipeline(
         result.prd_doc = stage_prd_ingest(opts, result, progress)
     if s.llm_design_enabled:
         result.cases = stage_llm_design(opts, result, progress)
+    if s.runtime_ui_enabled:
+        result.notes.append("runtime_ui 接入点已触发（P3 骨架未实现，discover_ui 待落地）")
+        stage_runtime_ui(opts, result, progress)
+    if s.executor_enabled:
+        result.notes.append("executor 接入点已触发（P3 骨架未实现，execute_case 待落地）")
+        stage_execute(opts, result, progress)
     stage_persist(opts, result, progress)
 
     _emit(progress, "done", **result.counts)
