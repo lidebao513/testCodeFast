@@ -107,6 +107,40 @@ def test_project_name_and_routes_labels_are_recognized():
     assert parsed.routes == ["/pc/tasks", "/pc/email"]
 
 
+# ---------------------------------------------------------------- 解析：空格式（中文习惯）
+def test_space_separated_labels_are_recognized():
+    """中文习惯的混排：`账号 test004 密码 xxx`（**无分隔符**）也必须成链。
+
+    这是最容易被漏掉的一种输入——漏了它，用户按习惯粘贴就被静默降级成匿名访问。
+    """
+    parsed = parse_auto_input(
+        "https://example.com/bmp/login 账号 test004 密码 MyPass123 动态口令 260326 "
+        "范围 正常,异常 代码目录 C:\\code\\repo"
+    )
+    assert parsed.login_url == "https://example.com/bmp/login"
+    assert parsed.url == "https://example.com"
+    assert parsed.user == "test004"
+    assert parsed.password == "MyPass123"
+    assert parsed.otp == "260326"
+    assert parsed.scopes == ["正常", "异常"]
+    assert parsed.local_path == "C:\\code\\repo"
+    assert parsed.has_credentials()
+
+
+def test_space_style_value_may_equal_an_alias_without_swallowing_next_field():
+    """值恰好长得像标签（用户名就叫 `user`）时，空格式的值只取单个 token，不得吃穿到下一个字段。"""
+    parsed = parse_auto_input("用户名 user 密码 Pass1234")
+    assert parsed.user == "user"
+    assert parsed.password == "Pass1234"
+
+
+def test_unknown_space_label_words_are_not_swallowed():
+    """空格式**只认已知别名**：`角色 admin` 里的 `角色` 不是标签，应作为未识别片段如实回报。"""
+    parsed = parse_auto_input("角色 admin")
+    assert parsed.user == ""
+    assert "角色" in parsed.unknown or any("角色" in u for u in parsed.unknown)
+
+
 # ---------------------------------------------------------------- 凭证红线
 def test_redacted_view_never_exposes_plaintext_credentials():
     parsed = parse_auto_input("账号: someone@corp.com 密码: SuperSecret9 动态码: 260909")

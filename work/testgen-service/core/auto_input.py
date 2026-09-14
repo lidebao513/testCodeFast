@@ -11,7 +11,7 @@
 设计原则
 --------
 - **纯规则、无网络、无 LLM**：可单测、可复现，不产生额外调用成本；
-- **标签优先、形态兜底**：`账号: xxx` 这类显式标签最可靠；无标签的裸 token 按形态
+- **标签优先、形态兜底**：`账号: xxx` / `账号 xxx` 这类显式标签最可靠；无标签的裸 token 按形态
   （URL / 邮箱 / 已存在目录 / 纯数字口令 / 密码特征）推断；
 - **不臆造**：识别不出的片段原样收进 `unknown` 并如实回报，**绝不静默丢弃**；
 - **凭证红线**：结果含明文凭证，`redacted()` 是唯一允许打印 / 返回 / 落库的视图
@@ -322,31 +322,63 @@ _SETTERS: dict[str, Callable[[AutoInputResult, str], None]] = {
 # ============================================================================
 # 主解析
 # ============================================================================
-# `标签: 值` 的切分：标签限 2~16 个中英文/下划线字符，且**必须**跟在行首或分隔符之后。
+# 两种标签写法并存——真实输入里两种都常见：
+#   1. `标签: 值`（显式分隔符，值可含空格，一直取到下一个标签）；
+#   2. `标签 值`（**空格分隔，无分隔符**）——中文习惯写法，如「账号 test004 密码 xxx」。
+#      此式**只认已知别名**，且值只取**紧随其后的单个 token**：否则整句里的普通词都会被
+#      当成标签，且「值恰好长得像标签」（如用户名就叫 `user`）时会把整段吞掉。
+#
 # 两条硬约束（都踩过坑）：
 #   1. 标签至少 2 个字符——否则 `C:\code\repo` 里的 `C:` 会被当成标签（Windows 盘符），
 #      整条路径被吞进「未知片段」，裸串路径识别直接失效；
-#   2. 值不得以反斜杠开头——`D:\x` 里的 `D:`
-#      之后必是 `\`，那是路径不是标签值。
-_LABEL_RE = re.compile(r"(?:^|[\s,;，；、|])([A-Za-z_\u4e00-\u9fff]{2,16})\s*[:=：＝]\s*")
+#   2. 显式分隔符式的值不得以 `//` 或反斜杠开头——`http://…` 的 `http:` 是 URL 方案名，
+#      `D:\…` 的 `D:` 是盘符，都不是标签。
+_LABEL_COLON_RE = re.compile(r"(?:^|[\s,;，；、|])([A-Za-z_\u4e00-\u9fff]{2,16})\s*[:=：＝]\s*")
+_LABEL_SPACE_RE = re.compile(r"(?:^|[\s,;，；、|])([A-Za-z_\u4e00-\u9fff]{2,16})[ \t]+(\S+)")
+
+
+def _label_candidates(text: str) -> list[tuple[int, int, int | None, str]]:
+    """收集候选标签位点，返回 `(标签起始, 值起点, 值的硬上限|None, 标签)`（已排序去重叠）。
+
+    值的硬上限仅空格式有（= 紧随 token 的结束位置）；显式分隔符式为 `None`，
+    表示值可继续延伸，由调用方截断到下一个标签起点。
+    """
+    raw: list[tuple[int, int, int | None, str, int]] = []
+    for match in _LABEL_COLON_RE.finditer(text):
+        following = text[match.end() : match.end() + 2]
+        if following == "//" or following.startswith("\\"):
+            continue  # `http://…` 的 `http:`；`D:\…` 的 `D:`
+        raw.append((match.start(), match.end(), None, match.group(1), 0))
+    for match in _LABEL_SPACE_RE.finditer(text):
+        if _normalize_label(match.group(1)) in _LABEL_ALIASES:
+            raw.append((match.start(), match.start(2), match.end(2), match.group(1), 1))
+    raw.sort(key=lambda hit: (hit[0], hit[4]))
+
+    kept: list[tuple[int, int, int | None, str]] = []
+    for start, value_start, hard_end, label, _priority in raw:
+        if kept:
+            prev_value_start, prev_hard_end = kept[-1][1], kept[-1][2]
+            inside_value = prev_hard_end is not None and start < prev_hard_end
+            if start < prev_value_start or inside_value:
+                continue  # 落在上一个标签或它已消费的值里 → 是同一段的尾巴，丢弃
+        kept.append((start, value_start, hard_end, label))
+    return kept
 
 
 def _label_spans(text: str) -> list[tuple[int, int, str, str]]:
-    """切出所有 `标签: 值` 片段，返回 (起始, 结束, 标签, 值)。"""
+    """切出所有标签片段，返回 `(起始, 结束, 标签, 值)`。"""
+    candidates = _label_candidates(text)
     spans: list[tuple[int, int, str, str]] = []
-    matches = list(_LABEL_RE.finditer(text))
-    for idx, match in enumerate(matches):
-        following = text[match.end() : match.end() + 2]
-        if following == "//" or following.startswith("\\"):
-            continue  # `http://…` 是 URL 方案名；`D:\…` 是 Windows 路径，都不是标签
-        value_end = matches[idx + 1].start() if idx + 1 < len(matches) else len(text)
-        newline = text.find("\n", match.end())
+    for idx, (start, value_start, hard_end, label) in enumerate(candidates):
+        next_start = candidates[idx + 1][0] if idx + 1 < len(candidates) else len(text)
+        value_end = next_start if hard_end is None else min(hard_end, next_start)
+        newline = text.find("\n", value_start)
         if newline != -1:
             value_end = min(value_end, newline)
-        value = text[match.end() : value_end].strip().strip(_QUOTES)
+        value = text[value_start:value_end].strip().strip(_QUOTES)
         value = value.strip(",;，；、|").strip()
         if value:
-            spans.append((match.start(), value_end, match.group(1), value))
+            spans.append((start, value_end, label, value))
     return spans
 
 
@@ -397,9 +429,10 @@ def _finalize(result: AutoInputResult) -> None:
 def parse_auto_input(text: str) -> AutoInputResult:
     """把一段混排文本解析为结构化运行参数（纯函数，反复调用结果一致）。
 
-    支持两种写法混排：
-        标签式： `地址: http://host:8090/chat 账号: t@ft 密码: Tp0909@test 动态码: 260909`
-        裸串式： `http://host:8090/chat t@ft Tp0909@test 260909`
+    支持三种写法混排：
+        标签式（分隔符）： `地址: http://host:8090/chat 账号: t@ft 密码: Tp0909@test 动态码: 260909`
+        标签式（空格）：   `地址 http://host:8090/chat 账号 test004 密码 Tp0909@test 范围 正常,异常`
+        裸串式：           `http://host:8090/chat t@ft Tp0909@test 260909`
     未被识别的部分进 `unknown`，由调用方一并回报给用户。
     """
     result = AutoInputResult()
