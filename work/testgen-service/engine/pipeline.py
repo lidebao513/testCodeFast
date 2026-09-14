@@ -19,7 +19,7 @@ from core import store
 from core.config import get_settings
 from core.contracts import CaseSpec, FunctionalPoint, TestPoint
 from core.db import init_db
-from core.enums import Tag, TPType
+from core.enums import FType, Tag, TPType, VerifyLayer
 from core.errors import EngineError, WorkspaceEscapeBlocked
 from core.log import get_logger, log_extra
 from engine import case_gen, diff_tag, fp_extract, scan, semantic_enrich, tp_expand
@@ -136,8 +136,13 @@ def stage_extract(
     progress: ProgressFn | None,
 ) -> list[FunctionalPoint]:
     _emit(progress, "fp_extract", files=len(files))
+    cfg = get_settings()
     extracted = fp_extract.extract_functional_points(
-        files, include_business=opts.include_business, extract_pages=opts.extract_pages
+        files,
+        include_business=opts.include_business,
+        extract_pages=opts.extract_pages,
+        business_extract_mode=cfg.business_extract_mode,
+        business_include_dirs=cfg.business_include_dirs,
     )
     result.counts["functional_points"] = len(extracted.functional_points)
     result.errors.extend(extracted.errors[:20])
@@ -229,7 +234,28 @@ def stage_cases(
     result: PipelineResult, tps: list[TestPoint], progress: ProgressFn | None
 ) -> list[CaseSpec]:
     _emit(progress, "case_gen", tp=len(tps))
-    cases = case_gen.generate_cases(tps)
+    s = get_settings()
+    # 已有 UI 覆盖的模块集合：用于判定接口层用例是否仅为「补充」
+    ui_modules = {
+        fp.module
+        for fp in result.functional_points
+        if fp.ftype in (FType.PAGE.value, FType.COMPONENT.value, FType.UI.value)
+    }
+    cases = case_gen.generate_cases(
+        tps,
+        ui_modules=ui_modules,
+        strategy=s.layer_strategy,
+        drop_supplement=s.drop_supplement_cases,
+    )
+    # UI 优先排序：UI 层用例置于接口层之前，同层按模块+编号稳定排序
+    layer_rank = {VerifyLayer.UI.value: 0, VerifyLayer.INTERFACE.value: 1}
+    cases.sort(
+        key=lambda c: (
+            layer_rank.get(str(c.steps[0].get("layer")) if c.steps else "", 1),
+            c.module,
+            c.tc_no,
+        )
+    )
     result.counts["cases"] = len(cases)
     bad = [c.tc_no for c in cases if c.missing_elements()]
     if bad:

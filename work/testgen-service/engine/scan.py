@@ -30,12 +30,33 @@ DEFAULT_EXCLUDE_DIRS: frozenset[str] = frozenset(
         "dist",
         "build",
         "site-packages",
+        # 非业务审计/快照工具目录：research-agent 仓库根自带 `audit_safeguard/`，
+        # 其内部 `snapshot/audit_safeguard/...` 是整个产品代码的**整仓副本**，
+        # 若不排除会被重复扫描，产生约 176 个重复功能点 / ~213 条重复用例。
+        # 该目录只含 gen_manifest/restore_audit 等审计工具，不是被测产品代码。
+        "audit_safeguard",
     }
 )
 
 # 测试/脚手架文件名前缀：参与扫描但不作为「业务功能点」来源
 NOISE_FILE_PREFIXES: tuple[str, ...] = ("test_", "conftest", "selftest_", "verify_")
-NOISE_DIR_PARTS: tuple[str, ...] = ("tests", "test", "docs", "examples", "migrations")
+# 非业务目录（整文件排除）：测试/文档/迁移 + 回归套件/脚手架/夹具/构建脚本。
+# research-agent 实测：regression/_fx_test/scripts/fixtures 目录含大量测试套件与构建脚本，
+# 其内部的「公开函数」被旧逻辑当成业务功能点（约 207 条），属明显噪声，应整文件排除。
+# 注意：conf/schema 不在本集合——它们可能含真实 API 路由，留给 fp_extract 的
+# 「业务函数级」噪声过滤（_file_is_business_noise）单独收窄，避免误伤接口。
+NOISE_DIR_PARTS: tuple[str, ...] = (
+    "tests",
+    "test",
+    "docs",
+    "examples",
+    "migrations",
+    "regression",
+    "_fx_test",
+    "fixtures",
+    "scripts",
+    "selftest",
+)
 
 # ---------------------------------------------------------------- 扩展名（单一真值）
 # 前端类扩展名：**扫描器与 fp_extract 必须共用同一份**，否则会出现

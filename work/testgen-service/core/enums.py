@@ -145,6 +145,29 @@ class PullStatus(Enum):
     TARGET_NOT_EMPTY = "target_not_empty"  # 非空且非 git 目录，无法克隆进入
 
 
+# ============================ 覆盖层策略（Layer Strategy · UI 优先） ============================
+# UI 优先覆盖策略：以代码为依据，优先生成 UI 层用例；当某功能/场景 UI 层无法覆盖时，
+# 改由接口层用例补充（标记为 supplement）。详见 qa-test-points 技能 §十三。
+LAYER_STRATEGY_UI_FIRST = "ui_first"  # UI 优先：UI 为主，接口仅做补充
+LAYER_STRATEGY_ALL = "all"  # 旧行为：两层独立全量生成，不区分主次
+LAYER_STRATEGY_CHOICES = (LAYER_STRATEGY_UI_FIRST, LAYER_STRATEGY_ALL)
+
+# 用例覆盖角色（写入 steps[0].coverage_role，契约 Additive，旧消费方忽略）
+COVERAGE_ROLE_PRIMARY = "primary"  # 该层是此能力的优先/唯一覆盖方式
+COVERAGE_ROLE_SUPPLEMENT = "supplement"  # 接口层用例，对应能力已有 UI 覆盖，接口仅作补充
+
+
+# ============================ 业务函数提取模式（P1 · 收窄） ============================
+# strict：排除测试/脚手架/构建脚本/配置模式类文件中的「业务函数」（不计入业务功能点）。
+#         仅保留被显式认定为「独立能力」的目录（tools/agents/mcp_servers 等，见配置白名单）。
+# loose ：保留所有公开业务函数（legacy 全量行为，不做收窄）。
+# 注意：该模式**只对业务函数（FType.BUSINESS）生效**，不影响 API 路由 / 页面 / 组件的提取，
+#       避免误伤真实接口（详见 qa-test-points 技能 §十四）。
+BUSINESS_EXTRACT_STRICT = "strict"
+BUSINESS_EXTRACT_LOOSE = "loose"
+BUSINESS_EXTRACT_CHOICES = (BUSINESS_EXTRACT_STRICT, BUSINESS_EXTRACT_LOOSE)
+
+
 # ============================ 范围常量（Scope · 唯一真值） ============================
 # 行为维度全集（顺序即展示顺序）
 ALL_TP_TYPES = [t.value for t in TPType]

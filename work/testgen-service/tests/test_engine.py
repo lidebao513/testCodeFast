@@ -157,6 +157,77 @@ def test_execution_layer_follows_verify_layer_not_http_verb(sample_repo):
     assert page.steps[0]["action"] == "ui_probe"
 
 
+def test_http_case_kind_is_api_not_empty(sample_repo):
+    """HTTP 接口用例的 `steps[0].kind` 必须是 `api`，不得为空串。
+
+    回归要点：`kind` 曾对 HTTP 路由返回 `""`，其他类型是 page/ui/business；
+    下游按 `kind` 分组时，整类 HTTP 接口用例（本仓 722 条）会被静默漏掉。
+    """
+    _, result = _extract(sample_repo)
+    tps = tp_expand.expand_all(
+        result.functional_points, tp_expand.ExpandContext(scopes={TPType.NORMAL.value})
+    )
+    api_tps = [tp for tp in tps if tp.verify_layer == VerifyLayer.INTERFACE.value]
+    assert api_tps, "样例仓库应含接口类测试点"
+    for tp in api_tps:
+        kind = case_gen.build_case(tp).steps[0]["kind"]
+        assert kind in {f.value for f in FType}, f"kind 必须是 FType 取值，实际 {kind!r}"
+
+
+def test_doc_steps_wording_matches_layer(sample_repo):
+    """人工步骤文案必须与执行层一致——页面/函数不能写成「发请求」。
+
+    回归要点：早期实现一律套用 HTTP 模板，产出「构造请求：PAGE /」「发送 FUNC main 请求」，
+    并统一断言「响应状态码符合预期」，对 UI 层与函数层属语义错误（实测影响 993/1715 条）。
+    """
+    _, result = _extract(sample_repo)
+    tps = tp_expand.expand_all(
+        result.functional_points, tp_expand.ExpandContext(scopes={TPType.NORMAL.value})
+    )
+    by_kind = {}
+    for tp in tps:
+        case = case_gen.build_case(tp)
+        by_kind.setdefault(case.steps[0]["kind"], case)
+
+    page_text = " ".join(s["desc"] for s in by_kind[FType.PAGE.value].doc_steps)
+    assert "打开页面" in page_text
+    assert "请求" not in page_text
+    assert "状态码" not in page_text
+
+    biz_text = " ".join(s["desc"] for s in by_kind[FType.BUSINESS.value].doc_steps)
+    assert "调用函数" in biz_text
+    assert "请求" not in biz_text
+
+    api_text = " ".join(s["desc"] for s in by_kind[FType.API.value].doc_steps)
+    assert "构造请求" in api_text
+    assert "状态码" in api_text
+
+
+def test_precondition_matches_layer(sample_repo):
+    """前置条件必须与执行层一致：UI 层不该要求 base_url / HTTP token。
+
+    回归要点：前置条件早期只按「维度」生成，UI 层用例也写着「base_url 可达…需持有有效 token」，
+    而 UI 层既不用 base_url 也不需要 HTTP 凭证，执行人员按此准备无从下手。
+    """
+    _, result = _extract(sample_repo)
+    tps = tp_expand.expand_all(
+        result.functional_points, tp_expand.ExpandContext(scopes={TPType.NORMAL.value})
+    )
+    by_kind = {}
+    for tp in tps:
+        case = case_gen.build_case(tp)
+        by_kind.setdefault(case.steps[0]["kind"], case)
+
+    ui_pre = by_kind[FType.PAGE.value].precondition
+    assert "前端可访问" in ui_pre
+    assert "浏览器" in ui_pre
+    assert "base_url" not in ui_pre
+    assert "token" not in ui_pre
+
+    api_pre = by_kind[FType.API.value].precondition
+    assert "base_url" in api_pre
+
+
 # ---------------------------------------------------------------- 安全维度
 def test_security_dimension_only_for_api(sample_repo):
     """安全维度只在接口类功能点上展开（页面/组件/业务函数不产出安全测试点）。

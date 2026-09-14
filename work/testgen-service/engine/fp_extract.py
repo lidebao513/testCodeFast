@@ -18,7 +18,7 @@ import re
 from dataclasses import dataclass, field
 
 from core.contracts import FunctionalPoint, fp_id_of
-from core.enums import FType
+from core.enums import BUSINESS_EXTRACT_STRICT, FType
 from engine.scan import FRONTEND_EXTS, SourceFile
 
 
@@ -47,7 +47,50 @@ _UI_HOOK_RE = re.compile(
 # 组件来源扩展名：.vue 为 legacy 原有；.tsx/.jsx 是 React 主战场，legacy 未覆盖
 _COMPONENT_EXTS: tuple[str, ...] = (".tsx", ".jsx", ".vue")
 
+# 屏幕目录：位于这些目录下的前端文件视为「页面/屏幕」（即使自身不写 path= 路由声明，
+# 它也是被路由渲染出来的完整页面）。这是修复「UI 层偏少」的关键：原实现只认 `path=` 声明，
+# 漏掉了所有「路由渲染出来的屏幕」（如 pages/mobile/MobileChatPage.tsx）。
+_SCREEN_DIRS: tuple[str, ...] = ("pages", "views", "screens")
+# 屏幕文件名：*Page / *Screen（React/Vue 常见命名）
+_SCREEN_NAME_RE = re.compile(r".*(Page|Screen)\.(tsx|jsx|vue|ts|js)$")
+
 _SKIP_FUNC_PREFIXES: tuple[str, ...] = ("_", "test_")
+
+
+def _is_screen(rel: str, text: str) -> bool:
+    """屏幕判定（宽松、可扩展）：命中任一即视为「页面/屏幕」。
+
+    1) 声明了路由 `path=`（如 App.tsx 路由树、带自我路由的页面）；
+    2) 位于 `pages/ views/ screens/` 目录；
+    3) 文件名形如 `*Page` / `*Screen`。
+    """
+    if _PAGE_PATH_RE.search(text):
+        return True
+    parts = rel.split("/")
+    if any(d in parts for d in _SCREEN_DIRS):
+        return True
+    return bool(_SCREEN_NAME_RE.search(parts[-1]))
+
+
+def _has_ui_hooks(sf: SourceFile) -> bool:
+    """是否含交互钩子（与 _extract_components 同源判定）。"""
+    return bool(_UI_HOOK_RE.search(sf.text))
+
+
+def _screen_fp(sf: SourceFile) -> FunctionalPoint:
+    """为「无 path= 声明的屏幕文件」生成一条页面功能点（按文件名路由化）。"""
+    stem = sf.name
+    name = f"/{stem}" if not stem.startswith("/") else stem
+    return FunctionalPoint(
+        fp_id=fp_id_of(FType.PAGE.value, sf.rel, name),
+        ftype=FType.PAGE.value,
+        file_path=sf.rel,
+        name=name,
+        title=f"{module_of(sf.rel)} · 页面/{stem}",
+        module=module_of(sf.rel),
+        semantic=f"前端屏幕（{sf.rel}）",
+        description=f"{sf.rel}",
+    )
 
 
 @dataclass
@@ -233,7 +276,45 @@ def _qualified_names(tree: ast.Module) -> dict[int, str]:
     return out
 
 
-def _extract_api_and_business(sf: SourceFile, tree: ast.Module) -> list[FunctionalPoint]:
+# 业务噪声目录片段（仅用于「业务函数」级过滤，与 scan.NOISE_DIR_PARTS 不同）：
+# 这些目录下的文件**整文件可能不被排除**（如 conf/schema 可能含真实 API），
+# 但其内部「业务函数」不是被测产品的独立能力（测试套件/脚手架/构建脚本/配置模式），
+# strict 模式下不计入业务功能点。regression/_fx_test/fixtures/scripts/selftest 虽也在本集合，
+# 但它们已被 scan.NOISE_DIR_PARTS 整文件排除，此处仅作防御性冗余判定。
+_BUSINESS_NOISE_DIR_PARTS: frozenset[str] = frozenset(
+    {"regression", "_fx_test", "fixtures", "scripts", "selftest", "conf", "schema"}
+)
+_BUSINESS_NOISE_FILE_PREFIXES: tuple[str, ...] = ("test_", "conftest", "verify_", "selftest_")
+
+
+def _file_is_business_noise(rel: str, mode: str, include_dirs: list[str]) -> bool:
+    """判断某文件中的「业务函数」是否应被排除（不计入业务功能点）。
+
+    - mode != "strict"：从不排除（保留 legacy 全量行为）。
+    - mode == "strict"：命中业务噪声信号（目录片段 / 文件名前缀）则排除；
+      但落在 include_dirs 白名单（如 tools/agents/mcp_servers）下的文件除外——
+      这些目录被显式认定为独立能力来源，其业务函数应保留。
+    """
+    if mode != BUSINESS_EXTRACT_STRICT:
+        return False
+    rel_norm = rel.replace("\\", "/")
+    parts = rel_norm.split("/")
+    # 白名单优先：落在独立能力目录下，业务函数保留
+    if any(
+        rel_norm == d.rstrip("/") or rel_norm.startswith(d.rstrip("/") + "/") for d in include_dirs
+    ):
+        return False
+    if parts[-1].startswith(_BUSINESS_NOISE_FILE_PREFIXES):
+        return True
+    return any(p in _BUSINESS_NOISE_DIR_PARTS for p in parts[:-1])
+
+
+def _extract_api_and_business(
+    sf: SourceFile,
+    tree: ast.Module,
+    business_extract_mode: str = BUSINESS_EXTRACT_STRICT,
+    business_include_dirs: list[str] | None = None,
+) -> list[FunctionalPoint]:
     module = module_of(sf.rel)
     prefix = _router_prefix(tree)
     qualnames = _qualified_names(tree)
@@ -268,6 +349,10 @@ def _extract_api_and_business(sf: SourceFile, tree: ast.Module) -> list[Function
             continue
         # 公开业务函数（无装饰器、非私有、非测试）
         if node.name.startswith(_SKIP_FUNC_PREFIXES):
+            continue
+        # P1 · 业务函数噪声过滤（strict 模式）：测试/脚手架/配置类文件中的函数排除，
+        # 避免把测试套件/构建脚本/配置模式当成被测业务能力（详见 qa-test-points 技能 §十四）。
+        if _file_is_business_noise(sf.rel, business_extract_mode, business_include_dirs or []):
             continue
         qname = qualnames.get(id(node), node.name)  # 机器键：类内方法带类名前缀，避免同名碰撞
         summary = _docstring_summary(node)
@@ -336,12 +421,14 @@ def _extract_components(sf: SourceFile) -> list[FunctionalPoint]:
 
 
 # ---------------------------------------------------------------- 对外入口
-def extract_functional_points(
+def extract_functional_points(  # noqa: C901, PLR0913
     files: dict[str, SourceFile],
     *,
     include_business: bool = True,
     extract_pages: bool = True,
     extract_components: bool = True,
+    business_extract_mode: str = BUSINESS_EXTRACT_STRICT,
+    business_include_dirs: list[str] | None = None,
 ) -> ExtractResult:
     """从已扫描文件集中提取功能点（同文件只解析一次 AST）。"""
     result = ExtractResult()
@@ -355,14 +442,21 @@ def extract_functional_points(
                 if tree is None:
                     result.errors.append(f"{rel}: AST 解析失败，已跳过")
                     continue
-                fns = _extract_api_and_business(sf, tree)
+                fns = _extract_api_and_business(
+                    sf, tree, business_extract_mode, business_include_dirs
+                )
                 if not include_business:
                     fns = [f for f in fns if f.ftype == FType.API.value]
                 result.functional_points.extend(fns)
             elif sf.ext in FRONTEND_EXTS:
-                if extract_pages:
-                    result.functional_points.extend(_extract_pages(sf))
-                if extract_components:
+                # 单文件单决策：屏幕优先判定为「页面」，否则（含交互钩子）判为「交互组件」。
+                # 避免一个屏幕文件同时产出「页面 + 组件」两条 UI 功能点造成重复。
+                if extract_pages and _is_screen(sf.rel, sf.text):
+                    pages = _extract_pages(sf)
+                    if not pages:
+                        pages = [_screen_fp(sf)]
+                    result.functional_points.extend(pages)
+                elif extract_components and _has_ui_hooks(sf):
                     result.functional_points.extend(_extract_components(sf))
         except (SyntaxError, ValueError, AttributeError) as exc:
             result.errors.append(f"{rel}: {type(exc).__name__}: {exc}")

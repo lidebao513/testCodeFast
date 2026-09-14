@@ -180,6 +180,8 @@ class CaseSpec:
     test_type: str = Tag.FULL.value
     status: str = "generated"
     version: int = 1
+    # 覆盖角色（UI 优先策略）：primary=该层优先/唯一覆盖；supplement=接口层用例且对应能力已有 UI 覆盖
+    coverage_role: str = ""
 
     def expect(self) -> str:
         """八要素之「预期结果」：落在 steps[0].expect。"""
@@ -218,8 +220,17 @@ def priority_of(category: str, module: str) -> str:
     return "P2"
 
 
-def precondition_of(category: str) -> str:
-    """前置条件规则。"""
+def precondition_of(category: str, layer: str | None = None) -> str:
+    """前置条件规则（须与执行层一致）。
+
+    早期实现只看「维度」，不看执行层，导致 UI 层用例的前置条件写着
+    「base_url 可达…需持有有效 token」——UI 层既不用 base_url 也不需要 HTTP token，
+    执行人员按此准备会无从下手。`layer` 缺省时保持接口层文案（向后兼容）。
+    """
+    if layer == VerifyLayer.UI.value:
+        if category == TPType.SECURITY.value:
+            return "被测服务已启动且前端可访问；已准备具备/不具备权限的两个测试账号"
+        return "被测服务已启动且前端可访问；已准备可用浏览器（Playwright）与测试账号（如需登录）"
     if category == TPType.ABNORMAL.value:
         return "被测服务已启动且 base_url 可达；已明确合法/非法输入的构造方式"
     return "被测服务已启动，base_url 可达；涉及鉴权接口需持有有效 token（或测试账号可匿名访问）"
