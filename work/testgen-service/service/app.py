@@ -21,10 +21,11 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from core import store
+from core.auto_input import parse_auto_input
 from core.config import get_settings
 from core.contracts import CONTRACT_VERSION
 from core.db import connect, init_db
-from core.enums import ALL_TP_TYPES, DEFAULT_SCOPE_LIST, PullStatus
+from core.enums import ALL_TP_TYPES, MODE_FULL, PullStatus
 from core.errors import AppError, UnauthorizedError, ValidationError
 from core.log import get_logger, log_extra, set_request_id
 from engine import pipeline
@@ -98,14 +99,14 @@ def _is_managed(local_path: str) -> bool:
 # 请求模型
 # ============================================================================
 class PipelineRequest(BaseModel):
-    local_path: str = Field(..., description="被测代码所在目录（绝对或相对路径）")
-    project_name: str = Field("", description="项目名（缺省用目录名）")
-    mode: str = Field("full", description="full=全量扫描 / incremental=增量扫描")
+    local_path: str = Field("", description="被测代码所在目录（可选；与 test_url 至少给一个）")
+    project_name: str = Field("", description="项目名（缺省用目录名或被测主机名）")
+    mode: str = Field("", description="full=全量扫描 / incremental=增量扫描（留空=默认 full）")
     base: str | None = Field(None, description="增量模式基线 ref")
     target: str | None = Field(None, description="增量模式目标 ref")
     scopes: list[str] = Field(
-        default_factory=lambda: list(DEFAULT_SCOPE_LIST),
-        description="行为维度范围：正常/异常/安全/边界（默认 正常+安全+边界）",
+        default_factory=list,
+        description="行为维度范围：正常/异常/安全/边界（留空=默认 正常+安全+边界）",
     )
     prd_source: str = Field("", description="PRD / OpenAPI 文件路径（启用 PRD 通道时使用）")
     include_business: bool = Field(True, description="是否提取业务函数功能点")
@@ -113,6 +114,24 @@ class PipelineRequest(BaseModel):
     persist: bool = Field(True, description="是否落库")
     llm_enhance: bool = Field(False, description="是否启用 LLM 增强通道")
     readonly_lock: bool = Field(False, description="分析完成后是否把目录置只读")
+    # —— 地址通道（A1）：凭证字段只用于本次运行，**绝不回显、不落库、不入产物** ——
+    test_url: str = Field("", description="被测环境地址（走运行时 UI 发现）")
+    login_url: str = Field("", description="登录页地址（缺省自动判定）")
+    login_user: str = Field("", description="登录账号（更推荐用环境变量注入）")
+    login_password: str = Field("", description="登录密码（更推荐用环境变量注入）")
+    login_otp: str = Field("", description="动态口令（更推荐用环境变量注入）")
+    runtime_routes: list[str] = Field(default_factory=list, description="显式路由（优先级最高）")
+    runtime_ui: bool = Field(False, description="启用运行时 UI 发现（等价 RUNTIME_UI_ENABLED=on）")
+    auto_input: str = Field("", description="统一智能输入框：一段混排文本（地址+账号+密码+口令）")
+    execute: bool = Field(False, description="执行生成的用例（接口层）")
+    allow_write: bool = Field(False, description="放行写操作；默认只跑只读请求")
+    exec_url: str = Field("", description="执行器被测服务地址（只跑接口层时可单独指定）")
+
+
+class ParseInputRequest(BaseModel):
+    """统一智能输入框解析请求（只解析、不跑流水线）。"""
+
+    text: str = Field("", description="混排文本：地址 / 账号 / 密码 / 动态口令 / 代码路径")
 
 
 # ============================================================================
@@ -144,19 +163,52 @@ def ready() -> dict[str, Any]:
 # ============================================================================
 # 业务端点 v1
 # ============================================================================
+def _apply_request(req: PipelineRequest, opts: pipeline.PipelineOptions) -> None:
+    """把请求字段覆盖到选项上（表驱动）。
+
+    顺序即优先级：调用方须先让智能输入框填（可覆盖默认值），再调本函数（覆盖输入框）。
+    """
+    for attr in ("project_name", "mode", "base", "target", "prd_source"):
+        value = getattr(req, attr, None)
+        if value:
+            setattr(opts, attr, value)
+    if req.scopes:
+        opts.scopes = set(req.scopes)
+    target = opts.target_req
+    for attr, value in (
+        ("base_url", req.test_url),
+        ("login_url", req.login_url),
+        ("login_user", req.login_user),
+        ("login_password", req.login_password),
+        ("login_otp", req.login_otp),
+    ):
+        if value:
+            setattr(target, attr, value)
+    if req.runtime_routes:
+        target.routes = [*req.runtime_routes, *target.routes]
+    if req.runtime_ui or req.test_url or req.login_url:
+        target.enabled = True
+    if req.exec_url:
+        target.exec_url = req.exec_url
+    target.execute = req.execute or bool(req.exec_url)
+    target.allow_write = req.allow_write
+
+
 @app.post("/api/v1/pipeline", dependencies=[Depends(require_auth)])
 def run_pipeline(req: PipelineRequest) -> dict[str, Any]:
-    """一站式：代码 → 功能点 → 测试点 → 用例（含落库与产物输出）。"""
+    """一站式：代码/地址 → 功能点 → 测试点 → 用例（含落库与产物输出）。
+
+    两条入口可单用也可并用：`local_path`（代码通道）与 `test_url`（地址通道）。
+    覆盖优先级：**请求字段 > auto_input 解析结果 > 环境变量**。
+    """
     invalid = set(req.scopes or []) - set(ALL_TP_TYPES)
     if invalid:
         raise ValidationError(f"非法行为维度：{sorted(invalid)}，允许 {ALL_TP_TYPES}")
 
-    opts = pipeline.default_options(req.local_path, mode=req.mode)
-    opts.project_name = req.project_name
-    opts.base = req.base
-    opts.target = req.target
-    opts.prd_source = req.prd_source
-    opts.scopes = set(req.scopes or [])
+    opts = pipeline.default_options(req.local_path, mode=req.mode or MODE_FULL)
+    if req.auto_input.strip():
+        pipeline.apply_auto_input(opts, parse_auto_input(req.auto_input))
+    _apply_request(req, opts)
     opts.include_business = req.include_business
     opts.extract_pages = req.extract_pages
     opts.persist = req.persist
@@ -173,10 +225,23 @@ def run_pipeline(req: PipelineRequest) -> dict[str, Any]:
         if req.readonly_lock:
             payload["readonly"] = (
                 WorkspaceManager().lock(Path(req.local_path).name, verify=True)
-                if _is_managed(req.local_path)
+                if req.local_path and _is_managed(req.local_path)
                 else {"skipped": "外部目录未纳入工作区管理"}
             )
     return payload
+
+
+@app.post("/api/v1/parse-input", dependencies=[Depends(require_auth)])
+def parse_input(req: ParseInputRequest) -> dict[str, Any]:
+    """统一智能输入框：只解析混排文本，返回**掩码视图**（可用于前端实时预览）。
+
+    绝不回显明文凭证——前端据此确认「识别对不对」，而不是把密码再抄一遍。
+    """
+    parsed = parse_auto_input(req.text)
+    return {
+        "recognized": parsed.recognized_fields(),
+        "parsed": parsed.redacted(),
+    }
 
 
 class AnalyzeRequest(BaseModel):

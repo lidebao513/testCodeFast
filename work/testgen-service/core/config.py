@@ -135,6 +135,9 @@ class Settings:
     runtime_auth_token: str = ""  # 值取自 runtime_auth_token_env 指向的环境变量
     runtime_auth_token_env: str = "RUNTIME_AUTH_TOKEN"  # 令牌来源环境变量名（不入库）
     executor_enabled: bool = False  # P3：用例执行器（接口探活 / 浏览器交互）
+    # A3：是否放行写操作（POST/PUT/PATCH/DELETE）。默认否——写操作会真实变更被测环境数据，
+    # 必须由使用者显式确认环境可写后才放行，否则接口层只执行 GET/HEAD 等只读请求。
+    executor_allow_write: bool = False
 
     # 鉴权：为空表示不校验（仅限内网/开发）
     auth_token: str = ""
@@ -175,6 +178,7 @@ class Settings:
             "playwright_headless": self.playwright_headless,
             "playwright_channel": self.playwright_channel,
             "executor_enabled": self.executor_enabled,
+            "executor_allow_write": self.executor_allow_write,
             "runtime_login_configured": bool(
                 self.runtime_login_user and self.runtime_login_password
             ),
@@ -264,6 +268,7 @@ def load_settings(env: dict[str, str] | None = None) -> Settings:
         runtime_auth_token=g(token_env_name) or "",
         runtime_auth_token_env=token_env_name,
         executor_enabled=_as_bool(g("EXECUTOR_ENABLED"), False),
+        executor_allow_write=_as_bool(g("EXECUTOR_ALLOW_WRITE"), False),
         auth_token=g("AUTH_TOKEN") or "",
         business_extract_mode=_as_choice(
             g("BUSINESS_EXTRACT_MODE"),

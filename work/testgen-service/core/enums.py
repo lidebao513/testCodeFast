@@ -181,6 +181,13 @@ PRD_FORMAT_CHOICES = (PRD_FORMAT_MARKDOWN, PRD_FORMAT_OPENAPI, PRD_FORMAT_AUTO)
 RUNTIME_UI_PLAYWRIGHT = "playwright"
 RUNTIME_UI_MODE_CHOICES = (RUNTIME_UI_PLAYWRIGHT,)
 
+# ============================ 流水线通道（mode · 单一真值） ============================
+# 为什么收进来：CLI（argparse choices）/ HTTP 契约 / 智能输入框解析 / 引擎四处都要用同
+# 一组取值；此前 "full"/"incremental" 字面量散落多处，任一处改动都会静默失配。
+MODE_FULL = "full"  # 全量：不做 diff，全部标「全量」
+MODE_INCREMENTAL = "incremental"  # 增量：base..target 变更部分标「更新」
+MODE_CHOICES = (MODE_FULL, MODE_INCREMENTAL)
+
 # ============================ 范围常量（Scope · 唯一真值） ============================
 # 行为维度全集（顺序即展示顺序）
 ALL_TP_TYPES = [t.value for t in TPType]

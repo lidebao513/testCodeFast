@@ -6,6 +6,13 @@
 
 **确定性为主**：不依赖 LLM；同一输入重复生成结果完全一致（配合 store 侧幂等对账）。
 **机器步只在 steps[0]**：执行器只读第一步，其余人类可读步骤写入 `doc_steps`。
+
+A2 富化（运行时细节落进正文）
+------------------------------
+拿到 `runtime_index`（`路径 → RuntimePageInfo`）时，UI 层用例的 `doc_steps` 会用
+**真实页面地址 / 真实可交互元素 / 控制台错误基线**替换通用模板，并在 `steps[0].runtime`
+挂上机器可读的细节（契约 Additive：只增字段，旧消费方忽略即可）。
+未提供 `runtime_index` 时行为与从前**逐字一致**，不影响「代码静态分析」通道。
 """
 
 from __future__ import annotations
@@ -29,6 +36,11 @@ from core.enums import (
     VerifyLayer,
     method_kind,
 )
+from engine.runtime_ui import RuntimePageInfo
+
+
+# 机器步里最多携带的可见元素数（防单条用例的 payload 过大）
+MAX_RUNTIME_ELEMENTS_IN_STEP = 20
 
 
 def _get(tp: Any, key: str, default: Any = "") -> Any:
@@ -47,13 +59,53 @@ def _method_kind(method: str) -> tuple[bool, str]:
     return kind == FType.API.value, kind
 
 
-def build_doc_steps(tp: Any, precondition: str, layer: str) -> list[dict[str, Any]]:
+def _runtime_steps(
+    kind: str, area: str, tail: str, info: RuntimePageInfo
+) -> tuple[str, str, str] | None:
+    """A2：有运行时细节时，用真实页面 / 元素 / 控制台基线替换通用模板。
+
+    返回 (准备, 执行, 断言) 三段文案；非 UI 面（接口 / 业务函数）返回 None，
+    由调用方回退到通用模板——接口层用例没有「页面元素」语义，硬套会误导执行人员。
+    """
+    if kind == FType.PAGE.value:
+        title = f"（页面标题：{info.title}）" if info.title else ""
+        phrases = info.element_phrases()
+        visible_desc = f"关键元素可见：{'、'.join(phrases)}" if phrases else "页面结构完整"
+        prepare = f"用浏览器打开被测环境地址 {info.url}{title}{tail}"
+        execute = f"访问 {area}，等待首屏渲染完成，并收集控制台输出"
+        baseline = info.console_errors
+        if baseline:
+            assert_desc = (
+                f"校验：页面正常渲染（无白屏）；控制台错误不超过基线 {len(baseline)} 条"
+                f"（基线示例：{baseline[0][:60]}）；{visible_desc}"
+            )
+        else:
+            assert_desc = f"校验：页面正常渲染（无白屏、无控制台报错）；{visible_desc}"
+        return prepare, execute, assert_desc
+    if kind == FType.UI.value:
+        phrases = info.element_phrases()
+        target = "、".join(phrases) if phrases else "该页面的各交互元素"
+        prepare = f"打开 {info.url}，定位交互点：{target}{tail}"
+        execute = f"依次触发 {target} 的交互（点击／输入），观察界面响应"
+        assert_desc = "校验：交互后界面按预期变化，且不新增控制台错误"
+        return prepare, execute, assert_desc
+    return None
+
+
+def build_doc_steps(
+    tp: Any,
+    precondition: str,
+    layer: str,
+    runtime_info: RuntimePageInfo | None = None,
+) -> list[dict[str, Any]]:
     """人类可读四步：前置 → 准备 → 执行 → 断言。
 
     文案必须与**执行层**一致：页面/组件不是「请求」，业务函数也不是「请求」，
     早期实现一律写成「构造请求：PAGE /」「发送 FUNC main 请求」，并统一断言
     「响应状态码符合预期」——对 UI 层与函数层属**语义错误**，人工审核与执行
     人员按此理解会走错通道（实测影响 993/1715 条用例）。
+
+    `runtime_info` 非空（该测试点来源是运行时 UI 发现的页面）时，走 A2 富化。
     """
     method = _get(tp, "method")
     area = _get(tp, "area")
@@ -64,7 +116,10 @@ def build_doc_steps(tp: Any, precondition: str, layer: str) -> list[dict[str, An
     kind = method_kind(str(method))
     is_ui = layer == VerifyLayer.UI.value
 
-    if is_ui and kind == FType.PAGE.value:
+    override = _runtime_steps(kind, area, tail, runtime_info) if runtime_info else None
+    if override is not None:
+        prepare, execute, assert_desc = override
+    elif is_ui and kind == FType.PAGE.value:
         prepare = f"打开页面：{area}{tail}"
         execute = f"访问 {area}，等待首屏渲染完成并收集控制台错误"
     elif is_ui:
@@ -77,22 +132,8 @@ def build_doc_steps(tp: Any, precondition: str, layer: str) -> list[dict[str, An
         prepare = f"准备调用上下文：{area}{tail}"
         execute = f"调用函数 {area}，捕获返回值与异常"
 
-    if category == TPType.ABNORMAL.value:
-        assert_desc = (
-            "校验：接口对非法/边界输入返回预期错误（4xx/5xx），且不产生未捕获异常或数据损坏"
-            if kind == FType.API.value
-            else "校验：函数对非法输入抛出预期异常或返回错误码，且不产生未捕获异常或数据损坏"
-        )
-    elif category == TPType.SECURITY.value:
-        assert_desc = "校验：无凭证/越权访问被拒绝（401/403），且不泄露资源内容"
-    elif kind == FType.API.value:
-        assert_desc = "校验：响应状态码符合预期，关键业务字段完整"
-    elif kind == FType.PAGE.value:
-        assert_desc = "校验：页面正常渲染（无白屏／无控制台报错），关键元素可见"
-    elif kind == FType.UI.value:
-        assert_desc = "校验：交互后界面按预期变化，无报错提示或状态残留"
-    else:
-        assert_desc = "校验：返回值符合语义，异常分支被正确捕获"
+    if override is None:
+        assert_desc = _assert_desc(category, kind)
 
     return [
         {"seq": 1, "type": "前置", "desc": precondition},
@@ -102,13 +143,51 @@ def build_doc_steps(tp: Any, precondition: str, layer: str) -> list[dict[str, An
     ]
 
 
-def build_case(
+def _assert_desc(category: str, kind: str) -> str:
+    """通用断言文案（无运行时细节时的回退）。"""
+    if category == TPType.ABNORMAL.value:
+        return (
+            "校验：接口对非法/边界输入返回预期错误（4xx/5xx），且不产生未捕获异常或数据损坏"
+            if kind == FType.API.value
+            else "校验：函数对非法输入抛出预期异常或返回错误码，且不产生未捕获异常或数据损坏"
+        )
+    if category == TPType.SECURITY.value:
+        return "校验：无凭证/越权访问被拒绝（401/403），且不泄露资源内容"
+    if kind == FType.API.value:
+        return "校验：响应状态码符合预期，关键业务字段完整"
+    if kind == FType.PAGE.value:
+        return "校验：页面正常渲染（无白屏／无控制台报错），关键元素可见"
+    if kind == FType.UI.value:
+        return "校验：交互后界面按预期变化，无报错提示或状态残留"
+    return "校验：返回值符合语义，异常分支被正确捕获"
+
+
+def _runtime_payload(info: RuntimePageInfo) -> dict[str, Any]:
+    """机器步携带的运行时细节（供 UI 层执行器使用；**不含凭证**）。"""
+    return {
+        "url": info.url,
+        "path": info.path,
+        "title": info.title,
+        "elements": [
+            {
+                "kind": str(e.get("kind") or ""),
+                "text": str(e.get("text") or ""),
+                "selector": str(e.get("selector") or ""),
+            }
+            for e in info.visible_elements()[:MAX_RUNTIME_ELEMENTS_IN_STEP]
+        ],
+        "console_error_baseline": len(info.console_errors),
+    }
+
+
+def build_case(  # noqa: PLR0913 - 生成选项本就多，显式关键字参数比选项对象更直观
     tp: Any,
     fp_row_id: int | None = None,
     *,
     ui_modules: set[str] | None = None,
     strategy: str = LAYER_STRATEGY_UI_FIRST,
     drop_supplement: bool = False,
+    runtime_index: Mapping[str, RuntimePageInfo] | None = None,
 ) -> CaseSpec | None:
     """由一条测试点构建用例规格。
 
@@ -117,6 +196,9 @@ def build_case(
     - 接口层用例：在 `ui_first` 策略下，若其所属模块已有 UI 覆盖 → `supplement`
       （接口仅作补充），否则仍为 `primary`（该后端能力 UI 无法覆盖，接口是必要的）；
     - `drop_supplement=True` 时，补充用例直接返回 None（被上层过滤丢弃）。
+
+    `runtime_index`（A2）：运行时发现的「页面路径 → 细节」；命中时富化 `doc_steps`
+    并在 `steps[0].runtime` 挂机器可读细节。
     """
     category = _get(tp, "category", TPType.NORMAL.value)
     method = str(_get(tp, "method"))
@@ -150,24 +232,27 @@ def build_case(
         return None
 
     precondition = precondition_of(category, layer)
+    runtime_info = (runtime_index or {}).get(area)
 
-    steps = [
-        {
-            "action": "ui_probe" if is_ui_layer else "http_probe",
-            "layer": layer,  # 契约「只增不破」：新增可选字段，供下游按执行层分组
-            "kind": kind,
-            "tp_id": tp_id,
-            "fp_id": fp_contract_id,
-            "source": source,
-            "file": source,  # 兼容字段：与 source 同值，供旧消费方读取
-            "method": method,
-            "path": area,
-            "func": area if kind == FType.BUSINESS.value else None,
-            "dimension": _get(tp, "dimension"),
-            "expect": expect,
-            "coverage_role": coverage_role,  # 契约 Additive：UI 优先覆盖角色
-        }
-    ]
+    step0: dict[str, Any] = {
+        "action": "ui_probe" if is_ui_layer else "http_probe",
+        "layer": layer,  # 契约「只增不破」：新增可选字段，供下游按执行层分组
+        "kind": kind,
+        "tp_id": tp_id,
+        "fp_id": fp_contract_id,
+        "source": source,
+        "file": source,  # 兼容字段：与 source 同值，供旧消费方读取
+        "method": method,
+        "path": area,
+        "func": area if kind == FType.BUSINESS.value else None,
+        "dimension": _get(tp, "dimension"),
+        "expect": expect,
+        "coverage_role": coverage_role,  # 契约 Additive：UI 优先覆盖角色
+    }
+    if runtime_info is not None:
+        # 契约 Additive：运行时发现细节，供 UI 层执行器与人工复核使用（不含凭证）
+        step0["runtime"] = _runtime_payload(runtime_info)
+    steps = [step0]
 
     return CaseSpec(
         tc_no=tp_id,
@@ -178,7 +263,7 @@ def build_case(
         case_type=str(category),
         priority=priority_of(str(category), module),
         precondition=precondition,
-        doc_steps=build_doc_steps(tp, precondition, layer),
+        doc_steps=build_doc_steps(tp, precondition, layer, runtime_info),
         tp_id=tp_id,
         fp_contract_id=fp_contract_id,
         fp_row_id=fp_row_id,
@@ -187,18 +272,20 @@ def build_case(
     )
 
 
-def generate_cases(
+def generate_cases(  # noqa: PLR0913 - 生成选项本就多，显式关键字参数比选项对象更直观
     tps: list[Any],
     fp_row_map: dict[str, int] | None = None,
     *,
     ui_modules: set[str] | None = None,
     strategy: str = LAYER_STRATEGY_UI_FIRST,
     drop_supplement: bool = False,
+    runtime_index: Mapping[str, RuntimePageInfo] | None = None,
 ) -> list[CaseSpec]:
     """批量生成：测试点 → 用例，1:1 对应（契约不变）。
 
     `ui_modules` 为「已有 UI 覆盖的模块集合」，用于判定接口层用例是否仅为补充。
     `drop_supplement=True` 时过滤掉所有补充用例（纯 UI 优先视图）。
+    `runtime_index` 见 `build_case`（A2 运行时细节富化）。
     """
     fp_row_map = fp_row_map or {}
     out: list[CaseSpec] = []
@@ -209,6 +296,7 @@ def generate_cases(
             ui_modules=ui_modules,
             strategy=strategy,
             drop_supplement=drop_supplement,
+            runtime_index=runtime_index,
         )
         if spec is not None:
             out.append(spec)

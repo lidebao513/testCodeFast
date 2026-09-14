@@ -237,6 +237,52 @@ class RuntimeUiResult:
 
 
 @dataclass
+class RuntimePageInfo:
+    """单个页面的运行时细节（A2：供用例正文富化；**不含任何凭证**）。
+
+    为什么单独建这个结构：`RuntimeUiResult` 是「一次发现的全部结果」，而用例生成需要的
+    是「按页面查细节」——一个以路径为键的索引。二者生命周期不同（前者随发现结束即归档，
+    后者随用例生成被反复查询），混用一个结构会让 case_gen 反向依赖整次发现的内部形状。
+    """
+
+    path: str
+    url: str = ""
+    title: str = ""
+    elements: list[dict[str, Any]] = field(default_factory=list)
+    console_errors: list[str] = field(default_factory=list)
+
+    def visible_elements(self) -> list[dict[str, Any]]:
+        return [e for e in self.elements if e.get("visible")]
+
+    def element_phrases(self, limit: int = 6) -> list[str]:
+        """元素的人类可读短语（`按钮「新建任务」`），超出上限折叠为「等 N 个」。"""
+        phrases: list[str] = []
+        visible = self.visible_elements()
+        for item in visible[:limit]:
+            text = str(item.get("text") or "").strip()
+            label = text or str(item.get("selector") or "")
+            phrases.append(
+                f"{_ELEMENT_KIND_CN.get(str(item.get('kind') or ''), '元素')}「{label}」"
+            )
+        rest = len(visible) - len(phrases)
+        if rest > 0:
+            phrases.append(f"等 {len(visible)} 个元素")
+        return phrases
+
+
+# 运行时元素 kind → 中文名（与 _EXTRACT_JS_TEMPLATE 的 push() 取值一一对应）
+_ELEMENT_KIND_CN: dict[str, str] = {
+    "nav": "导航项",
+    "button": "按钮",
+    "input": "输入框",
+    "select": "下拉框",
+    "textarea": "文本域",
+    "form": "表单",
+    "edit": "可编辑区域",
+}
+
+
+@dataclass
 class _Session:
     """一次浏览器会话（页面 + 其上下文）。打包传参，避免函数参数过长。"""
 
@@ -967,6 +1013,36 @@ def to_functional_points(result: RuntimeUiResult) -> list[FunctionalPoint]:
             seen.add(key)
             out.append(fp)
     return out
+
+
+def to_runtime_index(result: RuntimeUiResult | None) -> dict[str, RuntimePageInfo]:
+    """把发现结果转成「路径 → 页面运行时细节」索引（A2）。
+
+    用途：`case_gen` 按测试点的 `area`（页面路径）取出真实元素 / 控制台错误，
+    写进用例正文与机器步——这是「URL 生成」与「代码生成」用例正文**唯一**的区分点。
+    只收**可达**页面；不可达页面的细节没有验证价值。
+    """
+    if result is None:
+        return {}
+    index: dict[str, RuntimePageInfo] = {}
+    for page in result.reachable_pages():
+        path = page.path or "/"
+        index[path] = RuntimePageInfo(
+            path=path,
+            url=page.url,
+            title=(page.title or "").strip(),
+            elements=[
+                {
+                    "kind": e.kind,
+                    "text": e.text,
+                    "visible": e.visible,
+                    "selector": e.selector,
+                }
+                for e in page.elements
+            ],
+            console_errors=list(page.console_errors),
+        )
+    return index
 
 
 # ============================================================================
