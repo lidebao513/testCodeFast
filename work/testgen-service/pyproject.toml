@@ -4,7 +4,8 @@
 # - 本文件是被 pre-commit / CI 强制读取的硬约束，不是文档
 #
 # 与 legacy 的差异（有意为之）：
-#   1) 依赖不含 playwright —— 本服务只做「代码 → 测试点 → 用例」，不执行浏览器
+#   1) playwright 为**可选依赖**（optional-dependencies.runtime）——主链路仍只做
+#      「代码 → 测试点 → 用例」；P3 运行时 UI 发现启用时才装，代码内惰性导入
 #   2) ruff / mypy 不再有任何「上帝模块豁免」—— 新代码从第一天起全量严格
 #   3) 覆盖率覆盖五个源码层，阈值随阶段抬升
 # ============================================================================
@@ -31,6 +32,8 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["ruff", "pytest", "pytest-cov"]
+# P3 运行时 UI 发现 / 用例执行：默认不装，启用时 pip install -e ".[runtime]"
+runtime = ["playwright"]
 
 # ---------------------------------------------------------------------------
 # Ruff：统一的 lint + format 规则（pre-commit 与 CI 共用，保证不跑偏）
@@ -54,8 +57,14 @@ lines-after-imports = 2
 [tool.ruff.lint.per-file-ignores]
 # 测试层：需在导入前自举 sys.path，故放行 E402
 "tests/*" = ["E402"]
+# 本地工具脚本：同上（在 import core/engine 前把仓库根塞进 sys.path）
+"tools/*" = ["E402"]
 # 门禁脚本：从 legacy 同源复制，保留其存量风格豁免（不阻塞，登记为债务）
 "scripts/*" = ["PLR", "BLE", "C90", "E402", "E702", "F841"]
+# P3 运行时 UI 发现：与浏览器驱动（Playwright）交互，其异常层次宽、随版本变化，
+# 本模块策略是「驱动级失败一律转 EngineError 或记入结果，绝不中断主链路」，
+# 故集中放行 BLE001；每个捕获点均已注明理由（见 engine/runtime_ui.py）。
+"engine/runtime_ui.py" = ["BLE001"]
 
 [tool.ruff.format]
 quote-style = "double"

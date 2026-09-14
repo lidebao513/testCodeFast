@@ -6,6 +6,8 @@
 - **每个阶段一个函数**：输入输出都是显式数据，便于单测与影子双跑比对；
 - **全量 / 增量同一条链路**，差异只体现在「是否传入 diff 上下文」；
 - 任一阶段失败都带上下文抛出（`EngineError`），不吞异常。
+- **可选扩展阶段（P2/P3）默认关闭**：由 Settings 的 flag 守卫；其中 P3 运行时
+  UI 发现失败**只记错误不阻断主链路**（见 `P3_UI生成_详细设计.md` §10）。
 """
 
 from __future__ import annotations
@@ -22,7 +24,16 @@ from core.db import init_db
 from core.enums import DEFAULT_SCOPE, FType, Tag, VerifyLayer
 from core.errors import EngineError, WorkspaceEscapeBlocked
 from core.log import get_logger, log_extra
-from engine import case_gen, diff_tag, fp_extract, prd_ingest, scan, semantic_enrich, tp_expand
+from engine import (
+    case_gen,
+    diff_tag,
+    fp_extract,
+    prd_ingest,
+    runtime_ui,
+    scan,
+    semantic_enrich,
+    tp_expand,
+)
 from engine.scan import SourceFile
 
 
@@ -75,6 +86,7 @@ class PipelineResult:
     test_points: list[TestPoint] = field(default_factory=list, repr=False)
     cases: list[CaseSpec] = field(default_factory=list, repr=False)
     prd_doc: Any = None  # P2：解析后的 PRD（PrdDoc），未启用为 None
+    runtime_ui: Any = None  # P3：运行时 UI 发现结果（RuntimeUiResult），未启用为 None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -230,7 +242,7 @@ def stage_enrich(
 
 
 # ============================================================================
-# 阶段 5.5（P2 接入骨架）：PRD 通道 + LLM 用例设计
+# 阶段 5.5（P2）：PRD 通道 + LLM 用例设计
 # ============================================================================
 def stage_prd_ingest(
     opts: PipelineOptions,
@@ -273,20 +285,47 @@ def stage_llm_design(
 
 
 # ============================================================================
-# 阶段 5.7（P3 接入骨架）：运行时 UI 发现 + 用例执行
+# 阶段 5.7（P3）：运行时 UI 发现 + 用例执行
 # ============================================================================
+def _static_page_paths(fps: list[FunctionalPoint]) -> list[str]:
+    """路由优先级第 2 档：静态分析已提取的页面路径（形如 `/pc/tasks`）。"""
+    return [
+        str(fp.name)
+        for fp in fps
+        if fp.ftype in (FType.PAGE.value, FType.UI.value) and str(fp.name).startswith("/")
+    ]
+
+
 def stage_runtime_ui(
     opts: PipelineOptions,
     result: PipelineResult,
     progress: ProgressFn | None,
 ) -> Any | None:
-    """P3 接入点：运行时浏览器 UI 发现（当前为骨架，返回 None）。
+    """P3：运行时浏览器 UI 发现（真实实现，里程碑 M3.1–M3.2）。
 
-    后续实现惰性导入 Playwright，由 runtime_ui.discover_ui 驱动；
-    结果反向补全 / 校验 UI 测试点。启用 runtime_ui_enabled 即触发本钩子。
+    用 Playwright 打开被测环境、以账号密码登录、遍历路由抓取真实可交互元素，
+    结果挂到 `result.runtime_ui` 并计入 counts。
+
+    **本阶段只负责「发现」**：把发现的 UI 功能点并入功能点集合并参与测试点展开
+    属 M3.4（合并去重 + 增量标「全量」），requests 降级属 M3.5。
+    凭证经 `.env` 注入，不落库、不入产物。
     """
-    _emit(progress, "runtime_ui", enabled=True)
-    return None
+    s = get_settings()
+    _emit(progress, "runtime_ui", base_url=s.runtime_base_url)
+    if not s.runtime_base_url:
+        result.notes.append("运行时 UI 发现已跳过：未配置 RUNTIME_BASE_URL")
+        return None
+    found = runtime_ui.discover_ui(
+        runtime_ui.options_from_settings(s),
+        static_paths=_static_page_paths(result.functional_points),
+    )
+    result.runtime_ui = found
+    result.notes.extend(f"运行时 UI：{n}" for n in found.notes)
+    result.notes.append("运行时 UI 功能点尚未并入主链路（待 M3.4 合并去重）")
+    result.counts["runtime_ui_pages"] = len(found.pages)
+    result.counts["runtime_ui_reachable"] = sum(1 for p in found.pages if p.reachable)
+    result.counts["runtime_ui_elements"] = len(found.elements)
+    return found
 
 
 def stage_execute(
@@ -394,14 +433,20 @@ def run_pipeline(
     if not local.is_dir():
         raise EngineError(f"被测目录不存在：{local}")
 
+    s = get_settings()
     result = PipelineResult(mode=opts.mode)
     stage_register(opts, result)
     files = stage_scan(opts, result, progress)
     result.functional_points = stage_extract(opts, result, files, progress)
+    # P3：运行时 UI 发现（默认关闭）。失败只记错误、不阻断主链路（设计 §10）。
+    if s.runtime_ui_enabled:
+        try:
+            stage_runtime_ui(opts, result, progress)
+        except EngineError as exc:
+            result.errors.append(f"运行时 UI 发现失败：{exc.message}")
     _, tag_by_fp = stage_tag(opts, result, result.functional_points, progress)
     tps = stage_test_points(opts, result, result.functional_points, tag_by_fp, progress)
     result.test_points = stage_enrich(opts, result, tps, result.functional_points, progress)
-    s = get_settings()
     # P2：PRD 通道（默认关闭）——先解析需求并派生「业务规则」测试点，须在用例生成之前并入。
     if s.prd_enabled and opts.prd_source:
         result.prd_doc = stage_prd_ingest(opts, result, progress)
@@ -409,9 +454,6 @@ def run_pipeline(
     result.cases = stage_cases(result, result.test_points, progress)
     if s.llm_design_enabled:
         result.cases = stage_llm_design(opts, result, progress)
-    if s.runtime_ui_enabled:
-        result.notes.append("runtime_ui 接入点已触发（P3 骨架未实现，discover_ui 待落地）")
-        stage_runtime_ui(opts, result, progress)
     if s.executor_enabled:
         result.notes.append("executor 接入点已触发（P3 骨架未实现，execute_case 待落地）")
         stage_execute(opts, result, progress)

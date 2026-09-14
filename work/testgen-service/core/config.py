@@ -4,11 +4,17 @@
 - 密钥只允许出现在 `.env` / 环境变量中，**绝不硬编码**、绝不写日志；
 - 非法值（如 PORT 非数字）在启动期即抛 `ConfigError`，不拖到运行期炸；
 - 只提交 `.env.example`（占位值），真实 `.env` 由 `.gitignore` 排除。
+
+P3 凭证红线（见 `P3_UI生成_详细设计.md` §4.2）：
+- `runtime_login_password` / `runtime_auth_token` **绝不进入** `public_dict()`、
+  日志、产物 JSON、用例文本与数据库；
+- `public_dict()` 对凭证只输出 `*_configured` 布尔值。
 """
 
 from __future__ import annotations
 
 import os
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -114,15 +120,26 @@ class Settings:
     # P3：运行时浏览器 UI 发现 / 执行（默认关闭：本服务仍以代码静态分析为主）
     runtime_ui_enabled: bool = False
     playwright_headless: bool = True
+    # 浏览器通道：空=用 Playwright 自带 chromium；"msedge"/"chrome"=复用系统浏览器
+    # （沙箱内无法下载 chromium 内核时，复用系统 Edge 可免 150MB 下载）
+    playwright_channel: str = ""
     runtime_base_url: str = ""  # 被测环境地址（由用户提供，经 .env 注入）
-    runtime_auth_token_env: str = "RUNTIME_AUTH_TOKEN"  # 凭证取自此环境变量（不入库）
+    runtime_login_url: str = ""  # 登录页地址；为空则回退到 base_url
+    runtime_routes: list[str] = field(default_factory=list)  # 显式路由清单（逗号分隔）
+    runtime_ui_timeout: int = 30  # 单页/单步超时（秒）
+    runtime_max_pages: int = 60  # 单次发现遍历的页面上限（防爆）
+    # 凭证：只从环境变量读取，绝不入库/入日志/入产物（见模块 docstring 红线）
+    runtime_login_user: str = ""
+    runtime_login_password: str = ""
+    runtime_auth_token: str = ""  # 值取自 runtime_auth_token_env 指向的环境变量
+    runtime_auth_token_env: str = "RUNTIME_AUTH_TOKEN"  # 令牌来源环境变量名（不入库）
     executor_enabled: bool = False  # P3：用例执行器（接口探活 / 浏览器交互）
 
     # 鉴权：为空表示不校验（仅限内网/开发）
     auth_token: str = ""
 
     def public_dict(self) -> dict[str, object]:
-        """可安全输出的配置摘要（**不含密钥**）。"""
+        """可安全输出的配置摘要（**不含任何密钥/密码**）。"""
         return {
             "app_env": self.app_env,
             "host": self.host,
@@ -143,11 +160,58 @@ class Settings:
             "auth_enabled": bool(self.auth_token),
             "business_extract_mode": self.business_extract_mode,
             "business_include_dirs": self.business_include_dirs,
+            # P2
+            "prd_enabled": self.prd_enabled,
+            "prd_dir": str(self.prd_dir),
+            "llm_design_enabled": self.llm_design_enabled,
+            # P3：凭证一律只输出「是否已配置」，绝不输出取值
+            "runtime_ui_enabled": self.runtime_ui_enabled,
+            "runtime_base_url": self.runtime_base_url,
+            "runtime_login_url": self.runtime_login_url,
+            "runtime_routes": self.runtime_routes,
+            "runtime_ui_timeout": self.runtime_ui_timeout,
+            "runtime_max_pages": self.runtime_max_pages,
+            "playwright_headless": self.playwright_headless,
+            "playwright_channel": self.playwright_channel,
+            "executor_enabled": self.executor_enabled,
+            "runtime_login_configured": bool(
+                self.runtime_login_user and self.runtime_login_password
+            ),
+            "runtime_token_configured": bool(self.runtime_auth_token),
         }
 
     def ensure_dirs(self) -> None:
         for d in (self.data_dir, self.output_dir, self.workspace_root):
             d.mkdir(parents=True, exist_ok=True)
+
+
+def _apply_path_overrides(s: Settings, g: Callable[[str], str | None]) -> None:
+    """把目录类环境变量覆盖到已构造的 Settings 上（DB 默认跟随 data_dir）。"""
+    if g("DATA_DIR"):
+        s.data_dir = Path(g("DATA_DIR") or "").expanduser().resolve()
+    if g("OUTPUT_DIR"):
+        s.output_dir = Path(g("OUTPUT_DIR") or "").expanduser().resolve()
+    if g("WORKSPACE_ROOT"):
+        s.workspace_root = Path(g("WORKSPACE_ROOT") or "").expanduser().resolve()
+    db_path_env = g("DB_PATH")
+    s.db_path = (
+        Path(db_path_env).expanduser().resolve() if db_path_env else s.data_dir / "testgen.db"
+    )
+
+
+def _validate(s: Settings) -> None:
+    """启动期集中校验：非法即抛 ConfigError（快速失败，不拖到运行期）。"""
+    if s.llm_enhance and not s.llm_api_key:
+        raise ConfigError("LLM_ENHANCE=on 时必须提供 LLM_API_KEY")
+    if s.port <= 0 or s.port > 65535:
+        raise ConfigError(f"PORT 越界：{s.port}")
+    # P3 快速失败：开了运行时 UI 发现却没有被测地址，等于白跑（宁启动期报错，不静默跳过）
+    if s.runtime_ui_enabled and not s.runtime_base_url:
+        raise ConfigError("RUNTIME_UI_ENABLED=on 时必须提供 RUNTIME_BASE_URL（被测环境地址）")
+    if s.runtime_ui_timeout <= 0:
+        raise ConfigError(f"RUNTIME_UI_TIMEOUT 必须为正整数秒，实际 {s.runtime_ui_timeout}")
+    if s.runtime_max_pages <= 0:
+        raise ConfigError(f"RUNTIME_MAX_PAGES 必须为正整数，实际 {s.runtime_max_pages}")
 
 
 def load_settings(env: dict[str, str] | None = None) -> Settings:
@@ -160,6 +224,8 @@ def load_settings(env: dict[str, str] | None = None) -> Settings:
         return env.get(key)
 
     prd_dir_env = g("PRD_DIR")
+    # 令牌取值来源：先定环境变量名，再从该名下取真实令牌（令牌本身不入 public_dict）。
+    token_env_name = (g("RUNTIME_AUTH_TOKEN_ENV") or "RUNTIME_AUTH_TOKEN").strip()
     s = Settings(
         app_env=_as_choice(g("APP_ENV"), "dev", "APP_ENV", ("dev", "test", "prod")),
         host=g("HOST") or "127.0.0.1",
@@ -181,6 +247,19 @@ def load_settings(env: dict[str, str] | None = None) -> Settings:
         prd_enabled=_as_bool(g("PRD_ENABLED"), False),
         prd_dir=(Path(prd_dir_env).expanduser().resolve() if prd_dir_env else PROJECT_ROOT / "prd"),
         llm_design_enabled=_as_bool(g("LLM_DESIGN_ENABLED"), False),
+        # P3：运行时 UI 发现
+        runtime_ui_enabled=_as_bool(g("RUNTIME_UI_ENABLED"), False),
+        playwright_headless=_as_bool(g("PLAYWRIGHT_HEADLESS"), True),
+        playwright_channel=(g("PLAYWRIGHT_CHANNEL") or "").strip().lower(),
+        runtime_base_url=(g("RUNTIME_BASE_URL") or "").strip(),
+        runtime_login_url=(g("RUNTIME_LOGIN_URL") or "").strip(),
+        runtime_routes=_split_list(g("RUNTIME_ROUTES"), []),
+        runtime_ui_timeout=_as_int(g("RUNTIME_UI_TIMEOUT"), 30, "RUNTIME_UI_TIMEOUT"),
+        runtime_max_pages=_as_int(g("RUNTIME_MAX_PAGES"), 60, "RUNTIME_MAX_PAGES"),
+        runtime_login_user=(g("RUNTIME_LOGIN_USER") or "").strip(),
+        runtime_login_password=g("RUNTIME_LOGIN_PASSWORD") or "",
+        runtime_auth_token=g(token_env_name) or "",
+        runtime_auth_token_env=token_env_name,
         executor_enabled=_as_bool(g("EXECUTOR_ENABLED"), False),
         auth_token=g("AUTH_TOKEN") or "",
         business_extract_mode=_as_choice(
@@ -195,22 +274,8 @@ def load_settings(env: dict[str, str] | None = None) -> Settings:
         ),
     )
 
-    if g("DATA_DIR"):
-        s.data_dir = Path(g("DATA_DIR") or "").expanduser().resolve()
-    if g("OUTPUT_DIR"):
-        s.output_dir = Path(g("OUTPUT_DIR") or "").expanduser().resolve()
-    if g("WORKSPACE_ROOT"):
-        s.workspace_root = Path(g("WORKSPACE_ROOT") or "").expanduser().resolve()
-    db_path_env = g("DB_PATH")
-    s.db_path = (
-        Path(db_path_env).expanduser().resolve() if db_path_env else s.data_dir / "testgen.db"
-    )
-
-    if s.llm_enhance and not s.llm_api_key:
-        raise ConfigError("LLM_ENHANCE=on 时必须提供 LLM_API_KEY")
-    if s.port <= 0 or s.port > 65535:
-        raise ConfigError(f"PORT 越界：{s.port}")
-
+    _apply_path_overrides(s, g)
+    _validate(s)
     return s
 
 

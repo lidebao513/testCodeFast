@@ -1,9 +1,27 @@
 # P3 详细设计 · 用「测试地址 + 账号密码」经 UI 层生成测试用例
 
-> 状态：**设计稿（未实现）**。本文把需求拆解到可直接施工的粒度，供后续逐条实现。
-> 关联：`P1-P3实现方案.md` §3（P3 运行时 UI 发现）、`engine/runtime_ui.py`（现有接入骨架，函数体为桩）。
+> 状态：**M3.1–M3.2 已实现并验证**；M3.3（受保护页端到端验收）、M3.4（并入主链路）、M3.5（降级）待做。
+> 关联：`P1-P3实现方案.md` §3（P3 运行时 UI 发现）、`engine/runtime_ui.py`（真实实现，见 §12 里程碑状态）。
 > 设计基线：沿用既有「UI 优先」机制（`LAYER_STRATEGY=ui_first` + 用例 `coverage_role` 字段），
 > 运行时发现的 UI 功能点与静态提取的功能点**汇入同一条主链路**，按名称去重、按 UI 优先排序。
+
+---
+
+## 0. 实施状态（截至 2026-09-14）
+
+| 里程碑 | 状态 | 落地内容 |
+|---|---|---|
+| **M3.1** 配置与凭证模型 + 惰性导入探测 | ✅ 已实现 | `core/config.py` 新增 9 个 P3 配置项；`public_dict` 凭证只输出 `*_configured` 布尔；`_has_playwright()` 探测；`options_from_settings()` 映射 |
+| **M3.2** `_login` + `_collect_page` + 路由优先级 | ✅ 已实现 | `engine/runtime_ui.py` 真实实现（登录/抓页/路由/控制台错误）；`tools/run_runtime_ui.py` 可执行入口 |
+| **M3.3** 表单登录通路 + 受保护页发现 | 🟡 代码就绪、fixture 已验证 | `_login` 已实现；本地 fixture（登录页 + 受保护页）端到端通过；真实环境人工抽检待做 |
+| **M3.4** `_to_functional_points` + pipeline 合并去重 | ⬜ 未做 | pipeline 已接线（`stage_runtime_ui` 真实调用），但发现结果**尚未并入功能点集合** |
+| **M3.5** requests 降级 + 文档/技能同步 | ⬜ 未做 | `RuntimeUiOptions.degraded` 为占位字段 |
+
+**已落地的事实（可直接引用）**：
+- 依赖：`playwright` 走 `[project.optional-dependencies].runtime`，主链路默认不装，代码内惰性导入；
+- 凭证红线已用测试锁死：`test_public_dict_hides_password_and_token`、`test_repo_has_no_plaintext_password_in_tracked_files`；
+- 路由同源过滤 / 去重 / 上限、登录失败分类、控制台错误切片均有单测；
+- 真浏览器端到端用本地 `http.server` 迷你站点验证（登录页 → 受保护页），无需外部环境。
 
 ---
 
