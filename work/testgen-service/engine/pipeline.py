@@ -19,10 +19,10 @@ from core import store
 from core.config import get_settings
 from core.contracts import CaseSpec, FunctionalPoint, TestPoint
 from core.db import init_db
-from core.enums import FType, Tag, TPType, VerifyLayer
+from core.enums import DEFAULT_SCOPE, FType, Tag, VerifyLayer
 from core.errors import EngineError, WorkspaceEscapeBlocked
 from core.log import get_logger, log_extra
-from engine import case_gen, diff_tag, fp_extract, scan, semantic_enrich, tp_expand
+from engine import case_gen, diff_tag, fp_extract, prd_ingest, scan, semantic_enrich, tp_expand
 from engine.scan import SourceFile
 
 
@@ -45,7 +45,7 @@ class PipelineOptions:
     base: str | None = None
     target: str | None = None
     prd_source: str = ""  # P2：PRD 文件路径（启用 PRD 通道时读取）
-    scopes: set[str] = field(default_factory=lambda: {TPType.NORMAL.value, TPType.BOUNDARY.value})
+    scopes: set[str] = field(default_factory=lambda: set(DEFAULT_SCOPE))
     review_status: str = "pending"
     include_business: bool = True
     extract_pages: bool = True
@@ -237,9 +237,29 @@ def stage_prd_ingest(
     result: PipelineResult,
     progress: ProgressFn | None,
 ) -> Any | None:
-    """P2 接入点：解析 PRD 并与功能点对齐（当前为骨架，返回 None）。"""
+    """P2：解析 PRD / OpenAPI 为结构化需求（真实实现），返回 PrdDoc。"""
     _emit(progress, "prd_ingest", source=opts.prd_source)
-    return None
+    if not opts.prd_source:
+        return None
+    doc = prd_ingest.ingest_prd(opts.prd_source)
+    log.info("PRD 解析完成", extra=log_extra(fmt=doc.fmt, requirements=len(doc.requirements)))
+    return doc
+
+
+def _merge_prd_test_points(result: PipelineResult) -> None:
+    """把 PRD 需求派生的测试点并入主链路（仅在 PRD 通道启用时调用）。
+
+    未对齐到功能点的需求**不臆造**测试点，只把提示记入 result.notes（见 prd_ingest）。
+    """
+    if result.prd_doc is None:
+        return
+    prd_tps = prd_ingest.requirements_to_test_points(result.prd_doc, result.functional_points)
+    result.notes.extend(result.prd_doc.notes)
+    if not prd_tps:
+        return
+    result.test_points = [*result.test_points, *prd_tps]
+    result.counts["prd_test_points"] = len(prd_tps)
+    result.scope_summary = tp_expand.scope_summary(result.test_points)
 
 
 def stage_llm_design(
@@ -381,10 +401,12 @@ def run_pipeline(
     _, tag_by_fp = stage_tag(opts, result, result.functional_points, progress)
     tps = stage_test_points(opts, result, result.functional_points, tag_by_fp, progress)
     result.test_points = stage_enrich(opts, result, tps, result.functional_points, progress)
-    result.cases = stage_cases(result, result.test_points, progress)
     s = get_settings()
+    # P2：PRD 通道（默认关闭）——先解析需求并派生「业务规则」测试点，须在用例生成之前并入。
     if s.prd_enabled and opts.prd_source:
         result.prd_doc = stage_prd_ingest(opts, result, progress)
+        _merge_prd_test_points(result)
+    result.cases = stage_cases(result, result.test_points, progress)
     if s.llm_design_enabled:
         result.cases = stage_llm_design(opts, result, progress)
     if s.runtime_ui_enabled:

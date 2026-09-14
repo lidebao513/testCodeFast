@@ -18,7 +18,7 @@ from typing import Any
 
 from core.config import get_settings
 from core.db import init_db
-from core.enums import ALL_TP_TYPES, TPType
+from core.enums import ALL_TP_TYPES, DEFAULT_SCOPE, DEFAULT_SCOPE_LIST
 from core.errors import AppError
 from core.log import setup_logging
 from engine import pipeline
@@ -38,9 +38,10 @@ def _build_parser() -> argparse.ArgumentParser:
     pipe.add_argument("--target", default=None, help="增量模式目标 ref")
     pipe.add_argument(
         "--scopes",
-        default=",".join([TPType.NORMAL.value, TPType.BOUNDARY.value]),
-        help=f"行为维度范围，逗号分隔，可选 {ALL_TP_TYPES}",
+        default=",".join(DEFAULT_SCOPE_LIST),
+        help=f"行为维度范围，逗号分隔，可选 {ALL_TP_TYPES}（默认 {'+'.join(DEFAULT_SCOPE_LIST)}）",
     )
+    pipe.add_argument("--prd", default="", help="PRD / OpenAPI 文件路径（启用 PRD 通道）")
     pipe.add_argument("--no-business", action="store_true", help="不提取业务函数")
     pipe.add_argument("--no-pages", action="store_true", help="不提取前端路由")
     pipe.add_argument("--llm", action="store_true", help="启用 LLM 增强通道")
@@ -62,7 +63,7 @@ def _parse_scopes(raw: str) -> set[str]:
     invalid = items - set(ALL_TP_TYPES)
     if invalid:
         raise AppError(f"非法范围：{sorted(invalid)}，允许 {ALL_TP_TYPES}")
-    return items or {TPType.NORMAL.value, TPType.BOUNDARY.value}
+    return items or set(DEFAULT_SCOPE)
 
 
 def _cmd_pipeline(args: argparse.Namespace) -> int:
@@ -70,6 +71,7 @@ def _cmd_pipeline(args: argparse.Namespace) -> int:
     opts.project_name = args.name
     opts.base = args.base
     opts.target = args.target
+    opts.prd_source = args.prd
     opts.scopes = _parse_scopes(args.scopes)
     opts.include_business = not args.no_business
     opts.extract_pages = not args.no_pages

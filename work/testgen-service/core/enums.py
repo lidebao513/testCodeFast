@@ -82,6 +82,7 @@ class Dimension(Enum):
     BIZ_LOGIC = "业务函数-逻辑可用"
     PAGE_REACH = "页面/路由可达"
     INTERACTIVE = "交互元素可用"
+    BIZ_RULE = "业务规则"  # P2：来自 PRD / 接口文档的需求驱动测试点
 
 
 # ============================ 方法标记（method 字段取值） ============================
@@ -183,8 +184,12 @@ RUNTIME_UI_MODE_CHOICES = (RUNTIME_UI_PLAYWRIGHT,)
 # ============================ 范围常量（Scope · 唯一真值） ============================
 # 行为维度全集（顺序即展示顺序）
 ALL_TP_TYPES = [t.value for t in TPType]
-# 默认范围：正常 + 边界
-DEFAULT_SCOPE = {TPType.NORMAL.value, TPType.BOUNDARY.value}
+# 默认范围：正常 + 安全 + 边界。
+# 「安全」自 2026-09-14 起默认纳入——此前不显式指定就一条安全用例都没有，
+# 极易被误当成「已覆盖」（见 安全用例默认纳入 变更）。
+DEFAULT_SCOPE = {TPType.NORMAL.value, TPType.SECURITY.value, TPType.BOUNDARY.value}
+# 默认范围的「规范顺序」视图：构造列表型默认值时使用，保证输出顺序稳定。
+DEFAULT_SCOPE_LIST = [t for t in ALL_TP_TYPES if t in DEFAULT_SCOPE]
 # 全选范围
 FULL_SCOPE = set(ALL_TP_TYPES)
 # 「全部」同义词（resolve_scope 识别为全选，不注册为枚举值）

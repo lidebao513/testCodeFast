@@ -293,12 +293,16 @@ def test_expansion_plan_matches_legacy_parity_table():
         assert tp_expand.plan_of(fp) == expected, f"{ftype} {name} 展开规则偏离 legacy"
 
 
-def test_default_scope_excludes_security(sample_repo):
-    """默认范围不含「安全」——不显式指定就不会生成安全用例。"""
+def test_default_scope_includes_security(sample_repo):
+    """默认范围含「安全」——不显式指定也会生成安全用例（2026-09-14 变更）。
+
+    变更前默认 `{正常, 边界}`，不显式指定就一条安全用例都没有，极易被误当成
+    「已覆盖」；现默认 `{正常, 安全, 边界}`（见 core.enums.DEFAULT_SCOPE）。
+    """
     _, result = _extract(sample_repo)
     tps = tp_expand.expand_all(result.functional_points, tp_expand.ExpandContext())
     assert tps
-    assert TPType.SECURITY.value not in {tp.category for tp in tps}
+    assert TPType.SECURITY.value in {tp.category for tp in tps}
 
 
 # ---------------------------------------------------------------- 交互组件

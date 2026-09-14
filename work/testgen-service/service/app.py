@@ -24,7 +24,7 @@ from core import store
 from core.config import get_settings
 from core.contracts import CONTRACT_VERSION
 from core.db import connect, init_db
-from core.enums import ALL_TP_TYPES, PullStatus, TPType
+from core.enums import ALL_TP_TYPES, DEFAULT_SCOPE_LIST, PullStatus
 from core.errors import AppError, UnauthorizedError, ValidationError
 from core.log import get_logger, log_extra, set_request_id
 from engine import pipeline
@@ -104,9 +104,10 @@ class PipelineRequest(BaseModel):
     base: str | None = Field(None, description="增量模式基线 ref")
     target: str | None = Field(None, description="增量模式目标 ref")
     scopes: list[str] = Field(
-        default_factory=lambda: [TPType.NORMAL.value, TPType.BOUNDARY.value],
-        description="行为维度范围：正常/异常/安全/边界",
+        default_factory=lambda: list(DEFAULT_SCOPE_LIST),
+        description="行为维度范围：正常/异常/安全/边界（默认 正常+安全+边界）",
     )
+    prd_source: str = Field("", description="PRD / OpenAPI 文件路径（启用 PRD 通道时使用）")
     include_business: bool = Field(True, description="是否提取业务函数功能点")
     extract_pages: bool = Field(True, description="是否提取前端路由")
     persist: bool = Field(True, description="是否落库")
@@ -154,6 +155,7 @@ def run_pipeline(req: PipelineRequest) -> dict[str, Any]:
     opts.project_name = req.project_name
     opts.base = req.base
     opts.target = req.target
+    opts.prd_source = req.prd_source
     opts.scopes = set(req.scopes or [])
     opts.include_business = req.include_business
     opts.extract_pages = req.extract_pages

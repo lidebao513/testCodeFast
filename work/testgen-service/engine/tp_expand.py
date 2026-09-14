@@ -14,7 +14,7 @@ import re
 from dataclasses import dataclass, field
 
 from core.contracts import FunctionalPoint, TestPoint, tp_id_of, verify_layer_of_ftype
-from core.enums import Dimension, FType, MethodMarker, Tag, TPType
+from core.enums import DEFAULT_SCOPE, Dimension, FType, MethodMarker, Tag, TPType
 from engine.fp_extract import expect_of
 
 
@@ -78,7 +78,7 @@ def _ordinal_of(category: str, dimension: str) -> int:
 class ExpandContext:
     """展开上下文：范围过滤 + 标签 + 审核门。"""
 
-    scopes: set[str] = field(default_factory=lambda: {TPType.NORMAL.value, TPType.BOUNDARY.value})
+    scopes: set[str] = field(default_factory=lambda: set(DEFAULT_SCOPE))
     default_tag: str = Tag.FULL.value
     review_status: str = "pending"
     module_filter: set[str] = field(default_factory=set)

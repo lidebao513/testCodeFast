@@ -26,6 +26,7 @@ dependencies = [
     "openai",
     "httpx",
     "requests",
+    "PyYAML",
 ]
 
 [project.optional-dependencies]
