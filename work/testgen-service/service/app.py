@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Annotated, Any
 
 from fastapi import Depends, FastAPI, Header, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from pydantic import BaseModel, Field
 
 from core import store
@@ -25,10 +25,12 @@ from core.auto_input import parse_auto_input
 from core.config import get_settings
 from core.contracts import CONTRACT_VERSION
 from core.db import connect, init_db
-from core.enums import ALL_TP_TYPES, MODE_FULL, PullStatus
+from core.enums import ALL_TP_TYPES, MODE_FULL, REPORT_FORMATS, PullStatus, ReportFormat
 from core.errors import AppError, NotFoundError, UnauthorizedError, ValidationError
 from core.log import get_logger, log_extra, set_request_id
 from engine import pipeline
+from engine import report as report_engine
+from output.report_writer import render_html, render_markdown
 from output.writer import OutputWriter
 from workspace.manager import WorkspaceManager
 
@@ -325,6 +327,48 @@ def get_run_detail(pid: int, batch_id: str, limit: int = 500) -> dict[str, Any]:
         "project_id": pid,
         "batch": batch,
         "runs": store.list_runs(pid, batch_id=batch_id, limit=limit),
+    }
+
+
+@app.get("/api/v1/projects/{pid}/report", dependencies=[Depends(require_auth)])
+def get_report(
+    pid: int, batch: str = "", format: str = ReportFormat.JSON.value, write: bool = False
+):
+    """项目报告（F15）：执行摘要 + 覆盖率 + 趋势 + 追溯 + 执行证据。
+
+    - `format=json`（默认）→ 返回报告结构（机读，含全部字段）；
+    - `format=md` → 直接返回可交付 Markdown；`format=html` → 返回自包含浅色页面；
+    - `write=true` → 同时把 `REPORT.md` / `REPORT.html` / `report.json` 落到 `outputs/<pid>/`。
+
+    报告是 DB 事实的**纯函数**（取数 `store.report_snapshot` → 计算 `engine.report`），
+    不新建报告表——同一份数据任意时刻重算结论一致。
+    """
+    fmt = (format or "").strip().lower()
+    if fmt not in REPORT_FORMATS:
+        raise ValidationError(f"不支持的报告格式：{format!r}，允许 {list(REPORT_FORMATS)}")
+    built = report_engine.generate(pid, batch_id=batch, write=write)
+    body = built["report"]
+    if fmt == ReportFormat.MARKDOWN.value:
+        return Response(content=render_markdown(body), media_type="text/markdown; charset=utf-8")
+    if fmt == ReportFormat.HTML.value:
+        return HTMLResponse(content=render_html(body))
+    payload: dict[str, Any] = {"project_id": pid, "report": body}
+    if built["outputs"]:
+        payload["outputs"] = built["outputs"]
+    return payload
+
+
+@app.get("/api/v1/projects/{pid}/coverage", dependencies=[Depends(require_auth)])
+def get_coverage(pid: int) -> dict[str, Any]:
+    """覆盖率视图（F16）：功能点 → 测试点 → 用例，含未覆盖缺口。"""
+    snapshot = store.report_snapshot(pid)
+    if not snapshot.get("project"):
+        raise NotFoundError(f"项目不存在：{pid}")
+    return {
+        "project_id": pid,
+        "coverage": report_engine.coverage(
+            snapshot["functional_points"], snapshot["test_points"], snapshot["cases"]
+        ),
     }
 
 

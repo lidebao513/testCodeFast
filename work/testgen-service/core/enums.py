@@ -150,6 +150,21 @@ class ReviewStatus(Enum):
     PENDING = "pending"
 
 
+# ============================ 报告导出格式（F15 · report format） ============================
+# 单一真值：CLI（argparse choices）/ HTTP 契约 / 渲染器三处共用同一组取值。
+# 注意：PDF / Word / Excel 需要额外依赖（reportlab / python-docx / openpyxl），
+# 主链路默认不引入（见任务清单 §11）——需要时再作为可选导出格式扩展本枚举。
+class ReportFormat(Enum):
+    """报告导出格式：机读 JSON、人读 Markdown、可分享自包含 HTML。"""
+
+    JSON = "json"
+    MARKDOWN = "md"
+    HTML = "html"
+
+
+REPORT_FORMATS = tuple(f.value for f in ReportFormat)
+
+
 # ============================ 拉取状态（pull） ============================
 class PullStatus(Enum):
     """拉取代码的结果状态（**外部前置契约**，取值与技能 `qa-code-pull` 的

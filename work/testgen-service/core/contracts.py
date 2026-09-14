@@ -22,6 +22,10 @@ from core.enums import FType, Tag, TPType, VerifyLayer
 # 契约版本：变更规则见 P1-3《契约升版策略》（只增不破）
 CONTRACT_VERSION = "1.0"
 
+# 报告版本（F15）：报告 JSON 的结构版本，独立于产物契约版本演进。
+# 报告是**只读派生物**（DB 事实的纯函数），故其版本只约束「结构」，不参与三方契约冻结。
+REPORT_VERSION = "1.0"
+
 # 用例八要素（顺序即展示顺序；缺一不可）
 EIGHT_ELEMENTS: tuple[str, ...] = (
     "tc_no",

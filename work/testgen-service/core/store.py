@@ -715,3 +715,111 @@ def log_change(pid: int, kind: str, detail: str, *, conn: sqlite3.Connection | N
     finally:
         if own:
             conn.close()
+
+
+# ============================================================================
+# 报告取数快照（F15）：一次连接取齐报告所需的全部原始行（只读，不做业务计算）
+# ============================================================================
+def _select_batch(batches: list[dict[str, Any]], batch_id: str) -> dict[str, Any] | None:
+    """选批次：显式指定优先（指定但不存在 → None，由调用方决定是否报 404）；否则取最近一次。
+
+    最近一次按「结束时间 → 开始时间 → 批次号」排序取最大——**不能**直接用 `list_run_batches`
+    的倒序结果，因为趋势要的升序与"最近一次"是两个视角，容易写反。
+    """
+    if batch_id:
+        for b in batches:
+            if str(b.get("batch_id")) == batch_id:
+                return b
+        return None
+    if not batches:
+        return None
+    return max(
+        batches,
+        key=lambda b: (
+            str(b.get("finished_at") or b.get("started_at") or ""),
+            str(b.get("batch_id")),
+        ),
+    )
+
+
+def report_snapshot(
+    pid: int, *, batch_id: str = "", conn: sqlite3.Connection | None = None
+) -> dict[str, Any]:
+    """报告取数快照（F15）：把「报告要用到的原始行」一次取齐，**不做任何业务计算**。
+
+    职责边界：通过率 / 覆盖率 / 趋势 / 结论等**业务规则一律不在此**，全部放在
+    `engine/report.py`；本函数只把行从库里读出来，从而保证报告是 DB 事实的**纯函数**
+    （同一份数据任意时刻重算，结论一致、可复现）。
+
+    `batch_id` 为空取最近一次执行；显式指定但不存在时 `batch` 返回 `None`
+    （由上层决定是"报 404"还是"报告尚未执行"）。
+    """
+    own = conn is None
+    conn = conn or connect()
+
+    def rows(sql: str, params: tuple[Any, ...]) -> list[dict[str, Any]]:
+        return [dict(r) for r in conn.execute(sql, params)]
+
+    try:
+        project = conn.execute("SELECT * FROM projects WHERE id = ?", (pid,)).fetchone()
+        fps = rows(
+            "SELECT id, contract_id, name, module, ftype, file_path FROM functional_points"
+            " WHERE project_id = ? ORDER BY id",
+            (pid,),
+        )
+        tps = rows(
+            "SELECT tp_id, fp_contract_id, category, module, title, dimension, method,"
+            " expect, source, tag FROM test_points WHERE project_id = ? ORDER BY id",
+            (pid,),
+        )
+        cases = rows(
+            "SELECT id, tp_id, fp_contract_id, module, title, case_type, priority, status,"
+            " test_type, last_result FROM cases WHERE project_id = ? ORDER BY id",
+            (pid,),
+        )
+        batches = rows(
+            "SELECT batch_id, state, mode, source_kind, total, done, status_counts, started_at,"
+            " finished_at, error FROM run_batches WHERE project_id = ?"
+            " ORDER BY COALESCE(started_at, ''), batch_id",
+            (pid,),
+        )
+        for b in batches:
+            b["status_counts"] = _loads(b.get("status_counts"), {})
+        batch = _select_batch(batches, batch_id)
+        runs: list[dict[str, Any]] = []
+        if batch:
+            runs = rows(
+                "SELECT r.id, r.batch_id, r.case_id, r.tp_id, r.status, r.detail, r.duration_ms,"
+                " r.screenshot_path, r.log_path, c.title AS case_title, c.module AS case_module,"
+                " c.case_type AS case_type, c.priority AS case_priority, t.title AS tp_title,"
+                " t.fp_contract_id AS fp_contract_id, t.source AS source, t.expect AS expect"
+                " FROM runs r"
+                " LEFT JOIN cases c ON c.id = r.case_id"
+                " LEFT JOIN test_points t ON t.project_id = r.project_id AND t.tp_id = r.tp_id"
+                " WHERE r.project_id = ? AND r.batch_id = ? ORDER BY r.id",
+                (pid, str(batch["batch_id"])),
+            )
+        run_index = rows(
+            "SELECT batch_id, tp_id, case_id, status FROM runs WHERE project_id = ? ORDER BY id",
+            (pid,),
+        )
+        changes = rows(
+            "SELECT kind, detail, created_at FROM change_log WHERE project_id = ?"
+            " ORDER BY id DESC LIMIT 1",
+            (pid,),
+        )
+        return {
+            "project": dict(project) if project else None,
+            "functional_points": fps,
+            "test_points": tps,
+            "cases": cases,
+            "batches": batches,
+            "batch": batch,
+            "runs": runs,
+            "run_index": run_index,
+            "last_change": changes[0] if changes else None,
+            "traceability": traceability(pid, conn),
+        }
+    finally:
+        if own:
+            conn.close()

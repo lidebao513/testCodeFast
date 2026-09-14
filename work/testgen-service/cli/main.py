@@ -6,6 +6,7 @@
     python -m cli.main parse-input "<一段混排文本>"
     python -m cli.main analyze  --path <dir>
     python -m cli.main runs     --project <项目ID> [--batch <批次号>]
+    python -m cli.main report   --project <项目ID> [--batch <批次号>] [--out <目录>]
     python -m cli.main serve    [--host H] [--port P]
 
 设计约定：
@@ -40,6 +41,7 @@ from core.enums import (
 from core.errors import AppError
 from core.log import setup_logging
 from engine import diff_tag, pipeline
+from engine import report as report_engine
 from engine.scan import Scanner
 from output.writer import OutputWriter
 
@@ -109,6 +111,12 @@ def _build_parser() -> argparse.ArgumentParser:
     runs.add_argument("--project", type=int, required=True, help="项目 ID")
     runs.add_argument("--batch", default="", help="批次号；给出则额外输出该批次的逐条结论")
     runs.add_argument("--limit", type=int, default=50, help="批次 / 记录条数上限")
+
+    rep = sub.add_parser("report", help="生成测试报告（摘要 / 覆盖率 / 趋势 / 追溯 / 证据）")
+    rep.add_argument("--project", type=int, required=True, help="项目 ID")
+    rep.add_argument("--batch", default="", help="执行批次号；缺省取最近一次")
+    rep.add_argument("--out", default="", help="报告输出目录（缺省 outputs/<项目ID>/）")
+    rep.add_argument("--no-write", action="store_true", help="只计算不落盘（用于快速核对结论）")
 
     srv = sub.add_parser("serve", help="启动 HTTP 服务")
     srv.add_argument("--host", default=None)
@@ -272,6 +280,32 @@ def _cmd_runs(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_report(args: argparse.Namespace) -> int:
+    """生成测试报告（F15）：落盘 REPORT.md / REPORT.html / report.json，并打印结论摘要。"""
+    built = report_engine.generate(
+        args.project, batch_id=args.batch, out_dir=args.out or None, write=not args.no_write
+    )
+    body = built["report"]
+    summary = body["exec_summary"]
+    coverage = body["coverage"]
+    payload: dict[str, Any] = {
+        "project_id": args.project,
+        "batch_id": (body.get("batch") or {}).get("batch_id"),
+        "headline": summary["headline"],
+        "metrics": summary["metrics"],
+        "coverage": {
+            "fp_rate": coverage["fp_rate"],
+            "tp_rate": coverage["tp_rate"],
+            "uncovered_tp_count": coverage["uncovered_tp_count"],
+        },
+        "trend": {"count": body["trend"]["count"], "direction": body["trend"]["direction"]},
+        "flaky": {"count": body["flaky"]["count"]},
+        "outputs": built["outputs"],
+    }
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0
+
+
 def _cmd_serve(args: argparse.Namespace) -> int:
     import uvicorn
 
@@ -291,6 +325,7 @@ _COMMANDS: dict[str, Callable[[argparse.Namespace], int]] = {
     "parse-input": _cmd_parse_input,
     "analyze": _cmd_analyze,
     "runs": _cmd_runs,
+    "report": _cmd_report,
     "serve": _cmd_serve,
 }
 

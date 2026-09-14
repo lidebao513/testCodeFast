@@ -49,6 +49,7 @@ from core.enums import (
     FType,
     MethodMarker,
     PullStatus,
+    ReportFormat,
     ReviewStatus,
     RunBatchState,
     Tag,
@@ -71,6 +72,7 @@ for _e in (
     ReviewStatus,
     PullStatus,
     RunBatchState,
+    ReportFormat,
 ):
     for _m in _e:
         _LITERALS.add(_m.value)
@@ -199,6 +201,7 @@ def reverse_check():
         ReviewStatus,
         PullStatus,
         RunBatchState,
+        ReportFormat,
     ]
     blobs = {}
     for path in _iter_source_py():
