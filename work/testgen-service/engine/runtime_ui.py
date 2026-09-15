@@ -1150,6 +1150,103 @@ def _click_triggers(pw_page: Any, opts: RuntimeUiOptions, ctx: _DeepCtx) -> int:
     return count
 
 
+def _click_pagination(pw_page: Any, opts: RuntimeUiOptions, ctx: _DeepCtx) -> int:
+    """分页翻页（只读导航）：点击下一页/页码控件 → 抓取翻页后出现的新元素。
+
+    每点一次后回到基准页，避免后续点击句柄错位；单页受 MAX_CLICKTHROUGH_PER_PAGE 约束。
+    """
+    count = 0
+    for sel in _PAGINATION_SELECTOR:
+        if count >= MAX_CLICKTHROUGH_PER_PAGE:
+            break
+        try:
+            nodes = pw_page.query_selector_all(sel)
+        except Exception:
+            continue
+        for node in nodes:
+            if count >= MAX_CLICKTHROUGH_PER_PAGE:
+                break
+            try:
+                if not node.is_visible():
+                    continue
+                node.click(timeout=5000)
+                pw_page.wait_for_timeout(800)
+                _capture_deep(pw_page, ctx)
+                _goto_settle(pw_page, ctx.uip.url, opts)
+                count += 1
+            except Exception:  # 末页 disabled / 翻页异常 → 回基准页继续
+                try:
+                    _goto_settle(pw_page, ctx.uip.url, opts)
+                except Exception:
+                    pass
+                continue
+    return count
+
+
+def _form_submit_handle(form: Any, verbs: tuple[str, ...]) -> Any | None:
+    """在表单内找「提交按钮且文本命中只读动词」的句柄（创建/删除类不点）。"""
+    try:
+        candidates = form.query_selector_all("button, input[type=submit], [role='button']")
+    except Exception:
+        return None
+    for c in candidates:
+        try:
+            t = (c.inner_text() or c.get_attribute("value") or "").strip()
+        except Exception:
+            t = ""
+        if any(v in t for v in verbs):
+            return c
+    return None
+
+
+def _fill_form_inputs(form: Any) -> None:
+    """给文本类输入填无害探测值（仅 text/search/textarea，不碰 password/file）。"""
+    try:
+        inputs = form.query_selector_all(
+            "input[type=text], input[type=search], input:not([type]), textarea"
+        )
+    except Exception:
+        return
+    for inp in inputs:
+        try:
+            inp.fill("测试")
+        except Exception:
+            pass
+
+
+def _click_forms(pw_page: Any, opts: RuntimeUiOptions, ctx: _DeepCtx) -> int:
+    """搜索/筛选表单提交（只读）：填无害值 → 点搜索/筛选 → 抓取提交后新视图。
+
+    仅命中 `_FILTER_VERBS` 的提交按钮才点（避免误触创建/删除等写操作）；
+    每次提交后回到基准页，保证后续点击稳定。属「深度发现」的只读子集。
+    """
+    count = 0
+    try:
+        forms = pw_page.query_selector_all("form")
+    except Exception:
+        return 0
+    for form in forms:
+        if count >= MAX_CLICKTHROUGH_PER_PAGE:
+            break
+        try:
+            submit = _form_submit_handle(form, _FILTER_VERBS)
+            if submit is None or not submit.is_visible():
+                continue
+            _fill_form_inputs(form)
+            submit.click(timeout=5000)
+            pw_page.wait_for_timeout(800)
+            _capture_deep(pw_page, ctx)
+            _goto_settle(pw_page, ctx.uip.url, opts)
+            count += 1
+        except Exception:
+            try:
+                _goto_settle(pw_page, ctx.uip.url, opts)
+            except Exception:
+                pass
+            continue
+    return count
+
+
 def _click_through(
     session: _Session,
     opts: RuntimeUiOptions,
@@ -1183,8 +1280,13 @@ def _click_through(
         )
         total += _click_tabs(pw_page, opts, ctx)
         total += _click_triggers(pw_page, opts, ctx)
+        total += _click_pagination(pw_page, opts, ctx)
+        total += _click_forms(pw_page, opts, ctx)
     if total:
-        result.notes.append(f"click-through 深度发现完成：共 {total} 次交互")
+        result.notes.append(
+            "click-through 深度发现完成：共 "
+            f"{total} 次交互（Tab/弹窗-抽屉触发/分页翻页/搜索筛选表单提交）"
+        )
 
 
 # ============================================================================
@@ -1263,6 +1365,20 @@ _OPEN_VERBS = (
     "配置",
     "管理",
 )
+
+# 分页控件选择器（命中即尝试翻页，抓取下一页深层元素；只读导航，安全）
+_PAGINATION_SELECTOR = (
+    "[class*='pagination'] a",
+    "[class*='pager'] a",
+    "a[rel='next']",
+    "[aria-label*='next' i]",
+    "button[class*='next']",
+    ".page-item a",
+    "[class*='page'] a",
+)
+
+# 表单提交动词（仅命中「搜索/筛选」类只读提交才点，避免误触创建/删除等写操作）
+_FILTER_VERBS = ("搜索", "查询", "筛选", "过滤", "查找", "刷新", "搜")
 
 # 功能点业务价值排序（越小越优先）：页面结构 > 后端接口 > 交互元素 > 组件 > 业务函数
 _FP_VALUE_RANK: dict[str, int] = {
