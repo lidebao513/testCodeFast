@@ -119,15 +119,19 @@ def test_incremental_worktree_target_compares_working_tree(fresh_db, git_repo):
     assert result.tag_summary.get(Tag.UPDATE.value, 0) > 0
 
 
-def test_llm_design_enabled_reports_unimplemented(fresh_db, sample_repo):
-    """F10a：「配了以为生效」必须被消除——开关打开但能力未实现时明确上报。"""
+def test_llm_design_enabled_reports_no_effect(fresh_db, sample_repo):
+    """F10a/F10b：「配了以为生效」必须被消除——开关打开但能力未产出用例时明确上报。
+
+    能力已实现（F10b），但开启后若 LLM 未配置 / 候选全被护栏拒绝，必须如实写进
+    `result.errors` 说明「未新增任何 LLM 用例」，而非让人误以为生效。
+    """
     get_settings().llm_design_enabled = True
     result = _run(sample_repo)
 
     joined = " ".join(result.errors)
     assert "LLM 用例设计" in joined, result.errors
-    assert "尚未实现" in joined
     assert "未新增任何 LLM 用例" in joined  # 必须说清「没生效」，而不是让人以为生效了
+    assert "尚未实现" not in joined  # 能力已落地，不应再报「未实现」
     assert result.counts["cases"] == result.counts["test_points"], "不得凭空多出用例"
 
 

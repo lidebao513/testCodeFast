@@ -540,32 +540,48 @@ def _merge_prd_test_points(result: PipelineResult) -> None:
     result.scope_summary = tp_expand.scope_summary(result.test_points)
 
 
+def _design_options(settings: Any) -> llm_design.DesignOptions:
+    """从全局配置构造 LLM 用例设计选项。"""
+    return llm_design.DesignOptions(
+        enabled=settings.llm_design_enabled,
+        provider=settings.llm_provider,
+        base_url=settings.llm_base_url,
+        model=settings.llm_model,
+        api_key=settings.llm_api_key,
+        timeout=settings.llm_timeout,
+    )
+
+
 def stage_llm_design(
     opts: PipelineOptions,
     result: PipelineResult,
     progress: ProgressFn | None,
 ) -> list[CaseSpec]:
-    """P2 接入点：基于功能点 + PRD 上下文设计用例（F10a）。
+    """P2 接入点：基于功能点 + 测试点 + PRD 上下文设计补充用例（F10b 已实现）。
 
-    原实现命中开关后**原样返回**：不报错、不产用例、不写备注——于是
-    `LLM_DESIGN_ENABLED=on` 成了一条「配了以为生效」的静默陷阱，使用者会把
-    规则模板产物误当成 LLM 增强结果。现在改为**如实上报**：能力未就绪时写进
-    `result.errors`，明确说明「本次未新增任何 LLM 用例」。
+    护栏 B（不静默）：开关已开但未产出任何新增用例（候选全被护栏拒绝 / LLM 返回空 /
+    LLM 配置缺失）时，如实写进 `result.errors`，明确说明「本次未新增任何 LLM 用例」，
+    杜绝 F10a 发现的「配了以为生效」静默陷阱。LLM 不可用或开关关闭时由 design_cases
+    内部降级为规则产物，并在 notes 记录原因，不中断主链路。
     """
     _emit(progress, "llm_design", enabled=True)
-    try:
-        designed = llm_design.design_cases(
-            result.functional_points, result.test_points, result.prd_doc
-        )
-    except NotImplementedError as exc:
+    design_opts = _design_options(get_settings())
+    designed = llm_design.design_cases(
+        result.functional_points, result.test_points, result.prd_doc, design_opts
+    )
+    result.counts["llm_design_cases"] = len(designed.added)
+    result.notes.extend(designed.notes)
+    if designed.rejected:
+        result.notes.append(f"LLM 设计拒绝 {len(designed.rejected)} 条臆造/无效候选")
+    if designed.added:
+        return [*result.cases, *designed.added]
+    # 护栏 B：开关已开但未新增任何用例 → 如实上报，绝不静默
+    if design_opts.enabled:
         result.errors.append(
-            "LLM 用例设计开关已打开，但该能力尚未实现（engine/llm_design.py::design_cases）："
-            f"{exc}；本次未新增任何 LLM 用例，用例集仍为规则模板产物（{len(result.cases)} 条）"
+            "LLM 用例设计已开启但未新增任何 LLM 用例（候选全被护栏拒绝或 LLM 返回空）；"
+            f"用例集仍为规则模板产物（{len(result.cases)} 条）"
         )
-        return result.cases
-    # 能力就绪后在此把设计结果并入用例集；当前实现为桩，正常走不到这里。
-    result.counts["llm_design_cases"] = len(designed.cases)
-    return [*result.cases, *designed.cases]
+    return result.cases
 
 
 # ============================================================================

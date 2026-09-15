@@ -5,8 +5,6 @@ PRD 解析（`prd_ingest`）已落地为真实实现，其行为测试见 `test_
 
 from __future__ import annotations
 
-import pytest
-
 from engine import llm_design, prd_ingest
 
 
@@ -24,6 +22,8 @@ def test_prd_format_resolver():
     assert prd_ingest._resolve_format("x.md", "markdown") == "markdown"
 
 
-def test_llm_design_stub():
-    with pytest.raises(NotImplementedError):
-        llm_design.design_cases([], [])
+def test_llm_design_realized():
+    """F10b：design_cases 已真实实现（不再抛 NotImplementedError），未启用返回空 added。"""
+    res = llm_design.design_cases([], [])
+    assert isinstance(res, llm_design.DesignResult)
+    assert res.added == []
