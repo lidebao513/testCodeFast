@@ -58,9 +58,10 @@ app = FastAPI(
     title="testgen-service",
     version="0.1.0",
     description=(
-        "测试用例生成服务：代码解析 → 测试点 → 用例（契约 v1.0）。"
+        "测试用例生成服务：代码解析 → 测试点 → 用例 → 执行验证（契约 v1.0）。"
         "服务化：生成任务异步化（POST /api/v1/generate → 轮询 GET /api/v1/tasks/{id}），"
-        "发布流水线经 POST /api/v1/verify/webhook 触发；当前仅「生成用例」环节，不执行用例。"
+        "执行验证异步化（POST /api/v1/execute，对已有用例或生成+执行皆可），"
+        "发布流水线经 POST /api/v1/verify/webhook 触发（可带 execute=true 一并验证）。"
     ),
     lifespan=lifespan,
 )
@@ -164,6 +165,76 @@ class ParseInputRequest(BaseModel):
     """统一智能输入框解析请求（只解析、不跑流水线）。"""
 
     text: str = Field("", description="混排文本：地址 / 账号 / 密码 / 动态口令 / 代码路径")
+
+
+class ExecuteRequest(BaseModel):
+    """执行验证请求（G-2 服务化执行侧）。
+
+    两条路径（互斥，取其一）：
+    - 给 `project_id`：对**已有用例**执行验证（不重新生成，等价于 CLI `testgen execute`）；
+    - 给代码/地址来源：先生成用例再执行验证（等价于 CLI `pipeline --execute`）。
+    凭证字段只用于本次运行，**绝不回显、不落库、不入产物**。
+    """
+
+    project_id: int = Field(0, description="指定已有项目，仅执行其已生成用例（不重新生成）")
+    # —— 生成+执行路径（与 PipelineRequest 同义子集）——
+    local_path: str = Field("", description="被测代码目录（与 repo_url/test_url 至少给一个）")
+    repo_url: str = Field("", description="仓库地址（F1）：先取码再生成+执行")
+    project_name: str = Field("", description="项目名（缺省用目录名或被测主机名）")
+    mode: str = Field("", description="full=全量扫描 / incremental=增量扫描（留空=默认 full）")
+    scopes: list[str] = Field(
+        default_factory=list,
+        description="行为维度范围：正常/异常/安全/边界（留空=默认 正常+安全+边界）",
+    )
+    test_url: str = Field("", description="被测环境地址（运行时 UI 发现 + 接口执行 base_url）")
+    login_url: str = Field("", description="登录页地址（缺省自动判定）")
+    login_user: str = Field("", description="登录账号（更推荐用环境变量注入）")
+    login_password: str = Field("", description="登录密码（更推荐用环境变量注入）")
+    login_otp: str = Field("", description="动态口令（更推荐用环境变量注入）")
+    runtime_ui: bool = Field(False, description="启用运行时 UI 发现（生成阶段）")
+    runtime_routes: list[str] = Field(default_factory=list, description="显式路由（优先级最高）")
+    auto_input: str = Field("", description="统一智能输入框：一段混排文本（地址+账号+密码+口令）")
+    # —— 执行控制（两条路径共用）——
+    exec_url: str = Field("", description="执行器被测服务地址（只跑接口层时单独指定）")
+    allow_write: bool = Field(False, description="放行写操作；默认只跑只读请求")
+    ui_click: bool = Field(False, description="UI 层执行真实点击（F13）；默认只做只读断言")
+
+
+def _run_execution_job(
+    task_id: str, project_id: int, opts: pipeline.PipelineOptions
+) -> dict[str, Any]:
+    """后台作业：对已有项目执行验证（不重新生成），进度写回任务表。"""
+    best = {"frac": 0.0}
+
+    def _progress(stage: str, _info: dict[str, Any]) -> None:
+        frac = stage_fraction(stage, best["frac"])
+        best["frac"] = frac
+        task_store.update(task_id, progress=round(frac, 3), stage=stage)
+
+    return pipeline.run_execution(project_id, opts, progress=_progress)
+
+
+def _build_exec_opts_from_request(req: ExecuteRequest) -> pipeline.PipelineOptions:
+    """把 `ExecuteRequest` 的项目级执行字段映射到流水线选项（仅执行，不重新生成）。"""
+    opts = pipeline.default_options()
+    t = opts.target_req
+    t.exec_url = req.exec_url
+    t.allow_write = req.allow_write
+    t.ui_click = req.ui_click
+    if req.test_url:
+        t.base_url = req.test_url
+        t.enabled = True
+    if req.login_url:
+        t.login_url = req.login_url
+    if req.login_user:
+        t.login_user = req.login_user
+    if req.login_password:
+        t.login_password = req.login_password
+    if req.login_otp:
+        t.login_otp = req.login_otp
+    if req.runtime_ui:
+        t.enabled = True
+    return opts
 
 
 # ============================================================================
@@ -312,8 +383,18 @@ def _idem_key_for_generate(req: PipelineRequest) -> str:
     )
 
 
-def _run_generation_job(task_id: str, opts: pipeline.PipelineOptions) -> dict[str, Any]:
-    """后台作业：跑生成链路（强制生成-only），把进度/结果写回任务表。"""
+def _run_generation_job(
+    task_id: str, opts: pipeline.PipelineOptions, *, force_execute: bool = False
+) -> dict[str, Any]:
+    """后台作业：跑生成链路。
+
+    - `force_execute=False`（默认）：强制生成-only（与 `/api/v1/generate` 的红线一致）；
+    - `force_execute=True`：生成后紧接着执行验证（对应 `/api/v1/execute` 的「生成+执行」、
+      webhook 的 `execute=true`）。执行结论由 `stage_persist → record_execution` 自动落库。
+    """
+    if force_execute:
+        opts.target_req.execute = True
+        opts.persist = True
     best = {"frac": 0.0}
 
     def _progress(stage: str, _info: dict[str, Any]) -> None:
@@ -355,6 +436,60 @@ def submit_generate(req: PipelineRequest) -> JSONResponse:
     return _task_accepted(task, status_code=202)
 
 
+@app.post("/api/v1/execute", dependencies=[Depends(require_auth)])
+def submit_execute(req: ExecuteRequest) -> JSONResponse:
+    """异步提交「执行验证」任务（G-2 服务化执行侧）。
+
+    - 给了 `project_id`：对**已有用例**执行验证（不重新生成），等价于 CLI `testgen execute`；
+    - 给了代码/地址来源：先生成用例再执行验证（等价于 CLI `pipeline --execute`）。
+    结果经 `GET /api/v1/tasks/{task_id}` 轮询，复用同一张任务表（`kind=execute`）。
+
+    ⚠️ 诚实边界：本端点**只做只读验证**（默认不执行写操作、不真实点击 UI）。要主动污染被测环境，
+    调用方须显式传 `allow_write=true` / `ui_click=true` 并确认环境可写。写操作失败不会伪造通过。
+    """
+    if req.project_id:
+        opts = _build_exec_opts_from_request(req)
+        idem = "exec:" + str(req.project_id)
+        existing = task_store.find_by_idempotency(idem)
+        if existing and existing.state in (TaskState.PENDING.value, TaskState.RUNNING.value):
+            return _task_accepted(existing, status_code=202)
+        task = task_store.create(
+            kind="execute",
+            idempotency_key=idem,
+            request=json.dumps(req.model_dump(), ensure_ascii=False),
+        )
+        executor.submit(
+            task.task_id, lambda: _run_execution_job(task.task_id, req.project_id, opts)
+        )
+        return _task_accepted(task, status_code=202)
+
+    # 生成 + 执行：复用 PipelineRequest 同义字段，避免两套校验逻辑分叉
+    pr = PipelineRequest(**req.model_dump(exclude={"project_id"}))
+    if req.scopes:
+        invalid = set(req.scopes) - set(ALL_TP_TYPES)
+        if invalid:
+            raise ValidationError(f"非法行为维度：{sorted(invalid)}，允许 {ALL_TP_TYPES}")
+    opts = build_opts_from_request(pr)
+    idem = "genexec:" + "|".join(
+        [
+            req.local_path,
+            req.repo_url,
+            req.mode or "full",
+            ",".join(sorted(req.scopes)),
+            req.test_url,
+            req.exec_url,
+        ]
+    )
+    existing = task_store.find_by_idempotency(idem)
+    if existing and existing.state in (TaskState.PENDING.value, TaskState.RUNNING.value):
+        return _task_accepted(existing, status_code=202)
+    task = task_store.create(kind="execute", idempotency_key=idem, request=_redacted_request(pr))
+    executor.submit(
+        task.task_id, lambda: _run_generation_job(task.task_id, opts, force_execute=True)
+    )
+    return _task_accepted(task, status_code=202)
+
+
 @app.get("/api/v1/tasks", dependencies=[Depends(require_auth)])
 def list_tasks(limit: int = 20) -> dict[str, Any]:
     """任务清单（最近优先），便于运营后台 / 流水线巡检。"""
@@ -385,22 +520,32 @@ class WebhookRequest(BaseModel):
     local_path: str = Field("", description="本地目录（优先于 repo_url）")
     scopes: list[str] = Field(default_factory=list, description="行为维度范围：正常/异常/安全/边界")
     mode: str = Field("", description="full / incremental")
+    execute: bool = Field(
+        False,
+        description="生成完成后是否紧接着执行验证（默认否：仅生成用例）。需被测实例已就绪",
+    )
 
 
 @app.post("/api/v1/verify/webhook", dependencies=[Depends(require_auth)])
 def verify_webhook(req: WebhookRequest) -> JSONResponse:
     """发布流水线 webhook：收到 `deployment.success` → 触发「生成测试用例」任务。
 
-    ⚠️ 诚实边界：本服务当前**只生成用例、不执行 / 不验证运行时**。收到发布事件后，
-    它对刚发布的版本跑「生成用例」全链路（可据 `commit` 做增量对比），用例集落库；
-    执行环节的触发（真实探活 / 断言）不在此服务当前范围——避免「配了以为生效」的静默陷阱。
-    幂等：同一 `(target, commit, mode, scopes)` 的重复事件只跑一次。
+    ⚠️ 诚实边界：默认**只生成用例、不执行**。若载荷带 `execute=true`（需被测实例已就绪），
+    则在生成完成后紧接着执行只读验证，结论随任务结果返回（`stage_persist` 自动落库）。
+    执行默认只读（不写操作、不真实点击），避免污染刚发布的实例。
+    幂等：同一 `(target, commit, mode, scopes, execute)` 的重复事件只跑一次。
     """
     invalid = set(req.scopes) - set(ALL_TP_TYPES)
     if invalid:
         raise ValidationError(f"非法行为维度：{sorted(invalid)}，允许 {ALL_TP_TYPES}")
     idem = "wh:" + "|".join(
-        [req.target or req.repo_url, req.commit, req.mode or "full", ",".join(sorted(req.scopes))]
+        [
+            req.target or req.repo_url,
+            req.commit,
+            req.mode or "full",
+            ",".join(sorted(req.scopes)),
+            "exec" if req.execute else "gen",
+        ]
     )
     existing = task_store.find_by_idempotency(idem)
     if existing and existing.state in (TaskState.PENDING.value, TaskState.RUNNING.value):
@@ -415,13 +560,15 @@ def verify_webhook(req: WebhookRequest) -> JSONResponse:
     if req.scopes:
         opts.scopes = set(req.scopes)
     opts.persist = True
-    opts.target_req.execute = False  # 生成-only：绝不对刚发布版本执行
+    kind = "webhook_execute" if req.execute else "webhook_generate"
     task = task_store.create(
-        kind="webhook_generate",
+        kind=kind,
         idempotency_key=idem,
         request=json.dumps(req.model_dump(), ensure_ascii=False),
     )
-    executor.submit(task.task_id, lambda: _run_generation_job(task.task_id, opts))
+    executor.submit(
+        task.task_id, lambda: _run_generation_job(task.task_id, opts, force_execute=req.execute)
+    )
     return _task_accepted(task, status_code=202)
 
 

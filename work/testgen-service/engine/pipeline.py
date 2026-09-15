@@ -759,40 +759,56 @@ def stage_execute(
     真正落库在 `stage_persist`——必须等用例对账完成、`cases` 行就位后才能回填 `last_result`，
     否则首次运行「无处可写」。执行基础设施失败（如未装 requests）也会留下 `failed` 批次，**不静默**。
     """
-    s = get_settings()
     _emit(progress, "execute", cases=len(result.cases))
-    batch_id = _new_batch_id()
-    result.run_batch_id = batch_id
+    result.run_batch_id = _new_batch_id()
     started = _now_iso()
-    exec_options = executor.ExecutorOptions(
+    exec_options = _build_exec_options(opts, runtime_options, result.project_id)
+    try:
+        summary = executor.execute_all(result.cases, exec_options)
+    except EngineError as exc:
+        # 批次留痕：执行没跑起来也要可见（state=failed），否则「开关开了却什么都没发生」
+        result.execution = _failed_execution(
+            result.run_batch_id, len(result.cases), started, exc.message
+        )
+        result.notes.append(f"执行批次 {result.run_batch_id} 标记为 failed：{exc.message}")
+        raise
+    _finalize_execution(result, summary, started)
+    return summary
+
+
+def _build_exec_options(
+    opts: PipelineOptions,
+    runtime_options: runtime_ui.RuntimeUiOptions,
+    project_id: int | None,
+) -> executor.ExecutorOptions:
+    """把流水线选项映射为执行器选项（stage_execute 与 run_execution 共用，避免两套分支）。"""
+    s = get_settings()
+    return executor.ExecutorOptions(
         base_url=opts.target_req.exec_url or runtime_options.base_url,
         auth_token=runtime_options.auth_token or s.runtime_auth_token,
         headless=runtime_options.headless,
         timeout=runtime_options.timeout,
         allow_write=bool(opts.target_req.allow_write or s.executor_allow_write),
         # —— F13：浏览器（UI 层）通道 ——
-        # 仅在「真配置了运行时 UI（RUNTIME_UI_ENABLED=on 或指定了浏览器 channel）」时才启用
-        # UI 层真实执行；否则不启动浏览器，UI 用例走「如实 skipped」分支。
+        # 仅在「真配置了运行时 UI（RUNTIME_UI_ENABLED=on 或指定了浏览器 channel 或显式开启）」
+        # 时才启用 UI 层真实执行；否则不启动浏览器，UI 用例走「如实 skipped」分支。
         # 硬编码 True 会在无浏览器环境（测试 / 未配置部署）下尝试启动浏览器并挂起。
-        ui_enabled=bool(runtime_options.channel or s.runtime_ui_enabled),
+        ui_enabled=bool(runtime_options.channel or s.runtime_ui_enabled or opts.target_req.enabled),
         channel=runtime_options.channel,
         ui_click=opts.target_req.ui_click,
-        screenshot_dir=_screenshot_dir(result.project_id),
+        screenshot_dir=_screenshot_dir(project_id),
         login_url=runtime_options.login_url,
         login_user=runtime_options.login_user,
         login_password=runtime_options.login_password,
         login_otp=runtime_options.login_otp,
     )
-    try:
-        summary = executor.execute_all(result.cases, exec_options)
-    except EngineError as exc:
-        # 批次留痕：执行没跑起来也要可见（state=failed），否则「开关开了却什么都没发生」
-        result.execution = _failed_execution(batch_id, len(result.cases), started, exc.message)
-        result.notes.append(f"执行批次 {batch_id} 标记为 failed：{exc.message}")
-        raise
+
+
+def _finalize_execution(result: PipelineResult, summary: dict[str, Any], started: str) -> None:
+    """执行结论收口：补批次元信息、挂到 result、计数、备注（不与 stage_execute 重复实现）。"""
     summary.update(
         {
-            "batch_id": batch_id,
+            "batch_id": result.run_batch_id,
             "state": RunBatchState.COMPLETED.value,
             "started_at": started,
             "finished_at": _now_iso(),
@@ -805,11 +821,11 @@ def stage_execute(
     if artifacts:
         result.counts["exec_screenshots"] = artifacts
     result.notes.append(
-        f"执行结论（批次 {batch_id}）：共 {summary['total']} 条，已执行 {summary['executed']} 条"
+        f"执行结论（批次 {result.run_batch_id}）：共 {summary['total']} 条，"
+        f"已执行 {summary['executed']} 条"
         f"（通过 {summary['pass']} / 失败 {summary['fail']} / 异常 {summary['error']}），"
         f"跳过 {summary['skipped']} 条（UI 层会话不可用、非 HTTP 来源或写操作未放行）"
     )
-    return summary
 
 
 def _failed_execution(batch_id: str, total: int, started: str, error: str) -> dict[str, Any]:
@@ -832,6 +848,114 @@ def _failed_execution(batch_id: str, total: int, started: str, error: str) -> di
         "started_at": started,
         "finished_at": _now_iso(),
     }
+
+
+# ============================================================================
+# 项目级执行（G-1）：对已有用例重新验证（不重新生成）
+# ============================================================================
+def _case_spec_from_row(row: dict[str, Any]) -> CaseSpec:
+    """把 `cases` 表一行还原为 `CaseSpec`（执行器只认 CaseSpec）。
+
+    只取执行所需字段；`steps` / `doc_steps` 在 `store.list_cases` 已被 JSON 解析为列表。
+    """
+    return CaseSpec(
+        tc_no=str(row.get("tc_no") or ""),
+        title=str(row.get("title") or ""),
+        ctype=str(row.get("ctype") or "api"),
+        steps=list(row.get("steps") or []),
+        module=str(row.get("module") or ""),
+        case_type=str(row.get("case_type") or "正常"),
+        priority=str(row.get("priority") or "P2"),
+        precondition=str(row.get("precondition") or ""),
+        doc_steps=list(row.get("doc_steps") or []),
+        tp_id=str(row.get("tp_id") or ""),
+        fp_contract_id=str(row.get("fp_contract_id") or ""),
+        fp_row_id=row.get("fp_row_id"),
+        test_type=str(row.get("test_type") or "全量"),
+        status=str(row.get("status") or "generated"),
+        version=int(row.get("version") or 1),
+        coverage_role=str(row.get("coverage_role") or ""),
+    )
+
+
+def _runtime_options_for_execute(opts: PipelineOptions) -> runtime_ui.RuntimeUiOptions:
+    """为「仅执行」构造运行时选项：从环境配置起手，再用请求级参数覆盖。
+
+    与 `_runtime_target` 的区别：不强制 `enabled → 必须有 base_url`——仅执行模式下
+    UI 通道是否启用由 `ui_enabled` 透传给执行器，会话建不起来时 UI 用例会自动如实 skipped，
+    不应因为没开浏览器就报错阻断整次执行。
+    """
+    s = get_settings()
+    ro = runtime_ui.options_from_settings(s)
+    req = opts.target_req
+    for name in ("base_url", "login_url", "login_user", "login_password", "login_otp"):
+        value = str(getattr(req, name, "") or "")
+        if value:
+            setattr(ro, name, value)
+    # 接口层执行专用地址优先于运行时发现的 base_url
+    if req.exec_url:
+        ro.base_url = req.exec_url
+    # 注：UI 通道是否启用由 `_build_exec_options` 据 `opts.target_req.enabled`
+    # / `s.runtime_ui_enabled` 推导（RuntimeUiOptions 无 enabled 字段），
+    # 会话建不起来时 UI 用例会如实 skipped，不在此重复设置。
+    return ro
+
+
+def run_execution(
+    project_id: int,
+    opts: PipelineOptions | None = None,
+    *,
+    progress: ProgressFn | None = None,
+) -> dict[str, Any]:
+    """对**已有项目**的用例执行验证（不重新生成）。
+
+    用途：用例已落库后，被测环境升级 / 部署 / 配置变更，跑一次真实验证，得到
+    pass / fail / error / skipped 结论并落库（F12），无需重新生成用例。
+    等价于 CLI `testgen execute --project <id>` 与服务端 `POST /api/v1/execute`
+    （带 `project_id` 的调用）。执行策略与 `stage_execute` 完全一致（同一套 `_build_exec_options`）。
+    """
+    opts = opts or default_options()
+    rows = store.list_cases(project_id, include_obsolete=False)
+    if not rows:
+        raise EngineError(f"项目 {project_id} 没有可执行的用例；请先生成用例")
+    cases = [_case_spec_from_row(r) for r in rows]
+    ro = _runtime_options_for_execute(opts)
+    exec_options = _build_exec_options(opts, ro, project_id)
+    batch_id = _new_batch_id()
+    started = _now_iso()
+    _emit(progress, "execute", cases=len(cases))
+    try:
+        summary = executor.execute_all(cases, exec_options)
+    except EngineError as exc:
+        # 基础设施失败也要留痕（state=failed），否则「开了却什么都没发生」
+        summary = _failed_execution(batch_id, len(cases), started, exc.message)
+        store.record_execution(
+            project_id, summary, mode=opts.mode, source_kind="execute", conn=None
+        )
+        raise
+    summary.update(
+        {
+            "batch_id": batch_id,
+            "state": RunBatchState.COMPLETED.value,
+            "started_at": started,
+            "finished_at": _now_iso(),
+        }
+    )
+    written = store.record_execution(
+        project_id, summary, mode=opts.mode, source_kind="execute", conn=None
+    )
+    _emit(
+        progress,
+        "done",
+        exec_total=summary["total"],
+        exec_pass=summary["pass"],
+        exec_fail=summary["fail"],
+        exec_error=summary["error"],
+        exec_skipped=summary["skipped"],
+    )
+    summary["runs_written"] = int(written.get("runs", 0))
+    summary["cases_backfilled"] = int(written.get("cases", 0))
+    return summary
 
 
 # ============================================================================

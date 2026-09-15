@@ -165,6 +165,31 @@ def _build_parser() -> argparse.ArgumentParser:
 
     _add_pull_parser(sub)
     _add_pipeline_partners(sub)
+
+    # —— G-1：对已有项目用例执行验证（不重新生成）——
+    ex = sub.add_parser("execute", help="对已有项目用例执行验证（不重新生成）")
+    ex.add_argument("--project", type=int, required=True, help="项目 ID（用例须已落库）")
+    ex.add_argument("--exec-url", default="", help="执行器被测服务地址（只跑接口层时用它）")
+    ex.add_argument("--url", default="", help="被测环境地址（运行时 UI 发现 + 接口 base_url）")
+    ex.add_argument("--login-url", default="", help="登录页地址（缺省自动判定）")
+    ex.add_argument("--user", default="", help="登录账号（更推荐 RUNTIME_LOGIN_USER）")
+    ex.add_argument("--password", default="", help="登录密码（更推荐 RUNTIME_LOGIN_PASSWORD）")
+    ex.add_argument("--otp", default="", help="动态口令（更推荐 RUNTIME_LOGIN_OTP）")
+    ex.add_argument(
+        "--runtime-ui",
+        action="store_true",
+        help="启用运行时 UI 发现通道（需 Playwright；不开启则只跑接口层）",
+    )
+    ex.add_argument(
+        "--allow-write",
+        action="store_true",
+        help="放行写操作（POST/PUT/PATCH/DELETE）；默认只读，防污染被测环境",
+    )
+    ex.add_argument(
+        "--ui-click",
+        action="store_true",
+        help="UI 层执行真实点击（F13）；默认只断言页面可达与元素可见",
+    )
     return p
 
 
@@ -396,6 +421,51 @@ def _cmd_report(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_execute(args: argparse.Namespace) -> int:
+    """对已有项目用例执行验证（G-1）：不重新生成，直接真跑接口层 / UI 层。"""
+    init_db()
+    opts = pipeline.default_options(mode=MODE_FULL)
+    req = opts.target_req
+    if args.exec_url:
+        req.exec_url = args.exec_url
+    if args.url:
+        req.base_url = args.url
+        req.enabled = True
+    if args.login_url:
+        req.login_url = args.login_url
+    if args.user:
+        req.login_user = args.user
+    if args.password:
+        req.login_password = args.password
+    if args.otp:
+        req.login_otp = args.otp
+    if args.runtime_ui:
+        req.enabled = True
+    req.allow_write = bool(args.allow_write)
+    req.ui_click = bool(args.ui_click)
+
+    try:
+        summary = pipeline.run_execution(args.project, opts)
+    except AppError as exc:
+        print(f"[error] {exc.code}: {exc.message}", file=sys.stderr)
+        return 2
+    payload = {
+        "project_id": args.project,
+        "batch_id": summary.get("batch_id"),
+        "state": summary.get("state"),
+        "total": summary.get("total"),
+        "executed": summary.get("executed"),
+        "pass": summary.get("pass"),
+        "fail": summary.get("fail"),
+        "error": summary.get("error"),
+        "skipped": summary.get("skipped"),
+        "runs_written": summary.get("runs_written"),
+        "cases_backfilled": summary.get("cases_backfilled"),
+    }
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0
+
+
 def _cmd_serve(args: argparse.Namespace) -> int:
     import uvicorn
 
@@ -417,6 +487,7 @@ _COMMANDS: dict[str, Callable[[argparse.Namespace], int]] = {
     "analyze": _cmd_analyze,
     "runs": _cmd_runs,
     "report": _cmd_report,
+    "execute": _cmd_execute,
     "serve": _cmd_serve,
 }
 
