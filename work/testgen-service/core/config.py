@@ -132,6 +132,7 @@ class Settings:
     runtime_routes: list[str] = field(default_factory=list)  # 显式路由清单（逗号分隔）
     runtime_ui_timeout: int = 30  # 单页/单步超时（秒）
     runtime_max_pages: int = 60  # 单次发现遍历的页面上限（防爆）
+    runtime_ui_mobile_enabled: bool = False  # G-7：移动端视口发现开关（默认关）
     # 凭证：只从环境变量读取，绝不入库/入日志/入产物（见模块 docstring 红线）
     runtime_login_user: str = ""
     runtime_login_password: str = ""
@@ -267,6 +268,7 @@ def load_settings(env: dict[str, str] | None = None) -> Settings:
         runtime_routes=_split_list(g("RUNTIME_ROUTES"), []),
         runtime_ui_timeout=_as_int(g("RUNTIME_UI_TIMEOUT"), 30, "RUNTIME_UI_TIMEOUT"),
         runtime_max_pages=_as_int(g("RUNTIME_MAX_PAGES"), 60, "RUNTIME_MAX_PAGES"),
+        runtime_ui_mobile_enabled=_as_bool(g("RUNTIME_UI_MOBILE_ENABLED"), False),
         runtime_login_user=(g("RUNTIME_LOGIN_USER") or "").strip(),
         runtime_login_password=g("RUNTIME_LOGIN_PASSWORD") or "",
         runtime_login_otp=g("RUNTIME_LOGIN_OTP") or "",

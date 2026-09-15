@@ -41,6 +41,7 @@ _SEMANTIC_ACTION: dict[str, str] = {
     TPType.ABNORMAL.value: "验证异常路径处理",
     TPType.SECURITY.value: "验证鉴权与越权防护",
     TPType.BOUNDARY.value: "验证参数边界与非法输入",
+    TPType.PERFORMANCE.value: "验证性能与并发",  # G-8
 }
 
 # 维度规范顺序（与 enums.TPType 声明顺序一致）。
@@ -53,6 +54,7 @@ _CANONICAL_ORDER: tuple[str, ...] = (
     TPType.ABNORMAL.value,
     TPType.SECURITY.value,
     TPType.BOUNDARY.value,
+    TPType.PERFORMANCE.value,  # G-8：独立行为维度，tp_id 规范顺序固定末位
 )
 
 # 「行为维度 × 子维度」在规范顺序中的槽位：
@@ -85,6 +87,9 @@ _DIMENSION_SLOTS: dict[str, dict[str, int]] = {
         Dimension.UI_UNAUTH_PAGE.value: 3,
         # G-3：令牌过期续期（独立槽位）
         Dimension.TOKEN_EXPIRED.value: 4,
+        # G-9：多租户数据隔离（资源级隔离，独立槽位，避免与越权撞号）
+        Dimension.TENANT_READ.value: 5,
+        Dimension.TENANT_WRITE.value: 6,
     },
     TPType.BOUNDARY.value: {
         Dimension.PARAM_ILLEGAL.value: 0,
@@ -94,6 +99,11 @@ _DIMENSION_SLOTS: dict[str, dict[str, int]] = {
         Dimension.UI_REPEAT_CLICK.value: 3,
         Dimension.UI_DEEPLINK.value: 4,
         Dimension.UI_POOR_VIEWPORT.value: 5,
+    },
+    # G-8：性能/并发（独立行为维度「性能」，slot 0=基线 1=并发）
+    TPType.PERFORMANCE.value: {
+        Dimension.PERF_BASELINE.value: 0,
+        Dimension.PERF_CONCURRENCY.value: 1,
     },
 }
 _ORDINAL_STRIDE = 10
@@ -228,14 +238,37 @@ def _security_expect(dimension: str, auth_mode: str, resource: str = "") -> str:
     - `OPTIONAL`：有接线但未配置即放行 → 未配置时属未鉴权暴露，仍按「应被拒」断言；
     - `REQUIRED`：正常鉴权 → 越权/无凭证均应被拒。
 
-    `resource`（G-3 资源归属）：越权用例据此变成「操作他人{resource}资源应被拒」的
-    具体命题，而不是泛泛的「操作该资源」——越权验证才可构造、可复核。
+    `resource`（G-3/G-9 资源归属）：越权/跨租户用例据此变成「操作他人{resource}资源应被拒」
+    的具体命题，而不是泛泛的「操作该资源」——验证才可构造、可复核。
     """
-    if dimension == Dimension.TOKEN_EXPIRED.value:
-        return (
+    # 维度级期望文案（与越权/跨租户语义一致，按维度归表避免长 return 链）
+    dim_expect = {
+        Dimension.TOKEN_EXPIRED.value: (
             "使用过期/失效令牌访问 → 返回 401/403；持有效令牌刷新后恢复原访问能力"
             "（验证令牌生命周期与续期机制）"
-        )
+        ),
+        Dimension.PRIV_ESC.value: (
+            f"以非属主身份/越权凭证操作他人 {resource} 资源（resource_id 需人工提供他人 ID）"
+            "→ 403，且不产生越权修改"
+            if resource
+            else "以他人身份/越权凭证操作该资源 → 403，且不产生越权修改"
+        ),
+        # G-9：多租户隔离
+        Dimension.TENANT_READ.value: (
+            f"以他人租户/他人身份读取他人 {resource} 资源（需双身份 + 他人 resource_id 复测）"
+            "→ 403/404，且响应体不含他人数据"
+            if resource
+            else "以他人租户/他人身份读取他人资源 → 403/404，且响应体不含他人数据"
+        ),
+        Dimension.TENANT_WRITE.value: (
+            f"以他人租户/他人身份写入他人 {resource} 资源（需双身份 + 他人 resource_id 复测）"
+            "→ 403，且不产生越权修改/越权归属"
+            if resource
+            else "以他人租户/他人身份写入他人资源 → 403，且不产生越权修改"
+        ),
+    }
+    if dimension in dim_expect:
+        return dim_expect[dimension]
     if auth_mode == AuthMode.ABSENT.value:
         return (
             "该接口未检测到鉴权接线（公开接口）→ 可正常访问且不泄露敏感字段；"
@@ -246,13 +279,6 @@ def _security_expect(dimension: str, auth_mode: str, resource: str = "") -> str:
             "鉴权接线为占位实现（未配置令牌即放行）→ 未配置时视为未鉴权暴露；"
             "配置令牌后无凭证访问应被拒（401/403），且不泄露资源内容"
         )
-    if dimension == Dimension.PRIV_ESC.value:
-        if resource:
-            return (
-                f"以非属主身份/越权凭证操作他人 {resource} 资源"
-                f"（resource_id 需人工提供他人 ID）→ 403，且不产生越权修改"
-            )
-        return "以他人身份/越权凭证操作该资源 → 403，且不产生越权修改"
     return "未携带或携带无效凭证时返回 401/403，且不泄露资源内容（越权访问同样被拒）"
 
 
@@ -307,6 +333,11 @@ def _expect_of(
         if dimension in (Dimension.UI_INPUT_INJECT.value, Dimension.UI_UNAUTH_PAGE.value):
             return _UI_EXPECT[dimension]
         return _security_expect(dimension, auth_mode, resource)
+    if category == TPType.PERFORMANCE.value:  # G-8
+        return _PERF_EXPECT.get(
+            dimension,
+            "关键接口应达成约定 SLA（响应时间/并发行为），超阈值或串数据需专项/压测确认",
+        )
     # 边界：接口参数维度走通用文案；UI 维度走 _UI_EXPECT。
     return _UI_EXPECT.get(dimension, "参数缺失或越界时返回 400/422，校验信息明确指出非法字段")
 
@@ -326,6 +357,17 @@ def _abnormal_expect(dimension: str) -> str:
     return "返回 4xx（资源不存在 404 / 状态非法 409），响应体为结构化错误信息，服务不抛未捕获异常"
 
 
+# G-8：性能维度的预期文案（与 executor 判定口径一致：基线真实测延迟；并发需并行 harness）。
+_PERF_EXPECT: dict[str, str] = {
+    Dimension.PERF_BASELINE.value: (
+        "关键接口单次请求响应时间应低于约定 SLA（基线探测记录实际耗时，超阈值告警不判失败）"
+    ),
+    Dimension.PERF_CONCURRENCY.value: (
+        "并发读/写同一资源 → 不应串入他人数据、不应因竞争产生脏写/重复创建（需并行压测 harness 验证）"
+    ),
+}
+
+
 def _semantic_of(fp: FunctionalPoint, category: str) -> str:
     return f"{_SEMANTIC_ACTION[category]}：{fp.title}"
 
@@ -342,6 +384,11 @@ _BEST_EFFORT_DIMS: frozenset[str] = frozenset(
         Dimension.UI_ERROR_DISPLAY.value,
         Dimension.UI_EMPTY_STATE.value,
         Dimension.UI_SERVER_ERROR.value,
+        # G-9：多租户隔离需双身份 + 他人 resource_id 复测，单令牌无法构造 → 诚实 SKIPPED
+        Dimension.TENANT_READ.value,
+        Dimension.TENANT_WRITE.value,
+        # G-8：并发不串数据需并行压测 harness，单请求探活无法验证 → 诚实 SKIPPED
+        Dimension.PERF_CONCURRENCY.value,
     }
 )
 # 限流可发突发请求自动验证（置信度高于纯故障注入类）
@@ -398,6 +445,14 @@ def plan_of(fp: FunctionalPoint) -> list[tuple[str, str]]:
         plan.append((TPType.ABNORMAL.value, Dimension.TIMEOUT.value))
         if has_id and method in _PRIV_ESC_METHODS:
             plan.append((TPType.SECURITY.value, Dimension.PRIV_ESC.value))
+        # G-9：多租户数据隔离（需双身份复测，执行器诚实 SKIPPED）
+        if has_id and method == "GET":
+            plan.append((TPType.SECURITY.value, Dimension.TENANT_READ.value))
+        if has_id and method in _WRITE_METHODS:
+            plan.append((TPType.SECURITY.value, Dimension.TENANT_WRITE.value))
+        # G-8：性能/并发（独立行为维度「性能」，需 scope 含 性能 才默认生成）
+        plan.append((TPType.PERFORMANCE.value, Dimension.PERF_BASELINE.value))
+        plan.append((TPType.PERFORMANCE.value, Dimension.PERF_CONCURRENCY.value))
         return plan
     if fp.ftype == FType.PAGE.value:
         # #222：页面套 DEFAULT_SCOPE → 正常(可达) + 安全(未授权访问) + 边界(极端视口)
@@ -446,8 +501,11 @@ def expand_functional_point(
     for category, dimension in plan_of(fp):
         if category not in ctx.scopes:
             continue
-        # G-3：越权用例标记属主隔离（资源实体已识别且为资源级操作）
-        owner_scoped = bool(resource) and dimension == Dimension.PRIV_ESC.value
+        # G-3/G-9：越权与跨租户写用例标记属主隔离（资源实体已识别且为资源级操作）
+        owner_scoped = bool(resource) and dimension in (
+            Dimension.PRIV_ESC.value,
+            Dimension.TENANT_WRITE.value,
+        )
         out.append(
             TestPoint(
                 tp_id=tp_id_of(

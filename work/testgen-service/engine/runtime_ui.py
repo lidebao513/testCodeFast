@@ -195,6 +195,8 @@ class RuntimeUiOptions:
     # --- M3.3 新增（Additive）---
     login_otp: str = ""  # 动态口令 / 一次性验证码（不入库 / 不日志）
     discover_by_menu: bool = True  # 是否靠点菜单发现 SPA 路由（无正确 href 时的唯一途径）
+    # G-7：移动端/响应式发现（默认关：需显式开启 RUNTIME_UI_MOBILE_ENABLED）
+    mobile_enabled: bool = False
 
 
 @dataclass
@@ -206,6 +208,7 @@ class UiElement:
     text: str = ""
     visible: bool = False
     deep: bool = False  # 是否来自 click-through 深层视图（弹窗/Tab/表单提交后）
+    mobile: bool = False  # G-7：是否来自移动端视口发现（区别于桌面元素）
 
 
 @dataclass
@@ -354,6 +357,7 @@ def options_from_settings(settings: Any) -> RuntimeUiOptions:
         login_url=str(settings.runtime_login_url or ""),
         routes=list(settings.runtime_routes or []),
         max_pages=int(settings.runtime_max_pages),
+        mobile_enabled=bool(getattr(settings, "runtime_ui_mobile_enabled", False)),
     )
 
 
@@ -1290,6 +1294,109 @@ def _click_through(
 
 
 # ============================================================================
+# G-7 移动端 / 响应式发现（手机视口 + /m/* 专属路由）
+# ============================================================================
+# 用主流手机视口（iPhone 12/13 逻辑分辨率）模拟移动端；has_touch 让点击走触摸事件。
+_MOBILE_VIEWPORT: dict[str, int] = {"width": 390, "height": 844}
+_MOBILE_USER_AGENT = (
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 "
+    "(KHTML, like Gecko) Version/15.0 Mobile/15E148 Safari/604.1"
+)
+# 移动端专属路由发现：抓取所有指向 /m/* 的链接 / data-route 提示（SPA 常无 <a>）。
+_MOBILE_M_ROUTES_JS = """
+(function(){
+  var sel = 'a[href], [data-route], [data-to], [data-path]';
+  var nodes = Array.from(document.querySelectorAll(sel));
+  var out = [];
+  nodes.forEach(function(n){
+    var h = n.getAttribute('href') || n.getAttribute('data-route') ||
+            n.getAttribute('data-to') || n.getAttribute('data-path') || '';
+    if (h && h.indexOf('/m/') === 0) out.push(h);
+  });
+  return out;
+})()
+"""
+
+
+def _discover_mobile(
+    session: _Session, opts: RuntimeUiOptions, result: RuntimeUiResult, sink: ConsoleSink
+) -> int:
+    """G-7：移动端视口发现——用手机视口打开被测页，抽取移动专属元素并标记 `mobile=True`，
+    同时发现 /m/* 专属路由。
+
+    复用于桌面发现的同一套元素抽取脚本（`_build_extract_js`）；与桌面元素的差异仅在于
+    「视口/交互方式」不同（底部 Tab、手势、下拉刷新等移动专属交互在手机视口下才出现）。
+    已存在于桌面的元素不重复计入（按 selector 去重），只保留移动专属增量。
+    故障隔离：单页异常不影响主链路（调用方已包 try）。
+    """
+    page = session.page
+    before = len(result.elements)
+    raw: list[dict[str, Any]] = []
+    try:
+        got = page.evaluate(_build_extract_js())
+        if isinstance(got, list):
+            raw = [x for x in got if isinstance(x, dict)]
+    except Exception:  # 元素抽取失败只记降级，不中断
+        raw = []
+    seen = {e.selector for e in result.elements}
+    added = 0
+    for item in raw:
+        sel = str(item.get("selector") or "")
+        if not sel or sel in seen:
+            continue
+        result.elements.append(
+            UiElement(
+                selector=sel,
+                kind=str(item.get("kind") or ""),
+                text=str(item.get("text") or ""),
+                visible=bool(item.get("visible")),
+                mobile=True,
+            )
+        )
+        seen.add(sel)
+        added += 1
+    # /m/* 专属路由发现
+    m_routes: list[str] = []
+    try:
+        links = page.evaluate(_MOBILE_M_ROUTES_JS)
+        if isinstance(links, list):
+            m_routes = [str(x) for x in links if isinstance(x, str) and x.startswith("/m/")]
+    except Exception:
+        m_routes = []
+    if m_routes:
+        result.discovered_routes.extend(m_routes)
+    result.notes.append(
+        f"移动端发现完成：新增移动专属元素 {added} 个（去重后），/m/* 专属路由 {len(m_routes)} 条"
+    )
+    return len(result.elements) - before
+
+
+def _discover_mobile_pass(
+    browser: Any, opts: RuntimeUiOptions, result: RuntimeUiResult, sink: ConsoleSink
+) -> None:
+    """G-7 主链路入口：建手机视口上下文 → 登录 → 调 `_discover_mobile`，故障隔离。"""
+    m_context: Any = None
+    try:
+        m_context = browser.new_context(
+            ignore_https_errors=True,
+            is_mobile=True,
+            has_touch=True,
+            viewport=_MOBILE_VIEWPORT,
+            user_agent=_MOBILE_USER_AGENT,
+        )
+        m_context.set_default_timeout(timeout_ms(opts))
+        m_page, _ = open_authenticated_page(
+            m_context, opts, result, attach=lambda p: attach_console_listeners(p, sink)
+        )
+        _discover_mobile(_Session(m_page, m_context), opts, result, sink)
+    except Exception as exc:  # 移动端发现失败绝不阻断主链路
+        result.degraded = True
+        result.notes.append(f"移动端发现降级：{exc}")
+    finally:
+        close_quietly(m_context)
+
+
+# ============================================================================
 # 产出：运行时发现 → 功能点（M3.4）
 # ============================================================================
 def _module_of_path(path: str) -> str:
@@ -1793,6 +1900,9 @@ def discover_ui(
             except Exception as exc:  # 深度发现失败绝不阻断主链路
                 result.degraded = True
                 result.notes.append(f"click-through 深度发现降级：{exc}")
+            # G-7：移动端视口发现（手机视口 + /m/* 专属路由），故障隔离
+            if opts.mobile_enabled:
+                _discover_mobile_pass(browser, opts, result, sink)
             _record_summary(result, logged_in, reachable)
     except EngineError:
         raise

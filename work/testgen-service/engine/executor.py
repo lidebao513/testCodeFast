@@ -67,6 +67,10 @@ _CLIENT_ERR_MAX = 500
 # G-5：限流突发验证的请求次数（仅作「是否配置限流」的信号，远小于真实压测量级）
 _RATE_LIMIT_BURST = 8
 
+# G-8：性能基线告警阈值（毫秒）。基线探测只记录真实延迟，超阈值仅告警不判失败
+# （真实验证需设定业务 SLA 并持续观测，平台不臆造阈值）。
+_PERF_SLOW_MS = 30_000
+
 # G-5：UI 异常流维度（行为维度属「异常」，需 DEFAULT_SCOPE 含异常才生成）；
 # 常规渲染探活不构造「断网/报错/空数据/5xx」状态，由 UI 通道诚实跳过
 _UI_ABNORMAL_DIMS: frozenset[str] = frozenset(
@@ -150,6 +154,7 @@ _KIND_ABNORMAL = "abnormal"
 _KIND_AUTH = "auth"
 _KIND_PRIV_ESC = "priv_esc"
 _KIND_BOUNDARY = "boundary"
+_KIND_PERF = "perf"  # G-8：性能基线（按可达性判定，延迟记 note）
 # F8：未检测到鉴权接线的接口（公开接口）——按「可访问」判定，而不是判成「鉴权缺失失败」
 _KIND_PUBLIC = "public"
 
@@ -159,6 +164,7 @@ _PASS_PREDICATES: dict[str, Callable[[int], bool]] = {
     _KIND_AUTH: lambda s: s in _SECURITY_REJECT or s in _SECURITY_REDIRECT,
     _KIND_PRIV_ESC: lambda s: s in _SECURITY_REJECT,
     _KIND_BOUNDARY: lambda s: s in _BOUNDARY_OK,
+    _KIND_PERF: lambda s: _OK_MIN <= s < _OK_MAX,
     _KIND_PUBLIC: lambda s: _OK_MIN <= s < _OK_MAX,
 }
 
@@ -169,7 +175,18 @@ _VERDICT_DESC: dict[str, tuple[str, str]] = {
     _KIND_AUTH: ("无凭证访问被拒", "无凭证访问未被拒绝"),
     _KIND_PRIV_ESC: ("越权访问被拒", "越权访问未被拒绝"),
     _KIND_BOUNDARY: ("非法参数被校验拒绝", "非法参数未被校验"),
+    _KIND_PERF: ("接口性能基线可达", "接口性能基线不可达"),
     _KIND_PUBLIC: ("公开接口可正常访问", "公开接口未能正常访问"),
+}
+
+
+# 行为维度 → 判定种类（查表，避免逐维度 return 撑爆圈复杂度）
+_CATEGORY_KIND: dict[str, str] = {
+    TPType.NORMAL.value: _KIND_NORMAL,
+    TPType.ABNORMAL.value: _KIND_ABNORMAL,
+    TPType.BOUNDARY.value: _KIND_BOUNDARY,
+    TPType.PERFORMANCE.value: _KIND_PERF,
+    TPType.SECURITY.value: _KIND_AUTH,
 }
 
 
@@ -185,12 +202,7 @@ def _dimension_kind(category: str, dimension: str, auth_mode: str = "") -> str:
             return _KIND_PRIV_ESC
         if auth_mode == AuthMode.ABSENT.value:
             return _KIND_PUBLIC
-        return _KIND_AUTH
-    if category == TPType.BOUNDARY.value:
-        return _KIND_BOUNDARY
-    if category == TPType.ABNORMAL.value:
-        return _KIND_ABNORMAL
-    return _KIND_NORMAL
+    return _CATEGORY_KIND.get(category, _KIND_NORMAL)
 
 
 def _judge(category: str, dimension: str, status: int, auth_mode: str = "") -> tuple[bool, str]:
@@ -397,16 +409,51 @@ def _best_effort_skip_reason(dimension: str, category: str) -> str | None:
         Dimension.TOKEN_EXPIRED.value: (
             "令牌过期需注入过期令牌并重放，常规探活未持有过期令牌；需安全测试脚本复测"
         ),
+        # G-9：多租户隔离需双身份（他人令牌 + 他人 resource_id）复测，单令牌无法构造
+        Dimension.TENANT_READ.value: (
+            "跨租户读隔离需双身份（他人令牌 + 他人 resource_id）复测，平台单令牌无法构造；"
+            "需以他人身份访问他人资源并断言响应不含他人数据"
+        ),
+        Dimension.TENANT_WRITE.value: (
+            "跨租户写隔离需双身份（他人令牌 + 他人 resource_id）复测，平台单令牌无法构造；"
+            "需以他人身份写入他人资源并断言 403 且无越权修改"
+        ),
     }
     if category not in (TPType.ABNORMAL.value, TPType.SECURITY.value):
         return None
     return reason_map.get(dimension)
 
 
+def _special_probe(
+    case: CaseSpec, step: dict[str, Any], opts: ExecutorOptions, session: Any
+) -> ExecutionResult | None:
+    """性能/限流维度走专用探针；其余维度返回 None 走常规请求判定。"""
+    category = case.case_type
+    dimension = str(step.get("dimension") or "")
+    if category == TPType.PERFORMANCE.value:
+        if Dimension.PERF_CONCURRENCY.value in dimension:
+            return _skipped(
+                case,
+                "并发不串数据需并行压测 harness（多线程/协程并发打同一资源 + 双身份校验响应归属），"
+                "常规单请求探活无法验证，需专项/压测确认",
+            )
+        return _probe_perf_baseline(case, step, opts, session)
+    if Dimension.RATE_LIMIT.value in dimension:
+        method = str(step.get("method") or "").upper().split(" ")[0]
+        path = str(step.get("path") or "")
+        materialized = _materialize_path(path, opts.path_param_value)[0]
+        return _probe_rate_limit(case, method, materialized, opts, session)
+    return None
+
+
 def _probe_http(
     case: CaseSpec, step: dict[str, Any], opts: ExecutorOptions, session: Any
 ) -> ExecutionResult:
     """接口层探活：真实发请求 + 按行为维度断言。"""
+    # G-5/G-8：性能/限流维度走专用探针（其余走常规请求判定）
+    special = _special_probe(case, step, opts, session)
+    if special is not None:
+        return special
     reason = _not_executable(case, step, opts)
     if reason:
         return _skipped(case, reason)
@@ -419,9 +466,6 @@ def _probe_http(
     dimension = str(step.get("dimension") or "")
     auth_mode = str(step.get("auth_mode") or "")
     resource = str(step.get("resource") or "")
-    # G-5：限流维度走突发请求验证（不依赖单请求状态码判定）
-    if Dimension.RATE_LIMIT.value in dimension:
-        return _probe_rate_limit(case, method, materialized, opts, session)
     # G-5/安全(G-3)：需故障注入/双身份/特定应用状态才能验证的维度 → 诚实跳过（不伪装通过）
     reason_be = _best_effort_skip_reason(dimension, category)
     if reason_be:
@@ -495,6 +539,59 @@ def _probe_rate_limit(
         case,
         f"未触发限流：突发 {_RATE_LIMIT_BURST} 次请求状态={statuses}，均无 429；"
         f"需确认被测端是否配置限流阈值（或提高突发量），本次未判失败",
+    )
+
+
+def _probe_perf_baseline(
+    case: CaseSpec, step: dict[str, Any], opts: ExecutorOptions, session: Any
+) -> ExecutionResult:
+    """G-8：性能基线——真实发一次请求，记录端到端延迟（落 runs.duration_ms）。
+
+    判定口径：可达（2xx）即视为「基线可达」，超阈值仅告警不判失败（SLA 由业务设定，
+    平台不臆造）。写操作默认不执行（见 `_not_executable`），故基线主要针对读接口。
+    """
+    reason = _not_executable(case, step, opts)
+    if reason:
+        return _skipped(case, reason)
+    method = str(step.get("method") or "").upper().split(" ")[0]
+    path = str(step.get("path") or "")
+    materialized, _ = _materialize_path(path, opts.path_param_value)
+    url = _join_url(opts.base_url, materialized)
+    owns_session = session is None
+    active = session or _new_session()
+    try:
+        started = time.monotonic()
+        response = _send(
+            active,
+            method,
+            url,
+            opts,
+            _should_attach_auth(case.case_type, str(step.get("dimension") or "")),
+        )
+        status_code = int(response.status_code)
+        elapsed_ms = int((time.monotonic() - started) * 1000)
+    except Exception as exc:  # noqa: BLE001 - 网络/证书/超时/连接被拒等一律转 error 结论
+        return ExecutionResult(
+            tc_no=case.tc_no,
+            status=ExecStatus.ERROR.value,
+            step_results=[StepResult(seq=3, ok=False, detail=f"请求失败：{type(exc).__name__}")],
+            notes=[f"性能基线探测 {method} {materialized} 失败：{type(exc).__name__}"],
+        )
+    finally:
+        if owns_session:
+            _close_session(active)
+    reachable = _OK_MIN <= status_code < _OK_MAX
+    notes = [f"{method} {materialized} → {status_code}，基线耗时 {elapsed_ms}ms"]
+    if elapsed_ms > _PERF_SLOW_MS:
+        notes.append(
+            f"响应较慢（{elapsed_ms}ms > {_PERF_SLOW_MS}ms 阈值）：建议设定 SLA 并持续观测，本次不判失败"
+        )
+    return ExecutionResult(
+        tc_no=case.tc_no,
+        status=ExecStatus.PASS.value if reachable else ExecStatus.FAIL.value,
+        step_results=[StepResult(seq=3, ok=reachable, detail=notes[0])],
+        notes=notes,
+        duration_ms=elapsed_ms,
     )
 
 

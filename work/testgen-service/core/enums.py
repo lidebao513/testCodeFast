@@ -25,6 +25,7 @@ class TPType(Enum):
     ABNORMAL = "异常"  # 资源/异常态
     SECURITY = "安全"  # 鉴权/越权
     BOUNDARY = "边界"  # 参数/边界
+    PERFORMANCE = "性能"  # G-8：响应时间基线 / 并发不串数据（默认不纳入 DEFAULT_SCOPE）
 
 
 # ============================ 标签（tag） ============================
@@ -102,6 +103,14 @@ class Dimension(Enum):
     UI_ERROR_DISPLAY = "异常-错误回显"  # 提交非法/服务报错应回显友好提示，不抛原始堆栈
     UI_EMPTY_STATE = "异常-空状态"  # 无数据时应渲染空态，不崩溃/不白屏
     UI_SERVER_ERROR = "异常-错误页"  # 后端 5xx 时前端应展示错误页而非白屏
+    # G-8：性能/并发（独立行为维度「性能」，需 scope 含 性能 才默认生成）
+    PERF_BASELINE = "性能-响应时间基线"  # 关键接口响应时间基线（可真实探测）
+    PERF_CONCURRENCY = "性能-并发不串数据"  # 并发读/写不串他人数据（需并行压测 harness）
+    # G-9：多租户数据隔离（安全维度扩展；资源级隔离需双身份 + 他人 resource_id 复测，诚实 SKIPPED）
+    TENANT_READ = (
+        "安全-越权读他人数据"  # 以他人身份读他人 resource 应被拒（贴合 ft.cntaiping 数据泄露）
+    )
+    TENANT_WRITE = "安全-越权写他人数据"  # 以他人身份写他人 resource 应被拒且不产生越权修改
 
 
 # ============================ 方法标记（method 字段取值） ============================

@@ -181,6 +181,7 @@ def test_options_from_settings_maps_all_fields() -> None:
         runtime_login_url: ClassVar[str] = "http://srv:9001/login"
         runtime_routes: ClassVar[list[str]] = ["/pc/tasks"]
         runtime_max_pages: ClassVar[int] = 7
+        runtime_ui_mobile_enabled: ClassVar[bool] = True
 
     opts = runtime_ui.options_from_settings(_S())
     assert opts.base_url == "http://srv:9001/login"
@@ -191,6 +192,7 @@ def test_options_from_settings_maps_all_fields() -> None:
     assert opts.login_password == _SECRET_PASSWORD
     assert opts.routes == ["/pc/tasks"]
     assert opts.max_pages == 7
+    assert opts.mobile_enabled is True
 
 
 def test_public_dict_hides_password_and_token() -> None:

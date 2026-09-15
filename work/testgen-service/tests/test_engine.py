@@ -322,6 +322,9 @@ def test_expansion_plan_matches_legacy_parity_table():
             (TPType.ABNORMAL.value, Dimension.RATE_LIMIT.value),
             (TPType.ABNORMAL.value, Dimension.DEGRADED.value),
             (TPType.ABNORMAL.value, Dimension.TIMEOUT.value),
+            # G-8：性能/并发（独立行为维度「性能」，需 scope 含 性能 才默认生成）
+            (TPType.PERFORMANCE.value, Dimension.PERF_BASELINE.value),
+            (TPType.PERFORMANCE.value, Dimension.PERF_CONCURRENCY.value),
         ],
         ("api", "GET /a/{id}"): [
             (TPType.NORMAL.value, Dimension.AVAIL.value),
@@ -332,6 +335,10 @@ def test_expansion_plan_matches_legacy_parity_table():
             (TPType.ABNORMAL.value, Dimension.RATE_LIMIT.value),
             (TPType.ABNORMAL.value, Dimension.DEGRADED.value),
             (TPType.ABNORMAL.value, Dimension.TIMEOUT.value),
+            # G-9：跨租户读（GET + 含路径参数）
+            (TPType.SECURITY.value, Dimension.TENANT_READ.value),
+            (TPType.PERFORMANCE.value, Dimension.PERF_BASELINE.value),
+            (TPType.PERFORMANCE.value, Dimension.PERF_CONCURRENCY.value),
         ],
         ("api", "DELETE /a/{id}"): [
             (TPType.NORMAL.value, Dimension.AVAIL.value),
@@ -344,6 +351,10 @@ def test_expansion_plan_matches_legacy_parity_table():
             (TPType.ABNORMAL.value, Dimension.DEGRADED.value),
             (TPType.ABNORMAL.value, Dimension.TIMEOUT.value),
             (TPType.SECURITY.value, Dimension.PRIV_ESC.value),
+            # G-9：跨租户写（写操作 + 含路径参数）
+            (TPType.SECURITY.value, Dimension.TENANT_WRITE.value),
+            (TPType.PERFORMANCE.value, Dimension.PERF_BASELINE.value),
+            (TPType.PERFORMANCE.value, Dimension.PERF_CONCURRENCY.value),
         ],
         # G-5：页面套 DEFAULT_SCOPE（含异常）→ 追加 UI 异常流（网络中断/错误回显/空状态/错误页）
         ("page", "/p"): [
