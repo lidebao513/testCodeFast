@@ -183,13 +183,40 @@ def merge_functional_points(
 
     顺序稳定性：`base` 原有顺序不变；`incoming` 仅追加。同优先级时保留**先出现**者。
     """
-    stats: dict[str, Any] = {"added": 0, "replaced": 0, "deduped": 0, "examples": []}
+    stats: dict[str, Any] = {
+        "added": 0,
+        "replaced": 0,
+        "deduped": 0,
+        "examples": [],
+        "conflicts": [],
+    }
     merged: list[FunctionalPoint] = []
     index: dict[str, int] = {}
     for group, is_incoming in ((base, False), (incoming, True)):
         for fp in group:
             _place(merged, index, fp, stats, is_incoming=is_incoming)
     return merged, stats
+
+
+def _source_of(file_path: str) -> str:
+    """功能点来自哪条通道：地址运行时发现的 `file_path` 以 `runtime:` 开头 → `url`，
+    其余（真实源码 / 低可信桩）→ `code`。用于合并冲突标注的「维度」维度。"""
+    norm = (file_path or "").replace("\\", "/").lower()
+    return "url" if norm.startswith(_RUNTIME_PREFIX) else "code"
+
+
+def _reason(winner: tuple[int, int], loser: tuple[int, int]) -> str:
+    """冲突保留原因（人类可读，不含凭证）。按来源主优先级判定。"""
+    w_main, l_main = winner[0], loser[0]
+    if w_main == 3 and l_main == 2:
+        return "运行时(地址通道)优先于静态源码"
+    if w_main == 3 and l_main == 0:
+        return "运行时(地址通道)优先于低可信桩"
+    if w_main == 2 and l_main == 0:
+        return "真实源码优先于低可信桩(mock/stub/faker/demo/fixture)"
+    if w_main == l_main:
+        return "同源同名保留首次出现(平级)"
+    return "来源优先级高者保留"
 
 
 def _place(
@@ -200,7 +227,8 @@ def _place(
     *,
     is_incoming: bool,
 ) -> None:
-    """把单个功能点落到结果集合：无键则直放，有键则按来源优先级决出保留者。"""
+    """把单个功能点落到结果集合：无键则直放，有键则按来源优先级决出保留者，
+    并**结构化记录冲突**（不再静默）。"""
     key = semantic_key(fp)
     if key is None:
         merged.append(fp)
@@ -213,28 +241,63 @@ def _place(
             stats["added"] += 1
         return
     kept = merged[pos]
-    if source_rank(fp.file_path, str(fp.ftype)) > source_rank(kept.file_path, str(kept.ftype)):
+    r_in = source_rank(fp.file_path, str(fp.ftype))
+    r_kept = source_rank(kept.file_path, str(kept.ftype))
+    if r_in > r_kept:
         merged[pos] = fp
-        stats["replaced" if is_incoming else "deduped"] += 1
-        _record_example(stats, survivor=fp, dropped=kept)
-        return
-    stats["deduped"] += 1
-    _record_example(stats, survivor=kept, dropped=fp)
+        if is_incoming:
+            stats["replaced"] += 1
+        else:
+            stats["deduped"] += 1
+        _record_conflict(stats, key=key, winner=fp, loser=kept)
+    else:
+        stats["deduped"] += 1
+        _record_conflict(stats, key=key, winner=kept, loser=fp)
 
 
-def _record_example(
+def _record_conflict(
     stats: dict[str, Any],
     *,
-    survivor: FunctionalPoint,
-    dropped: FunctionalPoint,
+    key: str | None,
+    winner: FunctionalPoint,
+    loser: FunctionalPoint,
 ) -> None:
-    """登记一条「保留 X ← 收敛 Y」示例（仅保留者与来源路径，不含任何凭证）。"""
-    examples: list[str] = stats["examples"]
-    if len(examples) >= _MAX_EXAMPLES:
-        return
-    examples.append(
-        f"{survivor.ftype}『{survivor.name}』保留 {survivor.file_path}（收敛 {dropped.file_path}）"
+    """登记一条合并冲突（结构化，供报告标注「冲突的测试用例」）。
+
+    含：语义键、胜出方（来源维度 / 文件 / 语义 / 模块）、落败方同上、保留原因。
+    同时保留一条一行的 `examples` 文本（向后兼容 `summary_line` 与运行备注）。
+    绝不含任何凭证——`file_path` 对运行时项是 `runtime:<url>`（已脱敏）、对源码项是相对路径。
+    """
+    w_src = _source_of(winner.file_path)
+    l_src = _source_of(loser.file_path)
+    reason = _reason(
+        source_rank(winner.file_path, str(winner.ftype)),
+        source_rank(loser.file_path, str(loser.ftype)),
     )
+    rec = {
+        "semantic_key": key,
+        "ftype": str(winner.ftype),
+        "name": str(winner.name),
+        "survivor_source": w_src,
+        "survivor": {
+            "file_path": winner.file_path,
+            "semantic": getattr(winner, "semantic", "") or "",
+            "module": getattr(winner, "module", "") or "",
+        },
+        "dropped_source": l_src,
+        "dropped": {
+            "file_path": loser.file_path,
+            "semantic": getattr(loser, "semantic", "") or "",
+            "module": getattr(loser, "module", "") or "",
+        },
+        "reason": reason,
+    }
+    stats["conflicts"].append(rec)
+    examples: list[str] = stats["examples"]
+    if len(examples) < _MAX_EXAMPLES:
+        examples.append(
+            f"{winner.ftype}『{winner.name}』({w_src}) 覆盖 {loser.ftype}『{loser.name}』({l_src})：{reason}"
+        )
 
 
 def dedupe_functional_points(

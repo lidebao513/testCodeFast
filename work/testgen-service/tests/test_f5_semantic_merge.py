@@ -104,7 +104,7 @@ def test_dedupe_keeps_real_source_over_mock_server() -> None:
     assert merged[0].file_path == "backend/api.py", "真实源码必须优先于 mock"
     assert stats["input"] == 2
     assert stats["deduped"] == 1
-    assert "收敛" in stats["examples"][0]
+    assert "覆盖" in stats["examples"][0]
 
 
 def test_dedupe_does_not_touch_component_or_business() -> None:
@@ -135,7 +135,9 @@ def test_merge_is_stable_and_reports_examples() -> None:
     merged, stats = fp_merge.merge_functional_points([], [first, second])
     assert [fp.file_path for fp in merged] == ["web/1.tsx"]
     assert stats["deduped"] == 1
-    assert any("web/1.tsx" in ex for ex in stats["examples"])
+    # 平局保留先出现者，且结构化冲突清单可追溯（不再只靠一行文本）
+    assert stats["conflicts"][0]["survivor"]["file_path"] == "web/1.tsx"
+    assert stats["conflicts"][0]["reason"] == "同源同名保留首次出现(平级)"
 
 
 def test_summary_line_is_none_when_nothing_merged() -> None:

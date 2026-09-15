@@ -151,6 +151,9 @@ class PipelineResult:
     cases: list[CaseSpec] = field(default_factory=list, repr=False)
     prd_doc: Any = None  # P2：解析后的 PRD（PrdDoc），未启用为 None
     runtime_ui: Any = None  # P3：运行时 UI 发现结果（RuntimeUiResult），未启用为 None
+    merge_conflicts: list[dict] = field(
+        default_factory=list
+    )  # F5：合并冲突清单（结构化，供报告标注「冲突的测试用例」）
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -167,6 +170,7 @@ class PipelineResult:
             "pull": self.pull_result,
             "auth_scan": self.auth_scan,
             "notes": self.notes,
+            "merge_conflicts": self.merge_conflicts,
             "errors": self.errors,
         }
 
@@ -905,7 +909,7 @@ def _resolve_sources(opts: PipelineOptions, settings: Any) -> tuple[bool, Any, b
     return has_code, runtime_options, runtime_enabled
 
 
-def run_pipeline(
+def run_pipeline(  # noqa: PLR0915 - 编排函数，阶段多为合理；冲突标注仅其中一步
     opts: PipelineOptions,
     *,
     progress: ProgressFn | None = None,
@@ -964,6 +968,7 @@ def run_pipeline(
             examples = list(stats.get("examples") or [])
             if examples:
                 result.notes.append("语义合并明细（示例）：" + "；".join(examples))
+            result.merge_conflicts = list(stats.get("conflicts", []) or [])
     _, tag_by_fp = stage_tag(opts, result, result.functional_points, progress)
     tps = stage_test_points(
         result,
