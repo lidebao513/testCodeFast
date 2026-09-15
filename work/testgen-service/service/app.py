@@ -12,7 +12,9 @@
 
 from __future__ import annotations
 
+import json
 import uuid
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -32,16 +34,35 @@ from engine import pipeline
 from engine import report as report_engine
 from output.report_writer import render_html, render_markdown
 from output.writer import OutputWriter
+from service.tasks import BackgroundExecutor, GenerationTask, TaskState, TaskStore, stage_fraction
 from workspace.manager import WorkspaceManager
 
 
 log = get_logger(__name__)
 settings = get_settings()
 
+# P5 服务化：进程内后台执行器（生成任务异步化）。生产升级路径为 broker + 多 consumer。
+task_store = TaskStore()
+executor = BackgroundExecutor(task_store)
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> Any:
+    """启动建表、关闭时优雅停机 worker 池。"""
+    init_db()
+    yield
+    executor.shutdown(wait=True)
+
+
 app = FastAPI(
     title="testgen-service",
     version="0.1.0",
-    description="测试用例生成服务：代码解析 → 测试点 → 用例（契约 v1.0）",
+    description=(
+        "测试用例生成服务：代码解析 → 测试点 → 用例（契约 v1.0）。"
+        "服务化：生成任务异步化（POST /api/v1/generate → 轮询 GET /api/v1/tasks/{id}），"
+        "发布流水线经 POST /api/v1/verify/webhook 触发；当前仅「生成用例」环节，不执行用例。"
+    ),
+    lifespan=lifespan,
 )
 
 
@@ -217,17 +238,11 @@ def _apply_request(req: PipelineRequest, opts: pipeline.PipelineOptions) -> None
     target.ui_click = req.ui_click
 
 
-@app.post("/api/v1/pipeline", dependencies=[Depends(require_auth)])
-def run_pipeline(req: PipelineRequest) -> dict[str, Any]:
-    """一站式：代码/地址 → 功能点 → 测试点 → 用例（含落库与产物输出）。
-
-    两条入口可单用也可并用：`local_path`（代码通道）与 `test_url`（地址通道）。
-    覆盖优先级：**请求字段 > auto_input 解析结果 > 环境变量**。
-    """
+def build_opts_from_request(req: PipelineRequest) -> pipeline.PipelineOptions:
+    """把 HTTP 请求转成流水线选项（表驱动）：同步 / 异步两条入口共用，避免逻辑分叉。"""
     invalid = set(req.scopes or []) - set(ALL_TP_TYPES)
     if invalid:
         raise ValidationError(f"非法行为维度：{sorted(invalid)}，允许 {ALL_TP_TYPES}")
-
     opts = pipeline.default_options(req.local_path, mode=req.mode or MODE_FULL)
     if req.auto_input.strip():
         pipeline.apply_auto_input(opts, parse_auto_input(req.auto_input))
@@ -236,7 +251,17 @@ def run_pipeline(req: PipelineRequest) -> dict[str, Any]:
     opts.extract_pages = req.extract_pages
     opts.persist = req.persist
     opts.llm.enabled = bool(req.llm_enhance and settings.llm_enhance)
+    return opts
 
+
+@app.post("/api/v1/pipeline", dependencies=[Depends(require_auth)])
+def run_pipeline(req: PipelineRequest) -> dict[str, Any]:
+    """一站式同步生成（兼容旧调用方）。
+
+    注：服务化主入口已迁移到 `POST /api/v1/generate`（异步、可轮询、可幂等）。
+    本端点仍同步执行完整生成链路，便于一次性脚本 / 本地调试。
+    """
+    opts = build_opts_from_request(req)
     result = pipeline.run_pipeline(opts)
 
     payload: dict[str, Any] = {"result": result.to_dict()}
@@ -252,6 +277,168 @@ def run_pipeline(req: PipelineRequest) -> dict[str, Any]:
                 else {"skipped": "外部目录未纳入工作区管理"}
             )
     return payload
+
+
+# ============================================================================
+# P5 服务化：异步生成任务（仅「生成测试用例」环节）
+# ============================================================================
+def _task_accepted(task: GenerationTask, status_code: int = 202) -> JSONResponse:
+    body = task.to_dict()
+    body["poll_url"] = f"/api/v1/tasks/{task.task_id}"
+    return JSONResponse(status_code=status_code, content=body)
+
+
+def _redacted_request(req: PipelineRequest) -> str:
+    """持久化请求体但不含明文凭证（账号 / 密码 / 动态口令一律掩码）。"""
+    data = req.model_dump()
+    for key in ("login_password", "login_otp", "login_user"):
+        if data.get(key):
+            data[key] = "***"
+    return json.dumps(data, ensure_ascii=False)
+
+
+def _idem_key_for_generate(req: PipelineRequest) -> str:
+    return "gen:" + "|".join(
+        [
+            req.local_path,
+            req.repo_url,
+            req.mode or "full",
+            req.base or "",
+            req.target or "",
+            ",".join(sorted(req.scopes)),
+            ",".join(sorted(req.changed_files)),
+            req.project_name,
+        ]
+    )
+
+
+def _run_generation_job(task_id: str, opts: pipeline.PipelineOptions) -> dict[str, Any]:
+    """后台作业：跑生成链路（强制生成-only），把进度/结果写回任务表。"""
+    best = {"frac": 0.0}
+
+    def _progress(stage: str, _info: dict[str, Any]) -> None:
+        frac = stage_fraction(stage, best["frac"])
+        best["frac"] = frac
+        task_store.update(task_id, progress=round(frac, 3), stage=stage)
+
+    result = pipeline.run_pipeline(opts, progress=_progress)
+    payload: dict[str, Any] = result.to_dict()
+    if result.project_id:
+        task_store.update(task_id, project_id=result.project_id)
+        payload["outputs"] = OutputWriter().write_all(
+            result.project_id, result.test_points, result.cases, result.to_dict()
+        )
+    return payload
+
+
+@app.post("/api/v1/generate", dependencies=[Depends(require_auth)])
+def submit_generate(req: PipelineRequest) -> JSONResponse:
+    """异步提交「生成测试用例」任务（P5 服务化主入口）。
+
+    - 返回 **202** + `task_id` + `poll_url`；结果经 `GET /api/v1/tasks/{task_id}` 轮询；
+    - **生成-only 红线**：`execute` / `exec_url` 一律拒绝（422）——本服务当前只生成用例；
+    - 幂等：同一 `(路径/repo/模式/基线/目标/范围/变更集)` 的重复提交，若仍在 pending/running
+      则返回既有 `task_id`，不会重复跑。
+    """
+    if req.execute or req.exec_url:
+        raise ValidationError(
+            "本服务当前仅提供「生成测试用例」能力，不执行用例（execute/exec_url 不被接受）"
+        )
+    opts = build_opts_from_request(req)
+    opts.target_req.execute = False  # 双保险：强制生成-only，绝不落入 stage_execute
+    idem = _idem_key_for_generate(req)
+    existing = task_store.find_by_idempotency(idem)
+    if existing and existing.state in (TaskState.PENDING.value, TaskState.RUNNING.value):
+        return _task_accepted(existing, status_code=202)
+    task = task_store.create(kind="generate", idempotency_key=idem, request=_redacted_request(req))
+    executor.submit(task.task_id, lambda: _run_generation_job(task.task_id, opts))
+    return _task_accepted(task, status_code=202)
+
+
+@app.get("/api/v1/tasks", dependencies=[Depends(require_auth)])
+def list_tasks(limit: int = 20) -> dict[str, Any]:
+    """任务清单（最近优先），便于运营后台 / 流水线巡检。"""
+    tasks = task_store.list_recent(limit=limit)
+    return {"tasks": [t.to_dict() for t in tasks]}
+
+
+@app.get("/api/v1/tasks/{task_id}", dependencies=[Depends(require_auth)])
+def get_task(task_id: str) -> dict[str, Any]:
+    """轮询任务进度 / 结果。终态（success/failed/cancelled）后 `result` / `error` 落地。"""
+    task = task_store.get(task_id)
+    if task is None:
+        raise NotFoundError(f"任务不存在：{task_id}")
+    return task.to_dict()
+
+
+class WebhookRequest(BaseModel):
+    """发布流水线 webhook 载荷（仅携带触发生成所需的最小信息，不含凭证）。"""
+
+    event: str = Field("", description="发布事件类型，如 deployment.success")
+    target: str = Field("", description="被测目标名（用作 project_name）")
+    env: str = Field("", description="环境：staging / prod")
+    commit: str = Field("", description="刚发布的 commit（增量对比的 target ref）")
+    base_url: str = Field("", description="已发布实例地址（生成用例时作 base_url 上下文）")
+    health_url: str = Field("", description="存活探针地址（仅记录，本服务不主动探活执行）")
+    callback_url: str = Field("", description="回调地址（预留；当前生成完成不主动回调）")
+    repo_url: str = Field("", description="仓库地址（F1 取码）")
+    local_path: str = Field("", description="本地目录（优先于 repo_url）")
+    scopes: list[str] = Field(default_factory=list, description="行为维度范围：正常/异常/安全/边界")
+    mode: str = Field("", description="full / incremental")
+
+
+@app.post("/api/v1/verify/webhook", dependencies=[Depends(require_auth)])
+def verify_webhook(req: WebhookRequest) -> JSONResponse:
+    """发布流水线 webhook：收到 `deployment.success` → 触发「生成测试用例」任务。
+
+    ⚠️ 诚实边界：本服务当前**只生成用例、不执行 / 不验证运行时**。收到发布事件后，
+    它对刚发布的版本跑「生成用例」全链路（可据 `commit` 做增量对比），用例集落库；
+    执行环节的触发（真实探活 / 断言）不在此服务当前范围——避免「配了以为生效」的静默陷阱。
+    幂等：同一 `(target, commit, mode, scopes)` 的重复事件只跑一次。
+    """
+    invalid = set(req.scopes) - set(ALL_TP_TYPES)
+    if invalid:
+        raise ValidationError(f"非法行为维度：{sorted(invalid)}，允许 {ALL_TP_TYPES}")
+    idem = "wh:" + "|".join(
+        [req.target or req.repo_url, req.commit, req.mode or "full", ",".join(sorted(req.scopes))]
+    )
+    existing = task_store.find_by_idempotency(idem)
+    if existing and existing.state in (TaskState.PENDING.value, TaskState.RUNNING.value):
+        return _task_accepted(existing, status_code=202)
+    opts = pipeline.default_options(req.local_path or "", mode=req.mode or MODE_FULL)
+    if req.repo_url:
+        opts.repo_url = req.repo_url
+    if req.base_url:
+        opts.target_req.base_url = req.base_url
+    if req.target:
+        opts.project_name = req.target
+    if req.scopes:
+        opts.scopes = set(req.scopes)
+    opts.persist = True
+    opts.target_req.execute = False  # 生成-only：绝不对刚发布版本执行
+    task = task_store.create(
+        kind="webhook_generate",
+        idempotency_key=idem,
+        request=json.dumps(req.model_dump(), ensure_ascii=False),
+    )
+    executor.submit(task.task_id, lambda: _run_generation_job(task.task_id, opts))
+    return _task_accepted(task, status_code=202)
+
+
+@app.get("/api/v1/metrics", dependencies=[Depends(require_auth)])
+def metrics() -> dict[str, Any]:
+    """监控端点：任务总量 / 按状态分布 / 队列深度 / 最近任务（供 Prometheus 文本化或巡检）。"""
+    counts = task_store.counts_by_state()
+    recent = task_store.list_recent(5)
+    return {
+        "service": "testgen-service",
+        "contract_version": CONTRACT_VERSION,
+        "tasks_total": sum(counts.values()),
+        "by_state": counts,
+        "queue_depth": counts.get(TaskState.PENDING.value, 0)
+        + counts.get(TaskState.RUNNING.value, 0),
+        "recent": [t.to_dict() for t in recent],
+    }
 
 
 @app.post("/api/v1/parse-input", dependencies=[Depends(require_auth)])

@@ -141,6 +141,26 @@ SCHEMA: tuple[str, ...] = (
         updated_at    TEXT
     )
     """,
+    # P5 服务化：生成任务异步化（仅「生成测试用例」环节，执行环节不在本服务当前范围）。
+    # 状态机：pending → running → success / failed / cancelled；每个写操作独立连接，线程安全。
+    """
+    CREATE TABLE IF NOT EXISTS gen_tasks (
+        task_id         TEXT PRIMARY KEY,
+        project_id      INTEGER,
+        kind            TEXT,
+        idempotency_key TEXT,
+        state           TEXT,
+        progress        REAL DEFAULT 0,
+        stage           TEXT,
+        request         TEXT,
+        result          TEXT,
+        error           TEXT,
+        created_at      TEXT,
+        started_at      TEXT,
+        finished_at     TEXT,
+        updated_at      TEXT
+    )
+    """,
     """
     CREATE TABLE IF NOT EXISTS schema_meta (
         key   TEXT PRIMARY KEY,
