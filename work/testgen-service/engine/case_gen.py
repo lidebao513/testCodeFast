@@ -32,6 +32,7 @@ from core.enums import (
     COVERAGE_ROLE_SUPPLEMENT,
     LAYER_STRATEGY_UI_FIRST,
     AuthMode,
+    Dimension,
     FType,
     TPType,
     VerifyLayer,
@@ -116,6 +117,7 @@ def build_doc_steps(
     source = str(_get(tp, "source")).replace("\\", "/")
     category = _get(tp, "category", TPType.NORMAL.value)
     expect = _get(tp, "expect")
+    dimension = _get(tp, "dimension", "")
     tail = f"，来源文件 {source}" if source else ""
     kind = method_kind(str(method))
     is_ui = layer == VerifyLayer.UI.value
@@ -137,7 +139,7 @@ def build_doc_steps(
         execute = f"调用函数 {area}，捕获返回值与异常"
 
     if override is None:
-        assert_desc = _assert_desc(category, kind, auth_mode)
+        assert_desc = _assert_desc(category, kind, auth_mode, dimension)
 
     return [
         {"seq": 1, "type": "前置", "desc": precondition},
@@ -147,12 +149,14 @@ def build_doc_steps(
     ]
 
 
-def _security_assert(auth_mode: str) -> str:
+def _security_assert(auth_mode: str, dimension: str = "") -> str:
     """安全维度的断言文案（F8）：与 `tp_expand._expect_of` 同一口径。
 
     三处（测试点期望 / 用例断言 / 执行器判定）必须一致，否则会出现
     「用例写期望 401、执行器按『公开可访问』判通过」的自相矛盾。
     """
+    if dimension == Dimension.TOKEN_EXPIRED.value:
+        return "校验：使用过期/失效令牌访问被拒（401/403）；持有效令牌刷新后恢复原访问能力"
     if auth_mode == AuthMode.ABSENT.value:
         return (
             "校验：该接口未检测到鉴权接线（公开接口）→ 可正常访问且不泄露敏感字段；"
@@ -166,16 +170,34 @@ def _security_assert(auth_mode: str) -> str:
     return "校验：无凭证/越权访问被拒绝（401/403），且不泄露资源内容"
 
 
-def _assert_desc(category: str, kind: str, auth_mode: str = "") -> str:
+# G-5：UI 异常流的断言文案（与 tp_expand._UI_ABNORMAL_EXPECT 同一口径；
+# 这些场景多需人工/专项触发，用例描述「出错时应优雅」，执行器对可观测部分做最佳努力判定）
+_UI_ABNORMAL_ASSERT: dict[str, str] = {
+    "异常-网络中断": "校验：断网/弱网刷新或操作后页面不白屏、不抛未捕获异常，有重试或友好提示",
+    "异常-错误回显": "校验：提交非法数据或后端报错时回显友好提示，不展示原始堆栈/敏感内部信息",
+    "异常-空状态": "校验：无数据（空列表/空结果）时渲染空状态提示，不崩溃、不白屏",
+    "异常-错误页": "校验：后端 5xx 时前端展示错误页/降级提示而非白屏，不影响其他功能入口",
+}
+
+
+def _assert_desc(category: str, kind: str, auth_mode: str = "", dimension: str = "") -> str:
     """通用断言文案（无运行时细节时的回退）。"""
     if category == TPType.ABNORMAL.value:
-        return (
-            "校验：接口对非法/边界输入返回预期错误（4xx/5xx），且不产生未捕获异常或数据损坏"
-            if kind == FType.API.value
-            else "校验：函数对非法输入抛出预期异常或返回错误码，且不产生未捕获异常或数据损坏"
-        )
+        return _abnormal_assert(dimension, kind)
     if category == TPType.SECURITY.value:
-        return _security_assert(auth_mode)
+        return _security_assert(auth_mode, dimension)
+    return _normal_assert(kind)
+
+
+def _abnormal_assert(dimension: str, kind: str) -> str:
+    if dimension in _UI_ABNORMAL_ASSERT:
+        return _UI_ABNORMAL_ASSERT[dimension]
+    if kind == FType.API.value:
+        return "校验：接口对非法/边界输入返回预期错误（4xx/5xx），且不产生未捕获异常或数据损坏"
+    return "校验：函数对非法输入抛出预期异常或返回错误码，且不产生未捕获异常或数据损坏"
+
+
+def _normal_assert(kind: str) -> str:
     if kind == FType.API.value:
         return "校验：响应状态码符合预期，关键业务字段完整"
     if kind == FType.PAGE.value:
@@ -311,6 +333,9 @@ def build_case(  # noqa: PLR0913 - 生成选项本就多，显式关键字参数
         "expect": expect,
         "coverage_role": coverage_role,  # 契约 Additive：UI 优先覆盖角色
         "auth_mode": auth_mode,  # 契约 Additive（F8）：安全维度判定口径
+        # G-3：资源归属（供执行器产出高置信越权结论）；契约 Additive，缺省即「未识别」
+        "resource": str(_get(tp, "resource", "")),
+        "owner_scoped": bool(_get(tp, "owner_scoped", False)),
     }
     if runtime_info is not None:
         # 契约 Additive：运行时发现细节，供 UI 层执行器与人工复核使用（不含凭证）

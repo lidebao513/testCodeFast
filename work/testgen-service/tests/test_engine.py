@@ -313,28 +313,47 @@ def test_privilege_escalation_dimension_matches_legacy(sample_repo):
 def test_expansion_plan_matches_legacy_parity_table():
     """展开规则必须与 legacy 逐条对齐 —— 迁移不得静默丢维度。"""
     cases = {
+        # G-3/G-5：每个鉴权接口追加「令牌过期」；每个接口追加「限流/降级/超时兜底」异常流维度
         ("api", "GET /a"): [
             (TPType.NORMAL.value, Dimension.AVAIL.value),
             (TPType.SECURITY.value, Dimension.AUTH_MISS.value),
+            (TPType.SECURITY.value, Dimension.TOKEN_EXPIRED.value),
             (TPType.BOUNDARY.value, Dimension.PARAM_ILLEGAL.value),
+            (TPType.ABNORMAL.value, Dimension.RATE_LIMIT.value),
+            (TPType.ABNORMAL.value, Dimension.DEGRADED.value),
+            (TPType.ABNORMAL.value, Dimension.TIMEOUT.value),
         ],
         ("api", "GET /a/{id}"): [
             (TPType.NORMAL.value, Dimension.AVAIL.value),
             (TPType.SECURITY.value, Dimension.AUTH_MISS.value),
+            (TPType.SECURITY.value, Dimension.TOKEN_EXPIRED.value),
             (TPType.BOUNDARY.value, Dimension.PARAM_ILLEGAL.value),
             (TPType.ABNORMAL.value, Dimension.RES_NOT_FOUND.value),
+            (TPType.ABNORMAL.value, Dimension.RATE_LIMIT.value),
+            (TPType.ABNORMAL.value, Dimension.DEGRADED.value),
+            (TPType.ABNORMAL.value, Dimension.TIMEOUT.value),
         ],
         ("api", "DELETE /a/{id}"): [
             (TPType.NORMAL.value, Dimension.AVAIL.value),
             (TPType.SECURITY.value, Dimension.AUTH_MISS.value),
+            (TPType.SECURITY.value, Dimension.TOKEN_EXPIRED.value),
             (TPType.BOUNDARY.value, Dimension.PARAM_ILLEGAL.value),
             (TPType.ABNORMAL.value, Dimension.RES_NOT_FOUND.value),
+            (TPType.ABNORMAL.value, Dimension.RATE_LIMIT.value),
+            (TPType.ABNORMAL.value, Dimension.IDEMPOTENT.value),
+            (TPType.ABNORMAL.value, Dimension.DEGRADED.value),
+            (TPType.ABNORMAL.value, Dimension.TIMEOUT.value),
             (TPType.SECURITY.value, Dimension.PRIV_ESC.value),
         ],
+        # G-5：页面套 DEFAULT_SCOPE（含异常）→ 追加 UI 异常流（网络中断/错误回显/空状态/错误页）
         ("page", "/p"): [
             (TPType.NORMAL.value, Dimension.PAGE_REACH.value),
             (TPType.SECURITY.value, Dimension.UI_UNAUTH_PAGE.value),
             (TPType.BOUNDARY.value, Dimension.UI_POOR_VIEWPORT.value),
+            (TPType.ABNORMAL.value, Dimension.UI_NETWORK_INTERRUPT.value),
+            (TPType.ABNORMAL.value, Dimension.UI_ERROR_DISPLAY.value),
+            (TPType.ABNORMAL.value, Dimension.UI_EMPTY_STATE.value),
+            (TPType.ABNORMAL.value, Dimension.UI_SERVER_ERROR.value),
         ],
         ("component", "X.tsx"): [(TPType.NORMAL.value, Dimension.INTERACTIVE.value)],
         ("ui", "/p#input:查询|#q"): [

@@ -158,6 +158,11 @@ class TestPoint:
     confidence: float = 1.0
     origin: str = "rule"
     unverified: bool = False
+    # v1.2：安全资源归属（G-3）：该测试点操作/验证的资源实体与是否属主隔离。
+    # 仅用于越权/鉴权类用例，使「操作他人资源应被拒」成为可构造的具体命题；
+    # 缺省空串即「未识别归属」，执行器据此给出诚实的低把握结论而非假装高置信。
+    resource: str = ""
+    owner_scoped: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)

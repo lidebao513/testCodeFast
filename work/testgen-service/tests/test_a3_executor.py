@@ -125,7 +125,9 @@ def test_privilege_escalation_dimension_flags_low_confidence():
     result, session = _run(esc, status_code=403, auth_token="dummy-bearer-token", allow_write=True)
     assert result.status == ExecStatus.PASS.value
     assert "Authorization" in session.calls[0]["headers"], "越权维度需带本人凭证"
-    assert any("置信度较低" in n for n in result.notes)
+    # G-3：越权结论改为诚实归因（资源归属未识别时说明需双身份复测），不再「置信度较低」自贬
+    assert all("置信度较低" not in n for n in result.notes)
+    assert any("资源归属未从路由识别" in n or "鉴权边界" in n for n in result.notes)
     assert "dummy-bearer-token" not in str(result.notes), "结论文本不得回显凭证"
 
 

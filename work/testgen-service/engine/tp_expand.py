@@ -25,6 +25,8 @@ _PATH_PARAM_RE = re.compile(r"\{[^}]+\}")
 
 # 「越权」维度只针对**修改他人资源**的操作（与 legacy 一致）
 _PRIV_ESC_METHODS: tuple[str, ...] = ("PUT", "PATCH", "DELETE")
+# 写操作（会产生真实数据变更）：幂等维度仅对这些有意义
+_WRITE_METHODS: tuple[str, ...] = ("POST", "PUT", "PATCH", "DELETE")
 
 # 非 HTTP 来源 → method 字段标记（契约：PAGE/UI/FUNC，见 enums.MethodMarker）
 _MARKER_BY_FTYPE: dict[str, str] = {
@@ -62,13 +64,27 @@ _DIMENSION_SLOTS: dict[str, dict[str, int]] = {
         Dimension.PAGE_REACH.value: 0,
         Dimension.INTERACTIVE.value: 0,
     },
-    TPType.ABNORMAL.value: {Dimension.RES_NOT_FOUND.value: 0},
+    TPType.ABNORMAL.value: {
+        Dimension.RES_NOT_FOUND.value: 0,
+        # G-5：接口异常流（独立槽位，避免与资源不存在撞号）
+        Dimension.RATE_LIMIT.value: 1,
+        Dimension.IDEMPOTENT.value: 2,
+        Dimension.DEGRADED.value: 3,
+        Dimension.TIMEOUT.value: 4,
+        # G-5：UI 异常流（行为维度归属「异常」，需 DEFAULT_SCOPE 含异常才默认生成）
+        Dimension.UI_NETWORK_INTERRUPT.value: 5,
+        Dimension.UI_ERROR_DISPLAY.value: 6,
+        Dimension.UI_EMPTY_STATE.value: 7,
+        Dimension.UI_SERVER_ERROR.value: 8,
+    },
     TPType.SECURITY.value: {
         Dimension.AUTH_MISS.value: 0,
         Dimension.PRIV_ESC.value: 1,
         # #222：运行时 UI 元素级安全子维度（独立槽位，避免与鉴权缺失/越权撞号）
         Dimension.UI_INPUT_INJECT.value: 2,
         Dimension.UI_UNAUTH_PAGE.value: 3,
+        # G-3：令牌过期续期（独立槽位）
+        Dimension.TOKEN_EXPIRED.value: 4,
     },
     TPType.BOUNDARY.value: {
         Dimension.PARAM_ILLEGAL.value: 0,
@@ -152,7 +168,9 @@ class ExpandContext:
     default_tag: str = Tag.FULL.value
     review_status: str = "pending"
     module_filter: set[str] = field(default_factory=set)
-    max_per_fp: int = 8
+    max_per_fp: int = (
+        12  # 单功能点最多展开测试点数（留足 G-3/G-5 新增维度空间，避免静默丢弃关键维度）
+    )
     # F8：鉴权接线画像（`engine.auth_scan.AuthProfile`）。为空时安全维度退回
     # 「应当鉴权」的保守口径（保持 v1.0 行为，不影响既有测试与产物）。
     auth_profile: Any = None
@@ -161,6 +179,28 @@ class ExpandContext:
 def _method_of(fp: FunctionalPoint) -> str:
     """从功能点机器键里取 HTTP 方法（如 "POST /api/x" → POST）。"""
     return fp.name.split(" ", 1)[0].upper() if " " in fp.name else ""
+
+
+def _resource_entity_of(fp: FunctionalPoint) -> str:
+    """从 API 路径提取资源实体（G-3 资源归属）。
+
+    规则：取「路径参数 `{...}` 前一个名词段」——它通常是该接口的归属资源
+    （如 `POST /api/v1/invoices/{invoice_id}` → `invoices`）。
+    无路径参数时取最后一个名词段；非 API 来源返回空串（无资源归属语义）。
+    这是**轻量启发式**（不解析路由树），目的是让越权用例从「操作该资源应 403」
+    变成「操作他人{invoices}资源应 403」的具体命题，避免泛泛而不可验证。
+    """
+    if fp.ftype != FType.API.value or " " not in fp.name:
+        return ""
+    path = fp.name.split(" ", 1)[1]
+    segments = [s for s in path.split("/") if s]
+    if not segments:
+        return ""
+    # 找第一个含 `{` 的段，取其前一个段作为资源实体
+    for i, seg in enumerate(segments):
+        if "{" in seg and i > 0:
+            return segments[i - 1]
+    return segments[-1]
 
 
 def _tp_method(fp: FunctionalPoint) -> str:
@@ -180,14 +220,22 @@ def _area_of(fp: FunctionalPoint) -> str:
     return fp.name
 
 
-def _security_expect(dimension: str, auth_mode: str) -> str:
+def _security_expect(dimension: str, auth_mode: str, resource: str = "") -> str:
     """安全维度的预期文案（F8）：**来自代码事实**，不写死 401/403。
 
     三种模式的文案必须可区分——否则「判通过」会被读成「安全没问题」：
     - `ABSENT`：本就该公开 → 断言「可访问」；但要提示「如需鉴权应在代码接线」；
     - `OPTIONAL`：有接线但未配置即放行 → 未配置时属未鉴权暴露，仍按「应被拒」断言；
     - `REQUIRED`：正常鉴权 → 越权/无凭证均应被拒。
+
+    `resource`（G-3 资源归属）：越权用例据此变成「操作他人{resource}资源应被拒」的
+    具体命题，而不是泛泛的「操作该资源」——越权验证才可构造、可复核。
     """
+    if dimension == Dimension.TOKEN_EXPIRED.value:
+        return (
+            "使用过期/失效令牌访问 → 返回 401/403；持有效令牌刷新后恢复原访问能力"
+            "（验证令牌生命周期与续期机制）"
+        )
     if auth_mode == AuthMode.ABSENT.value:
         return (
             "该接口未检测到鉴权接线（公开接口）→ 可正常访问且不泄露敏感字段；"
@@ -199,6 +247,11 @@ def _security_expect(dimension: str, auth_mode: str) -> str:
             "配置令牌后无凭证访问应被拒（401/403），且不泄露资源内容"
         )
     if dimension == Dimension.PRIV_ESC.value:
+        if resource:
+            return (
+                f"以非属主身份/越权凭证操作他人 {resource} 资源"
+                f"（resource_id 需人工提供他人 ID）→ 403，且不产生越权修改"
+            )
         return "以他人身份/越权凭证操作该资源 → 403，且不产生越权修改"
     return "未携带或携带无效凭证时返回 401/403，且不泄露资源内容（越权访问同样被拒）"
 
@@ -218,29 +271,90 @@ _UI_EXPECT: dict[str, str] = {
     Dimension.UI_POOR_VIEWPORT.value: "极端视口（极小/极大）或弱网下 → 页面可渲染、关键功能可用，不白屏",
 }
 
+# UI 异常流预期文案（G-5）：行为维度属「异常」，需 DEFAULT_SCOPE 含异常才默认生成。
+# 这些场景多数需人工/专项触发（断网、注入报错、清空数据、杀后端），用例本身描述「出错时应优雅」，
+# 执行器对可观测部分（页面不白屏/控制台不新增报错）做最佳努力判定，不可观测部分如实标注。
+_UI_ABNORMAL_EXPECT: dict[str, str] = {
+    Dimension.UI_NETWORK_INTERRUPT.value: (
+        "断网/弱网后刷新或操作 → 应优雅处理（重试/友好提示），不白屏、不抛未捕获异常"
+    ),
+    Dimension.UI_ERROR_DISPLAY.value: (
+        "提交非法数据或触发服务报错 → 应回显友好错误提示，不展示原始堆栈/敏感内部信息"
+    ),
+    Dimension.UI_EMPTY_STATE.value: (
+        "无数据（空列表/空结果）时 → 应渲染空状态提示，不崩溃、不白屏、不抛未捕获异常"
+    ),
+    Dimension.UI_SERVER_ERROR.value: (
+        "后端返回 5xx 时 → 前端应展示错误页/降级提示而非白屏，且不影响其他功能入口"
+    ),
+}
 
-def _expect_of(fp: FunctionalPoint, category: str, dimension: str = "", auth_mode: str = "") -> str:
+
+def _expect_of(
+    fp: FunctionalPoint, category: str, dimension: str = "", auth_mode: str = "", resource: str = ""
+) -> str:
     """按维度给出可判定的预期结果文案。
 
     安全维度的预期**来自代码事实**（F8）：`auth_mode` 由 `engine/auth_scan.py` 扫源码得出，
     不再写死 401/403——对本来就该公开的接口写死 401/403 会产出假失败。
+    `resource`（G-3）用于把越权用例变成「操作他人资源应被拒」的具体命题。
     """
     if category == TPType.NORMAL.value:
         return expect_of(fp.ftype, fp.name, _method_of(fp))
     if category == TPType.ABNORMAL.value:
-        return (
-            "返回 4xx（资源不存在 404 / 状态非法 409），响应体为结构化错误信息，服务不抛未捕获异常"
-        )
+        return _abnormal_expect(dimension)
     if category == TPType.SECURITY.value:
         if dimension in (Dimension.UI_INPUT_INJECT.value, Dimension.UI_UNAUTH_PAGE.value):
             return _UI_EXPECT[dimension]
-        return _security_expect(dimension, auth_mode)
+        return _security_expect(dimension, auth_mode, resource)
     # 边界：接口参数维度走通用文案；UI 维度走 _UI_EXPECT。
     return _UI_EXPECT.get(dimension, "参数缺失或越界时返回 400/422，校验信息明确指出非法字段")
 
 
+def _abnormal_expect(dimension: str) -> str:
+    """G-5：异常流各维度的预期文案（与 executor 判定口径一致）。"""
+    if dimension in _UI_ABNORMAL_EXPECT:
+        return _UI_ABNORMAL_EXPECT[dimension]
+    table = {
+        Dimension.RATE_LIMIT.value: "高频/突发请求 → 触发限流（429 或 Retry-After/令牌桶耗尽），不拖垮服务",
+        Dimension.IDEMPOTENT.value: "重复提交同一请求 → 应幂等或防重（409 冲突/重复拒绝），不产生重复创建",
+        Dimension.DEGRADED.value: "依赖（DB/下游服务）故障时 → 服务应降级（503/熔断）而非级联雪崩",
+        Dimension.TIMEOUT.value: "慢请求/依赖超时 → 应超时兜底（504 或快速失败）而非无限挂起",
+    }
+    if dimension in table:
+        return table[dimension]
+    return "返回 4xx（资源不存在 404 / 状态非法 409），响应体为结构化错误信息，服务不抛未捕获异常"
+
+
 def _semantic_of(fp: FunctionalPoint, category: str) -> str:
     return f"{_SEMANTIC_ACTION[category]}：{fp.title}"
+
+
+# G-5：需要注入故障/特定上下文才能验证的异常流，自动化默认无法判定，标记为低把握 + 未验证。
+# 这些用例的价值是「覆盖出错」的设计层覆盖；真实验证需专项/人工/压测（详见覆盖评估报告 G-5）。
+_BEST_EFFORT_DIMS: frozenset[str] = frozenset(
+    {
+        Dimension.IDEMPOTENT.value,
+        Dimension.DEGRADED.value,
+        Dimension.TIMEOUT.value,
+        Dimension.TOKEN_EXPIRED.value,
+        Dimension.UI_NETWORK_INTERRUPT.value,
+        Dimension.UI_ERROR_DISPLAY.value,
+        Dimension.UI_EMPTY_STATE.value,
+        Dimension.UI_SERVER_ERROR.value,
+    }
+)
+# 限流可发突发请求自动验证（置信度高于纯故障注入类）
+_BURST_DIMS: frozenset[str] = frozenset({Dimension.RATE_LIMIT.value})
+
+
+def _confidence_of(dimension: str) -> float:
+    """测试点置信度：可自动验证的高；需故障注入/专项验证的低。"""
+    if dimension in _BURST_DIMS:
+        return 0.7
+    if dimension in _BEST_EFFORT_DIMS:
+        return 0.4
+    return 1.0
 
 
 def plan_of(fp: FunctionalPoint) -> list[tuple[str, str]]:
@@ -269,19 +383,34 @@ def plan_of(fp: FunctionalPoint) -> list[tuple[str, str]]:
         plan = [
             (TPType.NORMAL.value, Dimension.AVAIL.value),
             (TPType.SECURITY.value, Dimension.AUTH_MISS.value),
+            # G-3：令牌过期续期（对所有鉴权接口有意义；需注入过期令牌复测，故 best-effort）
+            (TPType.SECURITY.value, Dimension.TOKEN_EXPIRED.value),
             (TPType.BOUNDARY.value, Dimension.PARAM_ILLEGAL.value),
         ]
         if has_id:
             plan.append((TPType.ABNORMAL.value, Dimension.RES_NOT_FOUND.value))
+        # G-5：接口异常流（限流对所有接口有意义；幂等仅对写操作有意义）
+        plan.append((TPType.ABNORMAL.value, Dimension.RATE_LIMIT.value))
+        if method in _WRITE_METHODS:
+            plan.append((TPType.ABNORMAL.value, Dimension.IDEMPOTENT.value))
+        plan.append((TPType.ABNORMAL.value, Dimension.DEGRADED.value))
+        # G-5：超时兜底（慢依赖/超时请求应超时而非挂起；需构造慢依赖，best-effort）
+        plan.append((TPType.ABNORMAL.value, Dimension.TIMEOUT.value))
         if has_id and method in _PRIV_ESC_METHODS:
             plan.append((TPType.SECURITY.value, Dimension.PRIV_ESC.value))
         return plan
     if fp.ftype == FType.PAGE.value:
         # #222：页面套 DEFAULT_SCOPE → 正常(可达) + 安全(未授权访问) + 边界(极端视口)
+        # G-5：UI 异常流（网络中断/错误回显/空状态/错误页）—— 行为维度同属「异常」，
+        #      需 DEFAULT_SCOPE 含异常（2026-09-15 已纳入）才默认生成。
         return [
             (TPType.NORMAL.value, Dimension.PAGE_REACH.value),
             (TPType.SECURITY.value, Dimension.UI_UNAUTH_PAGE.value),
             (TPType.BOUNDARY.value, Dimension.UI_POOR_VIEWPORT.value),
+            (TPType.ABNORMAL.value, Dimension.UI_NETWORK_INTERRUPT.value),
+            (TPType.ABNORMAL.value, Dimension.UI_ERROR_DISPLAY.value),
+            (TPType.ABNORMAL.value, Dimension.UI_EMPTY_STATE.value),
+            (TPType.ABNORMAL.value, Dimension.UI_SERVER_ERROR.value),
         ]
     if fp.ftype == FType.UI.value:
         # #222：元素级功能点按 kind 展开「正常 + 安全 + 边界」（解决地址通道只到正常维度）
@@ -313,9 +442,12 @@ def expand_functional_point(
     )
     out: list[TestPoint] = []
     produced = 0
+    resource = _resource_entity_of(fp)  # G-3：资源归属（仅 API 有语义）
     for category, dimension in plan_of(fp):
         if category not in ctx.scopes:
             continue
+        # G-3：越权用例标记属主隔离（资源实体已识别且为资源级操作）
+        owner_scoped = bool(resource) and dimension == Dimension.PRIV_ESC.value
         out.append(
             TestPoint(
                 tp_id=tp_id_of(
@@ -335,11 +467,16 @@ def expand_functional_point(
                 source=fp.file_path,
                 method=method,
                 area=area,
-                expect=_expect_of(fp, category, dimension, auth_mode),
+                expect=_expect_of(fp, category, dimension, auth_mode, resource),
                 dimension=dimension,
                 tag=tag or ctx.default_tag,
                 review_status=ctx.review_status,
                 verify_layer=verify_layer_of_ftype(fp.ftype),
+                # G-3/G-5：资源归属与置信度随测试点透出，供执行器与报告使用
+                resource=resource,
+                owner_scoped=owner_scoped,
+                confidence=_confidence_of(dimension),
+                unverified=dimension in _BEST_EFFORT_DIMS,
             )
         )
         produced += 1

@@ -77,8 +77,13 @@ class Dimension(Enum):
     AVAIL = "正常-可用性"
     AUTH_MISS = "安全-鉴权缺失"
     PRIV_ESC = "安全-越权"
+    TOKEN_EXPIRED = "安全-令牌过期"  # G-3：过期令牌应被拒，刷新后应恢复
     PARAM_ILLEGAL = "边界-参数缺失/非法"
     RES_NOT_FOUND = "异常-资源不存在"
+    RATE_LIMIT = "异常-限流"  # G-5：高频/突发请求应被限流（429）
+    IDEMPOTENT = "异常-幂等"  # G-5：重复提交应防重/幂等
+    DEGRADED = "异常-降级"  # G-5：依赖故障时服务应降级（503）
+    TIMEOUT = "异常-超时兜底"  # G-5：慢请求应超时兜底而非挂起
     BIZ_LOGIC = "业务函数-逻辑可用"
     PAGE_REACH = "页面/路由可达"
     INTERACTIVE = "交互元素可用"
@@ -92,6 +97,11 @@ class Dimension(Enum):
     UI_REPEAT_CLICK = "边界-重复点击"  # 按钮快速连点/重复提交
     UI_DEEPLINK = "边界-深链直达"  # 导航项直接以 URL 访问
     UI_POOR_VIEWPORT = "边界-极端视口渲染"  # 极端视口/弱网下不白屏
+    # G-5：UI 异常流（行为维度仍属「异常」，需在 DEFAULT_SCOPE 含 异常 时才默认生成）
+    UI_NETWORK_INTERRUPT = "异常-网络中断"  # 断网/弱网后刷新应优雅处理（重试/提示，不白屏）
+    UI_ERROR_DISPLAY = "异常-错误回显"  # 提交非法/服务报错应回显友好提示，不抛原始堆栈
+    UI_EMPTY_STATE = "异常-空状态"  # 无数据时应渲染空态，不崩溃/不白屏
+    UI_SERVER_ERROR = "异常-错误页"  # 后端 5xx 时前端应展示错误页而非白屏
 
 
 # ============================ 方法标记（method 字段取值） ============================
@@ -279,10 +289,16 @@ MODE_CHOICES = (MODE_FULL, MODE_INCREMENTAL)
 # ============================ 范围常量（Scope · 唯一真值） ============================
 # 行为维度全集（顺序即展示顺序）
 ALL_TP_TYPES = [t.value for t in TPType]
-# 默认范围：正常 + 安全 + 边界。
-# 「安全」自 2026-09-14 起默认纳入——此前不显式指定就一条安全用例都没有，
-# 极易被误当成「已覆盖」（见 安全用例默认纳入 变更）。
-DEFAULT_SCOPE = {TPType.NORMAL.value, TPType.SECURITY.value, TPType.BOUNDARY.value}
+# 默认范围：正常 + 安全 + 边界 + 异常。
+# 「安全」自 2026-09-14 起默认纳入（此前不显式指定就一条安全用例都没有）；
+# 「异常」自 2026-09-15 起默认纳入（G-5 修复）：此前异常流（资源不存在/限流/幂等/降级/
+# 超时/UI 异常）默认一条都不生成，平台只验证"正常能用"、不验证"出错时是否优雅"。
+DEFAULT_SCOPE = {
+    TPType.NORMAL.value,
+    TPType.SECURITY.value,
+    TPType.BOUNDARY.value,
+    TPType.ABNORMAL.value,
+}
 # 默认范围的「规范顺序」视图：构造列表型默认值时使用，保证输出顺序稳定。
 DEFAULT_SCOPE_LIST = [t for t in ALL_TP_TYPES if t in DEFAULT_SCOPE]
 # 全选范围

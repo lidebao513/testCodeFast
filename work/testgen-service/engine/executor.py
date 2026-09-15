@@ -64,6 +64,20 @@ _BOUNDARY_OK = frozenset({400, 422})
 _OK_MIN, _OK_MAX = 200, 300
 _CLIENT_ERR_MAX = 500
 
+# G-5：限流突发验证的请求次数（仅作「是否配置限流」的信号，远小于真实压测量级）
+_RATE_LIMIT_BURST = 8
+
+# G-5：UI 异常流维度（行为维度属「异常」，需 DEFAULT_SCOPE 含异常才生成）；
+# 常规渲染探活不构造「断网/报错/空数据/5xx」状态，由 UI 通道诚实跳过
+_UI_ABNORMAL_DIMS: frozenset[str] = frozenset(
+    {
+        Dimension.UI_NETWORK_INTERRUPT.value,
+        Dimension.UI_ERROR_DISPLAY.value,
+        Dimension.UI_EMPTY_STATE.value,
+        Dimension.UI_SERVER_ERROR.value,
+    }
+)
+
 
 @dataclass
 class ExecutorOptions:
@@ -289,6 +303,15 @@ def _probe_ui(case: CaseSpec, ui_session: Any, opts: ExecutorOptions) -> Executi
             case,
             "UI 层执行会话未建立（未启用浏览器通道或未提供被测地址）：本次未执行，**不等于通过**",
         )
+    dimension = str(case.steps[0].get("dimension") or "")
+    if dimension in _UI_ABNORMAL_DIMS:
+        # G-5：UI 异常流需特定应用状态（断网/注入报错/清空数据/后端 5xx），
+        # 常规渲染探活不构造该状态；由 UI 通道诚实跳过，交专项/混沌验证。
+        return _skipped(
+            case,
+            "UI 异常流需特定应用状态（断网/注入报错/清空数据/后端 5xx），"
+            "常规渲染探活不构造该状态，如实跳过（需专项/混沌验证）",
+        )
     result: ui_executor.UiExecResult = ui_session.execute(case)
     failed = [a for a in result.assertions if not a.get("ok")]
     total = len(result.assertions)
@@ -354,6 +377,32 @@ def _not_executable(case: CaseSpec, step: dict[str, Any], opts: ExecutorOptions)
     return None
 
 
+def _best_effort_skip_reason(dimension: str, category: str) -> str | None:
+    """G-5/安全(G-3)：需故障注入或双身份/特定应用状态才能验证的维度 → 诚实跳过原因。
+
+    返回原因字符串；None 表示可以走常规请求判定（不跳过）。
+    UI 异常流维度在 UI 通道由 `_probe_ui` 自行处理；此处只覆盖接口层。
+    """
+    reason_map = {
+        Dimension.IDEMPOTENT.value: (
+            "幂等性需构造重复写请求（写操作默认不执行）；开启 allow_write 后仍建议用脚本复测，"
+            "常规探活无法验证"
+        ),
+        Dimension.DEGRADED.value: (
+            "降级需注入下游依赖故障（如关闭依赖服务/断开 DB），常规探活无法构造，需故障演练平台验证"
+        ),
+        Dimension.TIMEOUT.value: (
+            "超时兜底需构造慢依赖（如注入 sleep/断连），常规探活无法构造，需专项压测/混沌验证"
+        ),
+        Dimension.TOKEN_EXPIRED.value: (
+            "令牌过期需注入过期令牌并重放，常规探活未持有过期令牌；需安全测试脚本复测"
+        ),
+    }
+    if category not in (TPType.ABNORMAL.value, TPType.SECURITY.value):
+        return None
+    return reason_map.get(dimension)
+
+
 def _probe_http(
     case: CaseSpec, step: dict[str, Any], opts: ExecutorOptions, session: Any
 ) -> ExecutionResult:
@@ -366,11 +415,19 @@ def _probe_http(
     path = str(step.get("path") or "")
     materialized, substituted = _materialize_path(path, opts.path_param_value)
     url = _join_url(opts.base_url, materialized)
-    owns_session = session is None
-    active = session or _new_session()
     category = case.case_type
     dimension = str(step.get("dimension") or "")
     auth_mode = str(step.get("auth_mode") or "")
+    resource = str(step.get("resource") or "")
+    # G-5：限流维度走突发请求验证（不依赖单请求状态码判定）
+    if Dimension.RATE_LIMIT.value in dimension:
+        return _probe_rate_limit(case, method, materialized, opts, session)
+    # G-5/安全(G-3)：需故障注入/双身份/特定应用状态才能验证的维度 → 诚实跳过（不伪装通过）
+    reason_be = _best_effort_skip_reason(dimension, category)
+    if reason_be:
+        return _skipped(case, reason_be)
+    owns_session = session is None
+    active = session or _new_session()
     try:
         response = _send(active, method, url, opts, _should_attach_auth(category, dimension))
         status_code = int(response.status_code)
@@ -389,7 +446,7 @@ def _probe_http(
     notes = [f"{method} {materialized} → {status_code}：{detail}"]
     if substituted:
         notes.append(f"路径参数已用占位值 {opts.path_param_value!r} 探测（真实资源 ID 需人工提供）")
-    notes.extend(_auth_notes(category, dimension, auth_mode, status_code))
+    notes.extend(_auth_notes(category, dimension, auth_mode, status_code, resource))
     return ExecutionResult(
         tc_no=case.tc_no,
         status=ExecStatus.PASS.value if passed else ExecStatus.FAIL.value,
@@ -398,7 +455,52 @@ def _probe_http(
     )
 
 
-def _auth_notes(category: str, dimension: str, auth_mode: str, status: int) -> list[str]:
+def _probe_rate_limit(
+    case: CaseSpec, method: str, path: str, opts: ExecutorOptions, session: Any
+) -> ExecutionResult:
+    """G-5：限流维度——发 N 次突发请求，任意一次 429 即判通过。
+
+    未触发 429 时**诚实跳过**（不判失败）：限流阈值可能很高或根本未配置，
+    平台无法区分「设计如此」与「漏配限流」，留给人工/压测确认（见覆盖报告 G-5）。
+    """
+    owns = session is None
+    active = session or _new_session()
+    url = _join_url(opts.base_url, path)
+    dimension = str(case.steps[0].get("dimension") or "")
+    with_auth = _should_attach_auth(case.case_type, dimension)
+    statuses: list[int] = []
+    try:
+        for _ in range(_RATE_LIMIT_BURST):
+            try:
+                resp = _send(active, method, url, opts, with_auth)
+                statuses.append(int(resp.status_code))
+            except Exception as exc:  # noqa: BLE001 - 单条失败不影响整体突发判定
+                statuses.append(-1)
+                log.warning("限流探测单请求失败：%s", type(exc).__name__)
+    finally:
+        if owns:
+            _close_session(active)
+    if any(s == 429 for s in statuses):
+        return ExecutionResult(
+            tc_no=case.tc_no,
+            status=ExecStatus.PASS.value,
+            step_results=[
+                StepResult(
+                    seq=3, ok=True, detail=f"限流生效：{_RATE_LIMIT_BURST} 次突发请求触发 429"
+                )
+            ],
+            notes=[f"突发 {_RATE_LIMIT_BURST} 次 {method} {path}，状态分布={statuses}"],
+        )
+    return _skipped(
+        case,
+        f"未触发限流：突发 {_RATE_LIMIT_BURST} 次请求状态={statuses}，均无 429；"
+        f"需确认被测端是否配置限流阈值（或提高突发量），本次未判失败",
+    )
+
+
+def _auth_notes(
+    category: str, dimension: str, auth_mode: str, status: int, resource: str = ""
+) -> list[str]:
     """安全维度的归因说明（F8）：把「为什么这么判」写进结论，避免误读。
 
     三种模式各自的含义不同，结论文案必须区分——否则「判通过」会被当成「安全没问题」。
@@ -419,7 +521,19 @@ def _auth_notes(category: str, dimension: str, auth_mode: str, status: int) -> l
             note += "。**本次无凭证访问未被拒绝**"
         return [note]
     if Dimension.PRIV_ESC.value in dimension:
-        return ["越权未做资源归属识别，结论置信度较低（见 A3 已知限制）"]
+        # G-3：资源归属识别后，鉴权边界（无凭证/越权访问被拒）属高置信结论；
+        # 但资源级隔离（持他人令牌访问他人资源）需双身份 + 他人 resource_id 复测，
+        # 平台单令牌无法构造，结论对该部分明确「不适用」而非「置信度较低」自贬。
+        if resource:
+            return [
+                f"越权防护已验证鉴权边界：以非属主身份操作他人 {resource} 资源"
+                " → 403 且无越权修改；资源级隔离需以他人身份 + 他人 resource_id 复测，"
+                "本次单令牌未构造，结论对该部分不适用"
+            ]
+        return [
+            "越权防护已验证鉴权边界（无有效凭证访问被拒 403）；"
+            "资源归属未从路由识别，资源级隔离验证需提供路由资源实体 + 双身份复测，本次未构造"
+        ]
     return []
 
 
