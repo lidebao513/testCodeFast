@@ -12,9 +12,11 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from typing import Any
 
 from core.contracts import FunctionalPoint, TestPoint, tp_id_of, verify_layer_of_ftype
-from core.enums import DEFAULT_SCOPE, Dimension, FType, MethodMarker, Tag, TPType
+from core.enums import DEFAULT_SCOPE, AuthMode, Dimension, FType, MethodMarker, Tag, TPType
+from engine import auth_scan
 from engine.fp_extract import expect_of
 
 
@@ -76,13 +78,16 @@ def _ordinal_of(category: str, dimension: str) -> int:
 
 @dataclass
 class ExpandContext:
-    """展开上下文：范围过滤 + 标签 + 审核门。"""
+    """展开上下文：范围过滤 + 标签 + 审核门 + 鉴权画像（F8）。"""
 
     scopes: set[str] = field(default_factory=lambda: set(DEFAULT_SCOPE))
     default_tag: str = Tag.FULL.value
     review_status: str = "pending"
     module_filter: set[str] = field(default_factory=set)
     max_per_fp: int = 8
+    # F8：鉴权接线画像（`engine.auth_scan.AuthProfile`）。为空时安全维度退回
+    # 「应当鉴权」的保守口径（保持 v1.0 行为，不影响既有测试与产物）。
+    auth_profile: Any = None
 
 
 def _method_of(fp: FunctionalPoint) -> str:
@@ -107,8 +112,35 @@ def _area_of(fp: FunctionalPoint) -> str:
     return fp.name
 
 
-def _expect_of(fp: FunctionalPoint, category: str, dimension: str = "") -> str:
-    """按维度给出可判定的预期结果文案。"""
+def _security_expect(dimension: str, auth_mode: str) -> str:
+    """安全维度的预期文案（F8）：**来自代码事实**，不写死 401/403。
+
+    三种模式的文案必须可区分——否则「判通过」会被读成「安全没问题」：
+    - `ABSENT`：本就该公开 → 断言「可访问」；但要提示「如需鉴权应在代码接线」；
+    - `OPTIONAL`：有接线但未配置即放行 → 未配置时属未鉴权暴露，仍按「应被拒」断言；
+    - `REQUIRED`：正常鉴权 → 越权/无凭证均应被拒。
+    """
+    if auth_mode == AuthMode.ABSENT.value:
+        return (
+            "该接口未检测到鉴权接线（公开接口）→ 可正常访问且不泄露敏感字段；"
+            "如需鉴权应在代码中接线（判据见 engine/auth_scan.py）"
+        )
+    if auth_mode == AuthMode.OPTIONAL.value:
+        return (
+            "鉴权接线为占位实现（未配置令牌即放行）→ 未配置时视为未鉴权暴露；"
+            "配置令牌后无凭证访问应被拒（401/403），且不泄露资源内容"
+        )
+    if dimension == Dimension.PRIV_ESC.value:
+        return "以他人身份/越权凭证操作该资源 → 403，且不产生越权修改"
+    return "未携带或携带无效凭证时返回 401/403，且不泄露资源内容（越权访问同样被拒）"
+
+
+def _expect_of(fp: FunctionalPoint, category: str, dimension: str = "", auth_mode: str = "") -> str:
+    """按维度给出可判定的预期结果文案。
+
+    安全维度的预期**来自代码事实**（F8）：`auth_mode` 由 `engine/auth_scan.py` 扫源码得出，
+    不再写死 401/403——对本来就该公开的接口写死 401/403 会产出假失败。
+    """
     if category == TPType.NORMAL.value:
         return expect_of(fp.ftype, fp.name, _method_of(fp))
     if category == TPType.ABNORMAL.value:
@@ -116,9 +148,7 @@ def _expect_of(fp: FunctionalPoint, category: str, dimension: str = "") -> str:
             "返回 4xx（资源不存在 404 / 状态非法 409），响应体为结构化错误信息，服务不抛未捕获异常"
         )
     if category == TPType.SECURITY.value:
-        if dimension == Dimension.PRIV_ESC.value:
-            return "以他人身份/越权凭证操作该资源 → 403，且不产生越权修改"
-        return "未携带或携带无效凭证时返回 401/403，且不泄露资源内容（越权访问同样被拒）"
+        return _security_expect(dimension, auth_mode)
     return "参数缺失或越界时返回 400/422，校验信息明确指出非法字段"
 
 
@@ -181,6 +211,11 @@ def expand_functional_point(
     """把一条功能点展开为测试点集合（已按 ctx.scopes 过滤）。"""
     method = _tp_method(fp)
     area = _area_of(fp)
+    auth_mode = (
+        auth_scan.mode_of_fp(fp, ctx.auth_profile)
+        if ctx.auth_profile is not None
+        else AuthMode.REQUIRED.value
+    )
     out: list[TestPoint] = []
     produced = 0
     for category, dimension in plan_of(fp):
@@ -205,7 +240,7 @@ def expand_functional_point(
                 source=fp.file_path,
                 method=method,
                 area=area,
-                expect=_expect_of(fp, category, dimension),
+                expect=_expect_of(fp, category, dimension, auth_mode),
                 dimension=dimension,
                 tag=tag or ctx.default_tag,
                 review_status=ctx.review_status,

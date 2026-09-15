@@ -159,8 +159,9 @@ class RuntimeUiOptions:
     mode: str = RUNTIME_UI_PLAYWRIGHT
     headless: bool = True
     base_url: str = ""
-    auth_token: str = ""      # 来自环境变量，不入库
+    auth_token: str = ""  # 来自环境变量，不入库
     timeout: int = 30
+
 
 @dataclass
 class UiElement:
@@ -168,6 +169,7 @@ class UiElement:
     kind: str = ""
     text: str = ""
     visible: bool = False
+
 
 @dataclass
 class RuntimeUiResult:
@@ -182,21 +184,23 @@ class RuntimeUiResult:
 ```python
 @dataclass
 class RuntimeUiOptions:
-    ...                       # 以上保留
-    login_user: str = ""      # 新增：表单登录账号
+    ...  # 以上保留
+    login_user: str = ""  # 新增：表单登录账号
     login_password: str = ""  # 新增：表单登录密码（不入库/不日志）
-    routes: list[str] = field(default_factory=list)   # 新增：显式路由清单
-    login_url: str = ""       # 新增：登录页地址（缺省用 base_url）
-    degraded: bool = False    # 新增：是否降级为 requests 抓取
+    routes: list[str] = field(default_factory=list)  # 新增：显式路由清单
+    login_url: str = ""  # 新增：登录页地址（缺省用 base_url）
+    degraded: bool = False  # 新增：是否降级为 requests 抓取
+
 
 @dataclass
-class UiPage:                 # 新增：一个被发现的可达页面
+class UiPage:  # 新增：一个被发现的可达页面
     url: str
     path: str
     title: str = ""
     reachable: bool = True
     console_errors: list[str] = field(default_factory=list)
     elements: list[UiElement] = field(default_factory=list)
+
 
 @dataclass
 class RuntimeUiResult:
@@ -205,7 +209,7 @@ class RuntimeUiResult:
     console_errors: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
     pages: list[UiPage] = field(default_factory=list)  # 新增：按页聚合
-    degraded: bool = False                             # 新增
+    degraded: bool = False  # 新增
 ```
 
 ### 6.3 产出的功能点（复用既有契约，不新造）
@@ -303,10 +307,10 @@ def _has_playwright() -> bool: ...
 
 ```python
 result.functional_points = stage_extract(...)
-if s.runtime_ui_enabled:                       # 在「测试点展开」之前合并运行时 FP
+if s.runtime_ui_enabled:  # 在「测试点展开」之前合并运行时 FP
     result.functional_points = _merge_runtime_fps(result, stage_runtime_ui(opts, result, progress))
 _, tag_by_fp = stage_tag(...)
-tps = stage_test_points(...)                   # 运行时补入的 FP 也正常展开测试点
+tps = stage_test_points(...)  # 运行时补入的 FP 也正常展开测试点
 ```
 
 要点：

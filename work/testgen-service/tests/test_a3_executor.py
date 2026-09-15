@@ -138,10 +138,11 @@ def test_path_parameter_is_materialized_and_noted():
 
 
 # ---------------------------------------------------------------- 不执行的情形
-def test_ui_layer_is_skipped_with_reason():
+def test_ui_layer_without_session_is_skipped_with_reason():
+    """F13 后 UI 层会真开浏览器：没有会话时必须如实 skipped，且**绝不**伪装通过。"""
     result, session = _run(_case(layer=VerifyLayer.UI.value))
     assert result.status == ExecStatus.SKIPPED.value
-    assert "UI 层执行器待实现" in result.notes[0]
+    assert "不等于通过" in result.notes[0]
     assert session.calls == [], "UI 层不得误发 HTTP 请求"
 
 

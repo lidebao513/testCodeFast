@@ -31,11 +31,13 @@ from core.enums import (
     COVERAGE_ROLE_PRIMARY,
     COVERAGE_ROLE_SUPPLEMENT,
     LAYER_STRATEGY_UI_FIRST,
+    AuthMode,
     FType,
     TPType,
     VerifyLayer,
     method_kind,
 )
+from engine import ui_executor
 from engine.runtime_ui import RuntimePageInfo
 
 
@@ -97,6 +99,7 @@ def build_doc_steps(
     precondition: str,
     layer: str,
     runtime_info: RuntimePageInfo | None = None,
+    auth_mode: str = "",
 ) -> list[dict[str, Any]]:
     """人类可读四步：前置 → 准备 → 执行 → 断言。
 
@@ -106,6 +109,7 @@ def build_doc_steps(
     人员按此理解会走错通道（实测影响 993/1715 条用例）。
 
     `runtime_info` 非空（该测试点来源是运行时 UI 发现的页面）时，走 A2 富化。
+    `auth_mode`（F8）决定安全维度断言文案，与执行器 `_judge` 的判定口径一致。
     """
     method = _get(tp, "method")
     area = _get(tp, "area")
@@ -133,7 +137,7 @@ def build_doc_steps(
         execute = f"调用函数 {area}，捕获返回值与异常"
 
     if override is None:
-        assert_desc = _assert_desc(category, kind)
+        assert_desc = _assert_desc(category, kind, auth_mode)
 
     return [
         {"seq": 1, "type": "前置", "desc": precondition},
@@ -143,7 +147,26 @@ def build_doc_steps(
     ]
 
 
-def _assert_desc(category: str, kind: str) -> str:
+def _security_assert(auth_mode: str) -> str:
+    """安全维度的断言文案（F8）：与 `tp_expand._expect_of` 同一口径。
+
+    三处（测试点期望 / 用例断言 / 执行器判定）必须一致，否则会出现
+    「用例写期望 401、执行器按『公开可访问』判通过」的自相矛盾。
+    """
+    if auth_mode == AuthMode.ABSENT.value:
+        return (
+            "校验：该接口未检测到鉴权接线（公开接口）→ 可正常访问且不泄露敏感字段；"
+            "如需鉴权应在代码中接线（engine/auth_scan.py）"
+        )
+    if auth_mode == AuthMode.OPTIONAL.value:
+        return (
+            "校验：鉴权接线为占位实现（未配置令牌即放行）→ 未配置时属未鉴权暴露；"
+            "配置令牌后无凭证/越权访问应被拒（401/403），且不泄露资源内容"
+        )
+    return "校验：无凭证/越权访问被拒绝（401/403），且不泄露资源内容"
+
+
+def _assert_desc(category: str, kind: str, auth_mode: str = "") -> str:
     """通用断言文案（无运行时细节时的回退）。"""
     if category == TPType.ABNORMAL.value:
         return (
@@ -152,7 +175,7 @@ def _assert_desc(category: str, kind: str) -> str:
             else "校验：函数对非法输入抛出预期异常或返回错误码，且不产生未捕获异常或数据损坏"
         )
     if category == TPType.SECURITY.value:
-        return "校验：无凭证/越权访问被拒绝（401/403），且不泄露资源内容"
+        return _security_assert(auth_mode)
     if kind == FType.API.value:
         return "校验：响应状态码符合预期，关键业务字段完整"
     if kind == FType.PAGE.value:
@@ -160,6 +183,39 @@ def _assert_desc(category: str, kind: str) -> str:
     if kind == FType.UI.value:
         return "校验：交互后界面按预期变化，无报错提示或状态残留"
     return "校验：返回值符合语义，异常分支被正确捕获"
+
+
+def design_assertions(info: RuntimePageInfo | None) -> list[dict[str, Any]]:
+    """F9：把 A2 收进用例的 `selector` 变成**可判定断言**，而不是「仅作参考」。
+
+    产出的是机器可读断言清单，由 `engine/ui_executor.py` 逐条执行：
+      1. `page_rendered`：页面渲染出正文（白屏即失败）；
+      2. `console_within_baseline`：控制台错误不超过运行时基线；
+      3. `element_visible`：每个真实元素按 selector 断言「命中且可见」。
+
+    无运行时细节（非 UI 面 / 未跑运行时发现）时返回空列表——执行器会退化为
+    「页面可达 + 控制台基线」两条，绝不凭空编造元素断言。
+    """
+    if info is None:
+        return []
+    specs: list[dict[str, Any]] = [
+        {"kind": ui_executor.ASSERT_PAGE_RENDERED},
+        {
+            "kind": ui_executor.ASSERT_CONSOLE_WITHIN_BASELINE,
+            "baseline": len(info.console_errors),
+        },
+    ]
+    for element in info.visible_elements()[:MAX_RUNTIME_ELEMENTS_IN_STEP]:
+        selector = str(element.get("selector") or "")
+        if selector:
+            specs.append(
+                {
+                    "kind": ui_executor.ASSERT_ELEMENT_VISIBLE,
+                    "selector": selector,
+                    "text": str(element.get("text") or ""),
+                }
+            )
+    return specs
 
 
 def _runtime_payload(info: RuntimePageInfo) -> dict[str, Any]:
@@ -188,6 +244,7 @@ def build_case(  # noqa: PLR0913 - 生成选项本就多，显式关键字参数
     strategy: str = LAYER_STRATEGY_UI_FIRST,
     drop_supplement: bool = False,
     runtime_index: Mapping[str, RuntimePageInfo] | None = None,
+    auth_profile: Any = None,
 ) -> CaseSpec | None:
     """由一条测试点构建用例规格。
 
@@ -198,7 +255,9 @@ def build_case(  # noqa: PLR0913 - 生成选项本就多，显式关键字参数
     - `drop_supplement=True` 时，补充用例直接返回 None（被上层过滤丢弃）。
 
     `runtime_index`（A2）：运行时发现的「页面路径 → 细节」；命中时富化 `doc_steps`
-    并在 `steps[0].runtime` 挂机器可读细节。
+    并在 `steps[0].runtime` 挂机器可读细节，同时把元素 `selector` 变成可判定断言（F9）。
+    `auth_profile`（F8）：鉴权接线画像；安全用例的期望与判定口径由它决定
+    （`steps[0].auth_mode`），不再写死 401/403。
     """
     category = _get(tp, "category", TPType.NORMAL.value)
     method = str(_get(tp, "method"))
@@ -233,6 +292,9 @@ def build_case(  # noqa: PLR0913 - 生成选项本就多，显式关键字参数
 
     precondition = precondition_of(category, layer)
     runtime_info = (runtime_index or {}).get(area)
+    auth_mode = (
+        auth_profile.mode_for(source) if auth_profile is not None else AuthMode.REQUIRED.value
+    )
 
     step0: dict[str, Any] = {
         "action": "ui_probe" if is_ui_layer else "http_probe",
@@ -248,10 +310,13 @@ def build_case(  # noqa: PLR0913 - 生成选项本就多，显式关键字参数
         "dimension": _get(tp, "dimension"),
         "expect": expect,
         "coverage_role": coverage_role,  # 契约 Additive：UI 优先覆盖角色
+        "auth_mode": auth_mode,  # 契约 Additive（F8）：安全维度判定口径
     }
     if runtime_info is not None:
         # 契约 Additive：运行时发现细节，供 UI 层执行器与人工复核使用（不含凭证）
         step0["runtime"] = _runtime_payload(runtime_info)
+        # F9：把 selector 变成可判定断言（不再只是「参考」）
+        step0["assertions"] = design_assertions(runtime_info)
     steps = [step0]
 
     return CaseSpec(
@@ -263,7 +328,7 @@ def build_case(  # noqa: PLR0913 - 生成选项本就多，显式关键字参数
         case_type=str(category),
         priority=priority_of(str(category), module),
         precondition=precondition,
-        doc_steps=build_doc_steps(tp, precondition, layer, runtime_info),
+        doc_steps=build_doc_steps(tp, precondition, layer, runtime_info, auth_mode),
         tp_id=tp_id,
         fp_contract_id=fp_contract_id,
         fp_row_id=fp_row_id,
@@ -280,12 +345,14 @@ def generate_cases(  # noqa: PLR0913 - 生成选项本就多，显式关键字�
     strategy: str = LAYER_STRATEGY_UI_FIRST,
     drop_supplement: bool = False,
     runtime_index: Mapping[str, RuntimePageInfo] | None = None,
+    auth_profile: Any = None,
 ) -> list[CaseSpec]:
     """批量生成：测试点 → 用例，1:1 对应（契约不变）。
 
     `ui_modules` 为「已有 UI 覆盖的模块集合」，用于判定接口层用例是否仅为补充。
     `drop_supplement=True` 时过滤掉所有补充用例（纯 UI 优先视图）。
-    `runtime_index` 见 `build_case`（A2 运行时细节富化）。
+    `runtime_index` 见 `build_case`（A2 运行时细节富化 + F9 元素断言）。
+    `auth_profile` 见 `build_case`（F8 鉴权口径）。
     """
     fp_row_map = fp_row_map or {}
     out: list[CaseSpec] = []
@@ -297,6 +364,7 @@ def generate_cases(  # noqa: PLR0913 - 生成选项本就多，显式关键字�
             strategy=strategy,
             drop_supplement=drop_supplement,
             runtime_index=runtime_index,
+            auth_profile=auth_profile,
         )
         if spec is not None:
             out.append(spec)

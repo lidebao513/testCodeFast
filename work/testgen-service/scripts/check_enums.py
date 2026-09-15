@@ -43,6 +43,7 @@ SOURCE_DIRS = (
 )
 
 from core.enums import (
+    AuthMode,
     CaseLifecycleStatus,
     Dimension,
     ExecStatus,
@@ -73,6 +74,7 @@ for _e in (
     PullStatus,
     RunBatchState,
     ReportFormat,
+    AuthMode,
 ):
     for _m in _e:
         _LITERALS.add(_m.value)
@@ -90,6 +92,7 @@ FIELDS = [
     "method",
     "review_status",
     "layer",
+    "auth_mode",
 ]
 FA = "|".join(FIELDS)
 
@@ -202,6 +205,7 @@ def reverse_check():
         PullStatus,
         RunBatchState,
         ReportFormat,
+        AuthMode,
     ]
     blobs = {}
     for path in _iter_source_py():

@@ -102,6 +102,14 @@ def _is_managed(local_path: str) -> bool:
 # ============================================================================
 class PipelineRequest(BaseModel):
     local_path: str = Field("", description="被测代码所在目录（可选；与 test_url 至少给一个）")
+    repo_url: str = Field(
+        "", description="仓库地址（F1）：先取码到 local_path（缺省落到工作区根/仓库名）"
+    )
+    pull_deepen: int = Field(0, ge=0, description="浅克隆加深的提交数（0=不加深）")
+    changed_files: list[str] = Field(
+        default_factory=list,
+        description="显式变更文件清单（F2，正斜杠相对路径）；优先于本地 git diff",
+    )
     project_name: str = Field("", description="项目名（缺省用目录名或被测主机名）")
     mode: str = Field("", description="full=全量扫描 / incremental=增量扫描（留空=默认 full）")
     base: str | None = Field(None, description="增量模式基线 ref")
@@ -125,8 +133,9 @@ class PipelineRequest(BaseModel):
     runtime_routes: list[str] = Field(default_factory=list, description="显式路由（优先级最高）")
     runtime_ui: bool = Field(False, description="启用运行时 UI 发现（等价 RUNTIME_UI_ENABLED=on）")
     auto_input: str = Field("", description="统一智能输入框：一段混排文本（地址+账号+密码+口令）")
-    execute: bool = Field(False, description="执行生成的用例（接口层）")
+    execute: bool = Field(False, description="执行生成的用例（接口层 + UI 层）")
     allow_write: bool = Field(False, description="放行写操作；默认只跑只读请求")
+    ui_click: bool = Field(False, description="UI 层执行真实点击（F13）；默认只做只读断言")
     exec_url: str = Field("", description="执行器被测服务地址（只跑接口层时可单独指定）")
 
 
@@ -165,17 +174,28 @@ def ready() -> dict[str, Any]:
 # ============================================================================
 # 业务端点 v1
 # ============================================================================
-def _apply_request(req: PipelineRequest, opts: pipeline.PipelineOptions) -> None:
-    """把请求字段覆盖到选项上（表驱动）。
-
-    顺序即优先级：调用方须先让智能输入框填（可覆盖默认值），再调本函数（覆盖输入框）。
-    """
-    for attr in ("project_name", "mode", "base", "target", "prd_source"):
+def _apply_code_sources(req: PipelineRequest, opts: pipeline.PipelineOptions) -> None:
+    """把「代码来源类」字段覆盖到选项（F1 仓库地址 / F2 变更清单 / 模式 / 基线）。"""
+    for attr in ("project_name", "mode", "base", "target", "prd_source", "repo_url"):
         value = getattr(req, attr, None)
         if value:
             setattr(opts, attr, value)
     if req.scopes:
         opts.scopes = set(req.scopes)
+    # F2：显式变更文件清单（统一正斜杠，与 git diff 输出形态对齐）
+    files = [str(f).strip().replace("\\", "/") for f in req.changed_files if str(f).strip()]
+    if files:
+        opts.changed_files = files
+    if req.pull_deepen:
+        opts.pull_deepen = int(req.pull_deepen)
+
+
+def _apply_request(req: PipelineRequest, opts: pipeline.PipelineOptions) -> None:
+    """把请求字段覆盖到选项上（表驱动）。
+
+    顺序即优先级：调用方须先让智能输入框填（可覆盖默认值），再调本函数（覆盖输入框）。
+    """
+    _apply_code_sources(req, opts)
     target = opts.target_req
     for attr, value in (
         ("base_url", req.test_url),
@@ -194,6 +214,7 @@ def _apply_request(req: PipelineRequest, opts: pipeline.PipelineOptions) -> None
         target.exec_url = req.exec_url
     target.execute = req.execute or bool(req.exec_url)
     target.allow_write = req.allow_write
+    target.ui_click = req.ui_click
 
 
 @app.post("/api/v1/pipeline", dependencies=[Depends(require_auth)])
@@ -251,6 +272,38 @@ class AnalyzeRequest(BaseModel):
     project_name: str = ""
     include_business: bool = True
     extract_pages: bool = True
+
+
+class PullRequest(BaseModel):
+    """取码请求（F1）：把仓库准备到本地并（可选）算出变更集。
+
+    与 `/api/v1/pipeline` 的 `repo_url` 的区别：本端点**只取码**、不跑生成链路——
+    供上游平台在触发流水线前先确认「代码拿到了、变更集对不对」。凭证只在本请求内传递。
+    """
+
+    repo_url: str = Field("", description="仓库地址（含凭证时结果与日志一律掩码）")
+    local_path: str = Field("", description="本地目标目录；缺省落到工作区根/仓库名（受管目录）")
+    base: str = Field("", description="基线 ref（与 target 一起算变更集）")
+    target: str = Field("", description="目标 ref；WORKTREE 表示与当前工作区比较")
+    deepen: int = Field(0, ge=0, description="浅克隆加深的提交数（0=不加深）")
+
+
+@app.post("/api/v1/pull", dependencies=[Depends(require_auth)])
+def pull_code(req: PullRequest) -> dict[str, Any]:
+    """取码（F1）：克隆 / 更新 / 加深 / 算变更集。
+
+    失败**不抛 5xx**：取码失败是常见业务结果（远端不可达、非空目录、ref 失效），
+    以 `success=false` + `status` 如实返回，调用方据 `status` 决策。
+    凭证（URL 中的 user:token）在返回结果中**一律掩码**。
+    """
+    import os
+
+    from engine import pull as pull_engine
+
+    url = req.repo_url or (os.environ.get("REPO_URL") or "").strip()
+    local_path = req.local_path or str(settings.workspace_root / pipeline.repo_dir_name(url))
+    result = pull_engine.pull(url, local_path, base=req.base, target=req.target, deepen=req.deepen)
+    return {"pull": result.to_dict()}
 
 
 @app.post("/api/v1/analyze", dependencies=[Depends(require_auth)])

@@ -42,6 +42,7 @@ from core.enums import DEFAULT_SCOPE, FType, RunBatchState, Tag, VerifyLayer
 from core.errors import EngineError, WorkspaceEscapeBlocked
 from core.log import get_logger, log_extra
 from engine import (
+    auth_scan,
     case_gen,
     diff_tag,
     executor,
@@ -49,6 +50,7 @@ from engine import (
     fp_merge,
     llm_design,
     prd_ingest,
+    pull,
     runtime_ui,
     scan,
     semantic_enrich,
@@ -84,6 +86,7 @@ class TargetRequest:
     # —— 执行器（A3）——
     execute: bool = False  # 请求级开启用例执行
     allow_write: bool = False  # 是否放行写操作（默认否）
+    ui_click: bool = False  # F13：UI 层是否执行真实点击（会改状态，默认否）
     # 执行器专用的被测服务地址。为什么要单独一个字段：接口层执行只需要 HTTP 地址，
     # **不该被迫打开浏览器通道**（打开就意味着要装 Playwright、要登录态、要遍历页面）。
     # 未设置时回落到运行时发现的 base_url。
@@ -100,6 +103,15 @@ class PipelineOptions:
     mode: str = "full"  # full | incremental
     base: str | None = None
     target: str | None = None
+    # —— F1：取码（服务内获取被测代码）——
+    # 给了仓库地址即先取码把代码准备到 local_path，再走后续阶段；
+    # 未给 local_path 时按仓库名落到工作区根下（受管目录，便于只读加固）。
+    repo_url: str = ""
+    pull_deepen: int = 0  # 浅克隆加深的提交数（0=不加深）
+    # —— F2：显式变更文件清单 ——
+    # 上游（CI / 平台）已算好变更集时直接传入，**优先于**本地 git diff：
+    # 服务再跑一次 diff 既慢又可能因浅克隆而失真。路径须为正斜杠相对路径。
+    changed_files: list[str] = field(default_factory=list)
     prd_source: str = ""  # P2：PRD 文件路径（启用 PRD 通道时读取）
     scopes: set[str] = field(default_factory=lambda: set(DEFAULT_SCOPE))
     review_status: str = "pending"
@@ -129,6 +141,8 @@ class PipelineResult:
     case_stats: dict[str, Any] = field(default_factory=dict)
     traceability: dict[str, Any] = field(default_factory=dict)
     execution: dict[str, Any] = field(default_factory=dict)  # A3：执行结论汇总
+    pull_result: dict[str, Any] = field(default_factory=dict)  # F1：取码结论（未取码为空）
+    auth_scan: dict[str, Any] = field(default_factory=dict)  # F8：鉴权接线画像
     notes: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
     # 产物本体（不参与 to_dict 序列化，供调用方写出文件）
@@ -150,6 +164,8 @@ class PipelineResult:
             "case_stats": self.case_stats,
             "traceability": self.traceability,
             "execution": self.execution,
+            "pull": self.pull_result,
+            "auth_scan": self.auth_scan,
             "notes": self.notes,
             "errors": self.errors,
         }
@@ -179,6 +195,68 @@ def _count_by(items: list[Any], key: Callable[[Any], str]) -> dict[str, int]:
         k = key(it)
         out[k] = out.get(k, 0) + 1
     return out
+
+
+# ============================================================================
+# 阶段 -1（F1）：取码——把「给个仓库地址」变成服务内能力
+# ============================================================================
+def repo_dir_name(url: str) -> str:
+    """从仓库地址推目录名（`.../foo.git` → `foo`）；推不出则用 `target-repo`。
+
+    公开命名：CLI 的 `pull` 子命令与本模块共用同一套推导，避免两处各写一遍
+    （「同一地址推出两个目录名」是取码类工具最常见的自相矛盾）。
+    """
+    tail = (url or "").rstrip("/").rsplit("/", 1)[-1]
+    name = tail[:-4] if tail.endswith(".git") else tail
+    return name or "target-repo"
+
+
+def _pull_local_path(opts: PipelineOptions) -> str:
+    """取码目标目录：显式 `--path` 优先；否则按仓库名落到工作区根下（受管目录）。"""
+    if opts.local_path:
+        return opts.local_path
+    return str(get_settings().workspace_root / repo_dir_name(opts.repo_url))
+
+
+def stage_pull(opts: PipelineOptions, result: PipelineResult, progress: ProgressFn | None) -> None:
+    """F1：取码——克隆 / 更新远端仓库到 `local_path`，并（可选）算出变更集。
+
+    设计要点：
+    - **只在给了 `--repo-url` 时执行**：本地已有目录的用法（`--path` 直接指向代码）
+      完全不受影响，行为不变；
+    - 成功后**回填 `opts.local_path`**，让后续阶段（扫描 / diff / 执行）无感衔接；
+    - 取码得到的变更集（`base..target` / 工作区）在**未显式给 `--changed-files`** 时
+      作为增量通道的变更集使用——这一步把 F1 与 F2 接成一条链，
+      避免「取码算了一次 diff、打标又算一次」的重复与潜在不一致（浅克隆下两次结果可能不同）；
+    - 取码失败**不吞**：写入 `result.errors` 并抛 `EngineError`（宁快速失败，
+      也不要拿一个空目录跑出一条「0 功能点」的假产物）。
+    """
+    if not opts.repo_url:
+        return
+    target_path = _pull_local_path(opts)
+    _emit(progress, "pull", url=pull.mask_url(opts.repo_url), path=target_path)
+    pulled = pull.pull(
+        opts.repo_url,
+        target_path,
+        base=opts.base or "",
+        target=opts.target or "",
+        deepen=opts.pull_deepen,
+    )
+    result.pull_result = pulled.to_dict()
+    result.counts["pull_changed_files"] = pulled.changed_count
+    result.notes.append(pulled.summary_line())
+    result.errors.extend(pulled.errors[:5])
+    if not pulled.success:
+        raise EngineError(
+            f"取码失败（{pulled.status}）：{pulled.errors[0] if pulled.errors else '未知原因'}"
+        )
+    opts.local_path = pulled.local_path
+    if pulled.changed_files and not opts.changed_files:
+        opts.changed_files = list(pulled.changed_files)
+        result.notes.append(
+            f"增量变更集取自取码结果（{pulled.changed_count} 个文件）；"
+            "如需覆盖请显式给 --changed-files"
+        )
 
 
 # ============================================================================
@@ -242,6 +320,16 @@ def stage_extract(
         line = fp_merge.summary_line(merge_stats, "同源功能点语义去重")
         if line:
             result.notes.append(line)
+    # F6：业务调用图吞并——只被本文件路由调用链用到的辅助函数不产出功能点。
+    # 必须**如实上报**吞并数：否则「功能点变少了」会被误读成「扫描漏了」。
+    absorbed = int(getattr(extracted, "business_absorbed", 0))
+    if absorbed:
+        result.counts["business_absorbed"] = absorbed
+        examples = list(getattr(extracted, "business_absorbed_examples", []) or [])
+        tail = f"（示例：{'、'.join(examples[:3])}）" if examples else ""
+        result.notes.append(
+            f"业务调用图吞并（F6）：{absorbed} 个辅助函数融入其调用方，未单独产出功能点{tail}"
+        )
     result.counts["functional_points"] = len(fps)
     result.errors.extend(extracted.errors[:20])
     return fps
@@ -253,6 +341,11 @@ def stage_extract(
 def _build_diff_context(opts: PipelineOptions) -> tuple[diff_tag.DiffContext, list[str]]:
     """构造差异上下文；**只在「未指定基线」时**才降级为全量并记录。
 
+    优先级（F2）：
+    1. **显式变更文件清单**（`--changed-files` / 请求体 `changed_files`）——上游已经
+       算好了，服务不再跑 git；也只有文件级打标（无行号）。
+    2. 本地 `git diff base..target`——需要 base/target 可解析。
+
     F7：`base/target` 明确给出却不可解析（ref 失效、不是本仓库对象、git 执行失败）
     必须**立刻报错**。原实现在此处 `except (ValueError, OSError)` 后降级为全量继续跑，
     于是「所有功能点都被标成全量」这一明显错误的结果会**静默**流到下游——
@@ -262,6 +355,13 @@ def _build_diff_context(opts: PipelineOptions) -> tuple[diff_tag.DiffContext, li
     if not opts.is_incremental:
         notes.append("全量通道：不做 diff，全部标为『全量』")
         return diff_tag.DiffContext(), notes
+    if opts.changed_files:
+        ctx = diff_tag.context_from_files(opts.changed_files)
+        notes.append(
+            f"增量通道（显式变更集）：变更文件 {len(ctx.changed_files)} 个，"
+            "仅做文件级打标（无 hunk 行号，未对齐到行）"
+        )
+        return ctx, notes
     if not opts.base or not opts.target:
         notes.append(
             "增量通道未指定基线：无法计算变更集，本次所有功能点均标『全量』"
@@ -296,29 +396,90 @@ def stage_tag(
     fps: list[FunctionalPoint],
     progress: ProgressFn | None,
 ) -> tuple[diff_tag.DiffContext, dict[str, str]]:
+    """差异打标：静态来源走 `git diff` 命中判定，运行时来源（F4）走显式分支。
+
+    F4：`runtime:<url>` 功能点不对应任何 commit，**必须另路处理**。
+    早期实现让它们落进 `tag_of_rel`：拿 "runtime:http://host/x" 去和变更文件集比对，
+    永远 miss → 静默全标「全量」。结果虽与应然一致，但使用者无法从产物看出
+    「这些功能点为什么没被增量打标」。现在改为显式计数 + 备注。
+    """
     _emit(progress, "diff_tag", mode=opts.mode)
     ctx, notes = _build_diff_context(opts)
     result.notes.extend(notes)
     tag_by_fp: dict[str, str] = {}
+    url_sourced = 0
     for fp in fps:
-        tag = diff_tag.tag_of_rel(fp.file_path, ctx)
+        rel = str(fp.file_path or "")
+        if diff_tag.is_runtime_source(rel):
+            url_sourced += 1
+        tag = diff_tag.tag_of_source(rel, ctx)
         tag_by_fp[fp.fp_id] = tag
         fp.commit_ref = (opts.target or "") if tag == Tag.UPDATE.value else ""
+    if url_sourced:
+        result.counts["fp_url_sourced"] = url_sourced
+        result.notes.append(
+            f"运行时（地址通道）功能点 {url_sourced} 条：无版本概念，"
+            "增量通道对它们不做 diff，一律标『全量』（如需增量请以代码通道为准）"
+        )
     return ctx, tag_by_fp
 
 
 # ============================================================================
 # 阶段 4：测试点展开
 # ============================================================================
-def stage_test_points(
+def stage_auth_scan(
     opts: PipelineOptions,
     result: PipelineResult,
+    files: dict[str, SourceFile],
+    progress: ProgressFn | None,
+) -> auth_scan.AuthProfile | None:
+    """F8：扫源码得到鉴权接线画像，供测试点展开与用例生成共用。
+
+    **没有代码时返回 `None`**（而不是一个「什么都没扫到」的空画像）：
+    空画像的 `mode_for()` 对一切接口都返回 `ABSENT`，会把「看不到代码」误当成
+    「代码里没有鉴权接线」，进而把所有安全用例判成「公开接口可访问」——
+    那是比不判定更危险的假结论。返回 `None` 时下游退回 v1.0 的保守口径（按需鉴权）。
+    """
+    _emit(progress, "auth_scan", files=len(files))
+    if not files:
+        result.notes.append(
+            "未提供被测代码：跳过鉴权接线扫描（F8），安全用例退回保守口径（按需鉴权）"
+        )
+        return None
+    profile = auth_scan.scan_auth(files)
+    result.auth_scan = profile.to_dict()
+    result.counts["auth_wired_files"] = len(profile.files_with_auth)
+    result.notes.append(profile.summary_line())
+    if profile.evidence:
+        # 证据只留前若干条（`AuthProfile.evidence` 已按类限量），供人工复核
+        result.notes.append("鉴权接证据（示例）：" + "；".join(profile.evidence[:3]))
+    return profile
+
+
+def build_expand_context(
+    opts: PipelineOptions, auth_profile: auth_scan.AuthProfile | None
+) -> tp_expand.ExpandContext:
+    """构造测试点展开上下文（范围 / 审核门 / F8 鉴权画像）。
+
+    为什么在组合根构造而不在 `stage_test_points` 内构造：上下文是**本次运行的显式输入**
+    （范围来自 CLI/HTTP、鉴权画像来自源码扫描），在编排层组装才能一眼看清
+    「这次展开用的是什么口径」；函数签名也因此不必随口径增长而膨胀。
+    """
+    return tp_expand.ExpandContext(
+        scopes=set(opts.scopes),
+        review_status=opts.review_status,
+        auth_profile=auth_profile,
+    )
+
+
+def stage_test_points(
+    result: PipelineResult,
+    ctx: tp_expand.ExpandContext,
     fps: list[FunctionalPoint],
     tag_by_fp: dict[str, str],
     progress: ProgressFn | None,
 ) -> list[TestPoint]:
     _emit(progress, "tp_expand", fp=len(fps))
-    ctx = tp_expand.ExpandContext(scopes=set(opts.scopes), review_status=opts.review_status)
     tps = tp_expand.expand_all(fps, ctx, tag_by_fp=tag_by_fp)
     result.counts["test_points"] = len(tps)
     result.scope_summary = tp_expand.scope_summary(tps)
@@ -487,16 +648,33 @@ def _merge_runtime_fps(
     return fp_merge.merge_functional_points(static_fps, runtime_fps)
 
 
+def _screenshot_dir(project_id: int | None) -> str:
+    """UI 失败截图目录（`outputs/<pid>/screenshots/`）；无项目 ID 时不落盘。
+
+    为什么不落临时目录：截图的唯一价值是「事后复盘」，临时目录会被清掉；
+    落到产物目录下才能随报告一起交付。项目 ID 缺失时返回空串（`ui_executor`
+    据此跳过截图，而不是写到某个不明所以的位置）。
+    """
+    if not project_id:
+        return ""
+    return str(get_settings().output_dir / str(project_id) / "screenshots")
+
+
 def stage_execute(
     opts: PipelineOptions,
     result: PipelineResult,
     progress: ProgressFn | None,
     runtime_options: runtime_ui.RuntimeUiOptions,
 ) -> dict[str, Any]:
-    """P3：执行已生成的用例（A3：接口层真实执行，UI 层仍为桩）。
+    """P3：执行已生成的用例（A3 接口层 + F13 UI 层均**真实执行**）。
 
     地址与凭证取「请求级 > 环境变量」同一套优先级：接口层执行用的是**被测服务地址**
     （`RUNTIME_BASE_URL`），不是登录页——登录页是浏览器通道才需要的概念。
+
+    F13：UI 层用例由 `executor` 交给 `ui_executor` 用真浏览器执行——因此这里必须把
+    **浏览器通道选项**（channel / headless / 截图目录 / 登录凭证 / 是否真实点击）一并传入，
+    否则 UI 会话建不起来，UI 用例会全部如实 `skipped`（这是「配了却没生效」的典型形态，
+    必须避免）。`ui_click` 默认关：真实点击会改被测环境状态，与接口层 `allow_write` 同思路。
 
     F12：本阶段只**产出**执行结论（含批次号与起止时间）并挂到 `result.execution`；
     真正落库在 `stage_persist`——必须等用例对账完成、`cases` 行就位后才能回填 `last_result`，
@@ -510,8 +688,21 @@ def stage_execute(
     exec_options = executor.ExecutorOptions(
         base_url=opts.target_req.exec_url or runtime_options.base_url,
         auth_token=runtime_options.auth_token or s.runtime_auth_token,
+        headless=runtime_options.headless,
         timeout=runtime_options.timeout,
         allow_write=bool(opts.target_req.allow_write or s.executor_allow_write),
+        # —— F13：浏览器（UI 层）通道 ——
+        # 仅在「真配置了运行时 UI（RUNTIME_UI_ENABLED=on 或指定了浏览器 channel）」时才启用
+        # UI 层真实执行；否则不启动浏览器，UI 用例走「如实 skipped」分支。
+        # 硬编码 True 会在无浏览器环境（测试 / 未配置部署）下尝试启动浏览器并挂起。
+        ui_enabled=bool(runtime_options.channel or s.runtime_ui_enabled),
+        channel=runtime_options.channel,
+        ui_click=opts.target_req.ui_click,
+        screenshot_dir=_screenshot_dir(result.project_id),
+        login_url=runtime_options.login_url,
+        login_user=runtime_options.login_user,
+        login_password=runtime_options.login_password,
+        login_otp=runtime_options.login_otp,
     )
     try:
         summary = executor.execute_all(result.cases, exec_options)
@@ -531,10 +722,13 @@ def stage_execute(
     result.execution = summary
     for key in ("total", "executed", "pass", "fail", "error", "skipped"):
         result.counts[f"exec_{key}"] = int(summary.get(key, 0))
+    artifacts = sum(1 for r in summary.get("results", []) if r.get("screenshot_path"))
+    if artifacts:
+        result.counts["exec_screenshots"] = artifacts
     result.notes.append(
         f"执行结论（批次 {batch_id}）：共 {summary['total']} 条，已执行 {summary['executed']} 条"
         f"（通过 {summary['pass']} / 失败 {summary['fail']} / 异常 {summary['error']}），"
-        f"跳过 {summary['skipped']} 条（UI 层待实现、非 HTTP 来源或写操作未放行）"
+        f"跳过 {summary['skipped']} 条（UI 层会话不可用、非 HTTP 来源或写操作未放行）"
     )
     return summary
 
@@ -565,7 +759,10 @@ def _failed_execution(batch_id: str, total: int, started: str, error: str) -> di
 # 阶段 6：用例生成
 # ============================================================================
 def stage_cases(
-    result: PipelineResult, tps: list[TestPoint], progress: ProgressFn | None
+    result: PipelineResult,
+    tps: list[TestPoint],
+    progress: ProgressFn | None,
+    auth_profile: auth_scan.AuthProfile | None = None,
 ) -> list[CaseSpec]:
     _emit(progress, "case_gen", tp=len(tps))
     s = get_settings()
@@ -583,6 +780,7 @@ def stage_cases(
         strategy=s.layer_strategy,
         drop_supplement=s.drop_supplement_cases,
         runtime_index=runtime_index,
+        auth_profile=auth_profile,  # F8：安全用例期望值来自代码事实
     )
     result.counts["cases_with_runtime_detail"] = sum(
         1 for c in cases if c.steps and c.steps[0].get("runtime")
@@ -696,18 +894,30 @@ def run_pipeline(
     *,
     progress: ProgressFn | None = None,
 ) -> PipelineResult:
-    """执行完整流水线（代码通道 / 地址通道 / 两者并用）。"""
+    """执行完整流水线（代码通道 / 地址通道 / 两者并用）。
+
+    阶段顺序（F1 起头）：
+      取码 → 来源解析 → 项目注册 → 扫描 → 鉴权扫描 → 功能点提取 → （运行时 UI 发现）
+      → 差异打标 → 测试点展开 → 语义增强 → （PRD）→ 用例生成 → （LLM 设计）
+      → （用例执行）→ 落库
+    """
     s = get_settings()
+    result = PipelineResult(mode=opts.mode)
+    # F1：取码（仅在给了 --repo-url 时执行）。必须在来源解析之前——取码成功会回填
+    # `opts.local_path`，否则「只给仓库地址」的用法会在 `_resolve_sources` 处报「缺少被测来源」。
+    stage_pull(opts, result, progress)
     has_code, runtime_options, runtime_enabled = _resolve_sources(opts, s)
 
-    result = PipelineResult(mode=opts.mode)
     result.source_kind = "+".join(
         [k for k, on in (("code", has_code), ("url", runtime_enabled)) if on]
     )
     stage_register(opts, result)
     files: dict[str, SourceFile] = {}
+    auth_profile: auth_scan.AuthProfile | None = None
     if has_code:
         files = stage_scan(opts, result, progress)
+        # F8：鉴权接线扫描（供测试点期望与用例/执行判定共用同一份事实）
+        auth_profile = stage_auth_scan(opts, result, files, progress)
         result.functional_points = stage_extract(opts, result, files, progress)
     else:
         result.counts["files"] = 0
@@ -739,16 +949,23 @@ def run_pipeline(
             if examples:
                 result.notes.append("语义合并明细（示例）：" + "；".join(examples))
     _, tag_by_fp = stage_tag(opts, result, result.functional_points, progress)
-    tps = stage_test_points(opts, result, result.functional_points, tag_by_fp, progress)
+    tps = stage_test_points(
+        result,
+        build_expand_context(opts, auth_profile),
+        result.functional_points,
+        tag_by_fp,
+        progress,
+    )
     result.test_points = stage_enrich(opts, result, tps, result.functional_points, progress)
     # P2：PRD 通道（默认关闭）——先解析需求并派生「业务规则」测试点，须在用例生成之前并入。
     if s.prd_enabled and opts.prd_source:
         result.prd_doc = stage_prd_ingest(opts, result, progress)
         _merge_prd_test_points(result)
-    result.cases = stage_cases(result, result.test_points, progress)
+    result.cases = stage_cases(result, result.test_points, progress, auth_profile)
     if s.llm_design_enabled:
         result.cases = stage_llm_design(opts, result, progress)
-    # A3：用例执行（默认关闭）。接口层真实执行；UI 层为桩并会如实标记 skipped。
+    # A3 + F13：用例执行（默认关闭）。接口层真发请求，UI 层真开浏览器；
+    # 会话不可用时如实标记 skipped，绝不伪装通过。
     # F12：即便执行基础设施失败（stage_execute 抛 EngineError），`result.execution` 已记下
     # 一个 failed 批次 → 仍会被 stage_persist 落库，保证「跑过/没跑起来」都留痕。
     if s.executor_enabled or opts.target_req.execute:

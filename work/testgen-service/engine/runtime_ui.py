@@ -6,7 +6,7 @@
 
 依赖方向严格向下（只 import core），不感知 service / cli。
 Playwright 采用**惰性导入**：未安装时不影响主链路（默认关闭），
-由 `_has_playwright()` 探测，`discover_ui` 在缺失时给出可执行的安装指引。
+由 `has_playwright()` 探测，`discover_ui` 在缺失时给出可执行的安装指引。
 
 里程碑：
 - M3.1 配置与凭证模型 + 惰性导入探测；
@@ -163,7 +163,7 @@ _SUBMIT_SELECTORS = (
     ".login-button",
 )
 
-_INSTALL_HINT = (
+INSTALL_HINT = (
     "运行时 UI 发现需要 Playwright。请在项目 venv 中执行："
     "python -m pip install playwright && python -m playwright install chromium"
     "（沙箱内无法下载内核时可改用系统浏览器：设 PLAYWRIGHT_CHANNEL=msedge）"
@@ -304,7 +304,7 @@ class _MenuProbe:
 # ============================================================================
 # 可用性探测与配置映射（M3.1）
 # ============================================================================
-def _has_playwright() -> bool:
+def has_playwright() -> bool:
     """探测 Playwright 是否可用（决定真实浏览器通道 / 后续降级路径）。"""
     try:
         import playwright.sync_api  # noqa: F401
@@ -394,7 +394,7 @@ def _resolve_routes(
 # 页面操作（M3.2；page 用 Any 标注——Playwright 未安装时不应触发导入）
 # ============================================================================
 @dataclass
-class _ConsoleSink:
+class ConsoleSink:
     """按顺序累积控制台错误，支持「从某个位置起的新增条目」切片。"""
 
     entries: list[str] = field(default_factory=list)
@@ -407,7 +407,7 @@ class _ConsoleSink:
         return self.entries[mark : mark + MAX_CONSOLE_ERRORS_PER_PAGE]
 
 
-def _timeout_ms(options: RuntimeUiOptions) -> int:
+def timeout_ms(options: RuntimeUiOptions) -> int:
     """超时（秒）→ 毫秒（至少 1ms）。"""
     return max(1, int(options.timeout)) * 1000
 
@@ -426,7 +426,7 @@ def _route_of(page: Any) -> str:
     return f"{path}?{parts.query}" if parts.query else path
 
 
-def _attach_listeners(page: Any, sink: _ConsoleSink) -> None:
+def attach_console_listeners(page: Any, sink: ConsoleSink) -> None:
     """注册控制台错误与未捕获异常的监听（只进结果，不落日志）。"""
 
     def _on_console(msg: Any) -> None:
@@ -478,7 +478,7 @@ def _fill_otp_if_present(page: Any, options: RuntimeUiOptions) -> bool:
 def _click_submit(page: Any, submit: Any, options: RuntimeUiOptions) -> None:
     try:
         submit.click()
-        page.wait_for_load_state("networkidle", timeout=_timeout_ms(options))
+        page.wait_for_load_state("networkidle", timeout=timeout_ms(options))
     except Exception as exc:  # 提交过程任何失败都归为登录失败
         raise EngineError(f"登录失败：提交登录表单出错（{exc}）") from exc
 
@@ -497,7 +497,7 @@ def _maybe_submit_otp(page: Any, options: RuntimeUiOptions, result: RuntimeUiRes
     try:
         otp.fill(options.login_otp)
         submit.click()
-        page.wait_for_load_state("networkidle", timeout=_timeout_ms(options))
+        page.wait_for_load_state("networkidle", timeout=timeout_ms(options))
         result.notes.append("已执行二次验证（动态口令，取值不记录）")
     except Exception:  # 二次提交失败由调用方的「仍在登录页」判定统一兜底
         return
@@ -512,7 +512,7 @@ def _wait_login_ready(page: Any, options: RuntimeUiOptions) -> None:
     可能永远不 idle。
     """
     try:
-        page.wait_for_selector("input, form", timeout=_timeout_ms(options))
+        page.wait_for_selector("input, form", timeout=timeout_ms(options))
     except Exception:  # 超时即认为确实没有登录表单（公开页）
         return
 
@@ -529,7 +529,7 @@ def _login(page: Any, options: RuntimeUiOptions, result: RuntimeUiResult) -> boo
 
     target = options.login_url or options.base_url
     try:
-        page.goto(target, wait_until="domcontentloaded", timeout=_timeout_ms(options))
+        page.goto(target, wait_until="domcontentloaded", timeout=timeout_ms(options))
     except Exception as exc:  # 打开登录页失败即登录失败
         raise EngineError(f"登录失败：无法打开登录页 {target}（{exc}）") from exc
 
@@ -603,7 +603,7 @@ def _wait_nav_ready(page: Any, options: RuntimeUiOptions) -> None:
     `goto(domcontentloaded)` 返回时 React/Vue 常尚未渲染；更关键的是**首批菜单往往要等
     后端接口返回**才出现，故预算不能给太紧（给太紧会误判「本页没有导航」→ 静默 0 条）。
     """
-    budget = min(_timeout_ms(options), NAV_READY_TIMEOUT_MS)
+    budget = min(timeout_ms(options), NAV_READY_TIMEOUT_MS)
     try:
         page.wait_for_selector(_NAV_SELECTOR, timeout=budget)
     except Exception:  # 超时即认定该页确实没有导航区
@@ -613,7 +613,7 @@ def _wait_nav_ready(page: Any, options: RuntimeUiOptions) -> None:
 def _return_to(page: Any, url: str, options: RuntimeUiOptions) -> bool:
     """回到起点页并等导航渲染完（仅在需要「恢复」时调用）。"""
     try:
-        page.goto(url, wait_until="domcontentloaded", timeout=_timeout_ms(options))
+        page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms(options))
     except Exception:
         return False
     _wait_nav_ready(page, options)
@@ -657,7 +657,7 @@ def _click_and_read_route(page: Any, handle: Any, options: RuntimeUiOptions) -> 
     try:
         if not handle.is_visible():
             return ""
-        handle.click(timeout=_timeout_ms(options), no_wait_after=True)
+        handle.click(timeout=timeout_ms(options), no_wait_after=True)
     except Exception:  # 单个菜单项点不动不影响其它项（交给 href 兜底）
         return ""
     try:
@@ -676,7 +676,7 @@ def _popup_route(popups: list[Any], options: RuntimeUiOptions) -> str:
     """若点击新开了标签页，从弹出页读路由。"""
     for popup in popups:
         try:
-            popup.wait_for_load_state("domcontentloaded", timeout=_timeout_ms(options))
+            popup.wait_for_load_state("domcontentloaded", timeout=timeout_ms(options))
             route = _route_of(popup)
         except Exception:
             continue
@@ -743,7 +743,7 @@ def _probe_menu_routes(probe: _MenuProbe) -> list[str]:
             probe.session.context.remove_listener("page", _on_page)
         except Exception:
             pass
-        _close_all(*popups)
+        close_quietly(*popups)
     return found
 
 
@@ -868,14 +868,14 @@ def _collect_page(
     page: Any,
     url: str,
     options: RuntimeUiOptions,
-    sink: _ConsoleSink,
+    sink: ConsoleSink,
     mark: int,
 ) -> UiPage:
     """抓取单页：可达性、控制台错误、导航 / 表单 / 按钮元素。"""
-    timeout_ms = _timeout_ms(options)
+    budget_ms = timeout_ms(options)
     path = urlparse(url).path or "/"
     try:
-        page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
+        page.goto(url, wait_until="domcontentloaded", timeout=budget_ms)
         try:
             # 只等「首屏差不多渲染完」；SPA 长轮询会让 networkidle 永不满足，
             # 照配置超时等会把十几个路由的遍历拖到数分钟。
@@ -934,7 +934,7 @@ def _sweep_pages(
     session: _Session,
     opts: RuntimeUiOptions,
     result: RuntimeUiResult,
-    sink: _ConsoleSink,
+    sink: ConsoleSink,
     static_paths: list[str] | None,
 ) -> int:
     """抓取登录后落地页与各路由（含菜单点击发现），返回可达页数。"""
@@ -1048,7 +1048,31 @@ def to_runtime_index(result: RuntimeUiResult | None) -> dict[str, RuntimePageInf
 # ============================================================================
 # 主入口
 # ============================================================================
-def _launch_browser(playwright: Any, options: RuntimeUiOptions) -> Any:
+def open_authenticated_page(
+    context: Any,
+    options: RuntimeUiOptions,
+    result: RuntimeUiResult,
+    attach: Any = None,
+) -> tuple[Any, bool]:
+    """注入令牌 → 新建页面 →（可选）挂控制台监听 → 表单登录；返回 `(页面, 是否已登录)`。
+
+    为什么收成一个公共入口：运行时发现（`discover_ui`）与 UI 层用例执行
+    （`engine/ui_executor.py`）需要**同一套**「令牌 + 建页 + 登录」动作。
+    各写一遍必然漂移，而「登录态行为不一致」是最难排查的一类差异
+    （表现往往是「一半用例通过、一半莫名失败」）。
+
+    `attach` 由调用方传入（发现通道要收集控制台错误与页面事件），保持本函数与
+    「监听什么」解耦。
+    """
+    _apply_token(context, options, result)
+    page = context.new_page()
+    if attach is not None:
+        attach(page)
+    logged_in = _login(page, options, result)
+    return page, logged_in
+
+
+def launch_browser(playwright: Any, options: RuntimeUiOptions) -> Any:
     """启动浏览器：优先配置的 channel（可复用系统 Edge，免 150MB 内核下载）。"""
     kwargs: dict[str, Any] = {"headless": bool(options.headless)}
     if options.channel:
@@ -1064,7 +1088,7 @@ def _launch_browser(playwright: Any, options: RuntimeUiOptions) -> Any:
         raise EngineError(f"浏览器启动失败（channel={channel}）：{exc}；{hint}") from exc
 
 
-def _close_all(*resources: Any) -> None:
+def close_quietly(*resources: Any) -> None:
     """尽力关闭浏览器上下文（不留驻 cookie / storage）。"""
     for item in resources:
         if item is None:
@@ -1110,25 +1134,24 @@ def discover_ui(
         raise ValueError(f"未知的运行时 UI 发现模式：{opts.mode!r}，允许 {RUNTIME_UI_MODE_CHOICES}")
     if not opts.base_url:
         raise EngineError("运行时 UI 发现缺少被测地址（RUNTIME_BASE_URL）")
-    if not _has_playwright():
-        raise EngineError(_INSTALL_HINT)
+    if not has_playwright():
+        raise EngineError(INSTALL_HINT)
 
     from playwright.sync_api import sync_playwright
 
     result = RuntimeUiResult(base_url=opts.base_url)
-    sink = _ConsoleSink()
+    sink = ConsoleSink()
     browser = None
     context = None
     try:
         with sync_playwright() as pw:
-            browser = _launch_browser(pw, opts)
+            browser = launch_browser(pw, opts)
             context = browser.new_context(ignore_https_errors=True)
-            context.set_default_timeout(_timeout_ms(opts))
-            _apply_token(context, opts, result)
-            page = context.new_page()
-            _attach_listeners(page, sink)
+            context.set_default_timeout(timeout_ms(opts))
+            page, logged_in = open_authenticated_page(
+                context, opts, result, attach=lambda p: attach_console_listeners(p, sink)
+            )
             session = _Session(page, context)
-            logged_in = _login(page, opts, result)
             reachable = _sweep_pages(session, opts, result, sink, static_paths)
             if reachable == 0:
                 raise EngineError(f"运行时 UI 发现失败：所有页面均不可达（{opts.base_url}）")
@@ -1138,5 +1161,5 @@ def discover_ui(
     except Exception as exc:  # 浏览器驱动异常面很宽，统一转 EngineError
         raise EngineError(f"运行时 UI 发现失败：{exc}") from exc
     finally:
-        _close_all(context, browser)
+        close_quietly(context, browser)
     return result

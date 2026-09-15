@@ -26,6 +26,7 @@ from __future__ import annotations
 import os
 import re
 import subprocess
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -42,10 +43,25 @@ _DIFF_FILE_RE = re.compile(r"^\+\+\+ b/(.+)$")
 # 这是唯一被 accept 的非 ref 取值——其余无法解析的 target 一律报错，不再静默降级。
 WORKTREE_TARGET = "WORKTREE"
 
+# 运行时（地址通道）功能点的来源标记前缀：`file_path = "runtime:<url>"`。
+# 这类功能点没有版本概念（不是从某个 commit 的代码里提出来的），因此无法参与 diff——
+# 必须**显式**处理，否则 `tag_of_rel` 会拿 "runtime:http://..." 去和变更文件集比对，
+# 永远 miss → 全部落到「全量」。结果虽与「按设计应然」一致，却是一次**静默空转**：
+# 使用者无法从产物里看出「这些功能点为什么没有被增量打标」。见 `tag_of_source`。
+RUNTIME_SOURCE_PREFIX = "runtime:"
+
 
 def is_worktree_target(target: str | None) -> bool:
     """`target` 是否为工作树哨兵（大小写不敏感）。"""
     return (target or "").strip().upper() == WORKTREE_TARGET
+
+
+def is_runtime_source(rel: str) -> bool:
+    """来源是否为运行时（地址通道）功能点（`runtime:<url>`）。
+
+    F4：这类功能点无版本概念，必须显式识别而不是让 `tag_of_rel` 空转。
+    """
+    return (rel or "").strip().startswith(RUNTIME_SOURCE_PREFIX)
 
 
 def run_git(
@@ -179,6 +195,33 @@ def tag_of_rel(rel: str, ctx: DiffContext) -> str:
         if changed.rsplit("/", 1)[-1] == base:
             return Tag.UPDATE.value
     return Tag.FULL.value
+
+
+def tag_of_source(rel: str, ctx: DiffContext) -> str:
+    """按「来源形态」打标：运行时来源显式走专用分支，不落进 `tag_of_rel` 的空转。
+
+    F4：`runtime:<url>` 功能点是从**当前线上环境**发现的，不对应任何 commit，
+    因此增量通道对它无从打标。此处**显式**返回「全量」——与「碰巧 miss」结果相同，
+    但语义明确，且调用方（`pipeline.stage_tag`）能据此统计并写出备注。
+    """
+    if is_runtime_source(rel):
+        return Tag.FULL.value
+    return tag_of_rel(rel, ctx)
+
+
+def context_from_files(files: Iterable[str]) -> DiffContext:
+    """F2：由**显式变更文件清单**构造差异上下文（不跑 git diff）。
+
+    用途：CI / 上游平台已经算好变更集，只需把清单交给服务——服务再跑一次
+    `git diff` 既慢又可能因浅克隆而失真。典型入口：`--changed-files a.py,b.ts`
+    或 HTTP 请求体的 `changed_files`。
+
+    诚实边界：只有文件清单、没有 hunk 行号，因此只做**文件级**打标
+    （命中文件的全部功能点都标「更新」），`aligned=False` 明示「未对齐到行号」，
+    不得据此做符号级判定。
+    """
+    norm = {str(f).strip().replace("\\", "/") for f in files if str(f).strip()}
+    return DiffContext(changed_files=norm, hunks={}, aligned=False)
 
 
 def tag_of_symbol(rel: str, start_line: int, end_line: int, ctx: DiffContext) -> str:

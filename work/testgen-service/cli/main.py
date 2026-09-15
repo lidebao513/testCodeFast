@@ -1,9 +1,12 @@
 """命令行入口（CLI）。
 
     python -m cli.main pipeline --path <dir> [--mode full|incremental] [--base REF --target REF]
+    python -m cli.main pipeline --repo-url <仓库地址> [--path <目录>] [--deepen N]
+    python -m cli.main pipeline --changed-files a.py,b.ts [--mode incremental]
     python -m cli.main pipeline --url <地址> --user <账号> --password <密码> [--otp <动态口令>]
     python -m cli.main pipeline --auto-input "<一段混排文本>"
     python -m cli.main parse-input "<一段混排文本>"
+    python -m cli.main pull     --repo-url <仓库地址> [--path <目录>] [--base REF --target REF]
     python -m cli.main analyze  --path <dir>
     python -m cli.main runs     --project <项目ID> [--batch <批次号>]
     python -m cli.main report   --project <项目ID> [--batch <批次号>] [--out <目录>]
@@ -22,6 +25,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -40,10 +44,53 @@ from core.enums import (
 )
 from core.errors import AppError
 from core.log import setup_logging
-from engine import diff_tag, pipeline
+from engine import diff_tag, pipeline, pull
 from engine import report as report_engine
 from engine.scan import Scanner
 from output.writer import OutputWriter
+
+
+def _add_pull_parser(sub: Any) -> None:
+    """`pull` 子命令（F1）：只取码、不跑生成链路。"""
+    pl = sub.add_parser("pull", help="取码：把仓库准备到本地并算出变更集（F1）")
+    pl.add_argument("--repo-url", default="", help="仓库地址（缺省读环境变量 REPO_URL）")
+    pl.add_argument(
+        "--path",
+        default="",
+        help="本地目标目录；缺省落到工作区根/仓库名（受管目录，便于只读加固）",
+    )
+    pl.add_argument("--base", default="", help="基线 ref（给定则一并算变更集）")
+    pl.add_argument(
+        "--target",
+        default="",
+        help=f"目标 ref；给 {diff_tag.WORKTREE_TARGET} 表示与当前工作区比较",
+    )
+    pl.add_argument("--deepen", type=int, default=0, help="浅克隆加深的提交数（0=不加深）")
+
+
+def _add_pipeline_partners(sub: Any) -> None:
+    """pipeline 之外的轻量子命令（解析输入 / 分析 / 留痕 / 报告 / 服务）。"""
+    pi = sub.add_parser("parse-input", help="只解析统一智能输入框文本（不跑流水线）")
+    pi.add_argument("text", nargs="*", help="混排文本；@文件 从文件读")
+    pi.add_argument("--pretty", action="store_true", help="美化 JSON 输出")
+
+    ana = sub.add_parser("analyze", help="只做扫描 + 功能点提取")
+    ana.add_argument("--path", required=True)
+
+    runs = sub.add_parser("runs", help="查询执行留痕（批次 / 逐条结论）")
+    runs.add_argument("--project", type=int, required=True, help="项目 ID")
+    runs.add_argument("--batch", default="", help="批次号；给出则额外输出该批次的逐条结论")
+    runs.add_argument("--limit", type=int, default=50, help="批次 / 记录条数上限")
+
+    rep = sub.add_parser("report", help="生成测试报告（摘要 / 覆盖率 / 趋势 / 追溯 / 证据）")
+    rep.add_argument("--project", type=int, required=True, help="项目 ID")
+    rep.add_argument("--batch", default="", help="执行批次号；缺省取最近一次")
+    rep.add_argument("--out", default="", help="报告输出目录（缺省 outputs/<项目ID>/）")
+    rep.add_argument("--no-write", action="store_true", help="只计算不落盘（用于快速核对结论）")
+
+    srv = sub.add_parser("serve", help="启动 HTTP 服务")
+    srv.add_argument("--host", default=None)
+    srv.add_argument("--port", type=int, default=None)
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -52,6 +99,17 @@ def _build_parser() -> argparse.ArgumentParser:
 
     pipe = sub.add_parser("pipeline", help="代码/地址 → 功能点 → 测试点 → 用例")
     pipe.add_argument("--path", default="", help="被测代码目录（可选；与 --url 至少给一个）")
+    pipe.add_argument(
+        "--repo-url",
+        default="",
+        help="仓库地址（F1）：先取码到 --path（缺省落到工作区根/仓库名），再走后续阶段",
+    )
+    pipe.add_argument("--deepen", type=int, default=0, help="浅克隆加深的提交数（0=不加深）")
+    pipe.add_argument(
+        "--changed-files",
+        default="",
+        help="显式变更文件清单（F2，逗号分隔；@文件 逐行读）；优先于本地 git diff",
+    )
     pipe.add_argument("--name", default="", help="项目名（缺省用目录名或被测主机名）")
     pipe.add_argument("--mode", default=None, choices=list(MODE_CHOICES))
     pipe.add_argument("--base", default=None, help="增量模式基线 ref")
@@ -88,7 +146,7 @@ def _build_parser() -> argparse.ArgumentParser:
         default="",
         help="统一智能输入框：一段混排文本（地址+账号+密码+动态口令+路径）；@文件 从文件读",
     )
-    pipe.add_argument("--execute", action="store_true", help="执行生成的用例（接口层）")
+    pipe.add_argument("--execute", action="store_true", help="执行生成的用例（接口层 + UI 层）")
     pipe.add_argument(
         "--exec-url",
         default="",
@@ -99,29 +157,14 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="放行写操作（POST/PUT/PATCH/DELETE）；默认只跑只读请求，防污染被测环境",
     )
+    pipe.add_argument(
+        "--ui-click",
+        action="store_true",
+        help="UI 层执行真实点击（F13）；默认只断言页面可达与元素可见，防污染被测环境",
+    )
 
-    pi = sub.add_parser("parse-input", help="只解析统一智能输入框文本（不跑流水线）")
-    pi.add_argument("text", nargs="*", help="混排文本；@文件 从文件读")
-    pi.add_argument("--pretty", action="store_true", help="美化 JSON 输出")
-
-    ana = sub.add_parser("analyze", help="只做扫描 + 功能点提取")
-    ana.add_argument("--path", required=True)
-
-    runs = sub.add_parser("runs", help="查询执行留痕（批次 / 逐条结论）")
-    runs.add_argument("--project", type=int, required=True, help="项目 ID")
-    runs.add_argument("--batch", default="", help="批次号；给出则额外输出该批次的逐条结论")
-    runs.add_argument("--limit", type=int, default=50, help="批次 / 记录条数上限")
-
-    rep = sub.add_parser("report", help="生成测试报告（摘要 / 覆盖率 / 趋势 / 追溯 / 证据）")
-    rep.add_argument("--project", type=int, required=True, help="项目 ID")
-    rep.add_argument("--batch", default="", help="执行批次号；缺省取最近一次")
-    rep.add_argument("--out", default="", help="报告输出目录（缺省 outputs/<项目ID>/）")
-    rep.add_argument("--no-write", action="store_true", help="只计算不落盘（用于快速核对结论）")
-
-    srv = sub.add_parser("serve", help="启动 HTTP 服务")
-    srv.add_argument("--host", default=None)
-    srv.add_argument("--port", type=int, default=None)
-
+    _add_pull_parser(sub)
+    _add_pipeline_partners(sub)
     return p
 
 
@@ -131,6 +174,20 @@ def _parse_scopes(raw: str) -> set[str]:
     if invalid:
         raise AppError(f"非法范围：{sorted(invalid)}，允许 {ALL_TP_TYPES}")
     return items or set(DEFAULT_SCOPE)
+
+
+def _parse_list(raw: str) -> list[str]:
+    """解析清单类参数（`--changed-files`）：`@文件` 读文件，否则按逗号/空白/分号切分。
+
+    路径统一转正斜杠——与 `git diff --name-only` 的输出形态对齐，否则
+    Windows 下 `a\\b.py` 永远匹配不上变更集（只能靠 basename 兜底，同名文件会误配）。
+    """
+    text = (raw or "").strip()
+    if not text:
+        return []
+    body = Path(text[1:]).expanduser().read_text(encoding="utf-8") if text.startswith("@") else text
+    parts = re.split(r"[\s,;]+", body)
+    return [p.strip().replace("\\", "/") for p in parts if p.strip()]
 
 
 def _read_text(raw: str) -> str:
@@ -164,6 +221,8 @@ def _report_auto_input(parsed: AutoInputResult, adopted: list[str]) -> None:
 # 显式 CLI 参数 → 选项属性（表驱动：新增参数只加一行，避免长 if 分支链）
 _OPTION_FIELDS: tuple[tuple[str, str], ...] = (
     ("path", "local_path"),
+    ("repo_url", "repo_url"),
+    ("deepen", "pull_deepen"),
     ("name", "project_name"),
     ("mode", "mode"),
     ("base", "base"),
@@ -188,6 +247,10 @@ def _apply_cli_target(args: argparse.Namespace, opts: pipeline.PipelineOptions) 
             setattr(opts, attr, getattr(args, arg_name))
     if args.scopes:
         opts.scopes = _parse_scopes(args.scopes)
+    # F2：显式变更文件清单（优先于后续取码得到的变更集）
+    files = _parse_list(getattr(args, "changed_files", ""))
+    if files:
+        opts.changed_files = files
     req = opts.target_req
     for arg_name, attr in _TARGET_FIELDS:
         if getattr(args, arg_name, ""):
@@ -200,6 +263,7 @@ def _apply_cli_target(args: argparse.Namespace, opts: pipeline.PipelineOptions) 
         req.exec_url = args.exec_url
     req.execute = bool(req.execute or args.execute or args.exec_url)
     req.allow_write = bool(req.allow_write or args.allow_write)
+    req.ui_click = bool(req.ui_click or getattr(args, "ui_click", False))
 
 
 def _cmd_pipeline(args: argparse.Namespace) -> int:
@@ -242,6 +306,32 @@ def _cmd_parse_input(args: argparse.Namespace) -> int:
     }
     print(json.dumps(payload, ensure_ascii=False, indent=2 if args.pretty else None))
     return 0
+
+
+def _cmd_pull(args: argparse.Namespace) -> int:
+    """取码（F1）：把仓库准备到本地，并（可选）算出 `base..target` 变更集。
+
+    与 `pipeline --repo-url` 的区别：本命令**只取码**、不跑后续阶段——
+    供外部技能 / CI 在跑流水线前先确认「代码拿到了、变更集对不对」。
+    结果永远返回 JSON（含 `success`），失败时退出码 2 便于脚本判断。
+    """
+    url = args.repo_url or _env_repo_url()
+    local_path = args.path or str(get_settings().workspace_root / pipeline.repo_dir_name(url))
+    result = pull.pull(url, local_path, base=args.base, target=args.target, deepen=args.deepen)
+    print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
+    if not result.success:
+        reason = result.errors[0] if result.errors else result.status
+        print(f"[error] 取码失败：{reason}", file=sys.stderr)
+        return 2
+    print(result.summary_line(), file=sys.stderr)
+    return 0
+
+
+def _env_repo_url() -> str:
+    """从环境变量读仓库地址（F1）；命令行仍是最常用入口，故仅在缺省时兜底。"""
+    import os
+
+    return (os.environ.get("REPO_URL") or "").strip()
 
 
 def _cmd_analyze(args: argparse.Namespace) -> int:
@@ -323,6 +413,7 @@ def _cmd_serve(args: argparse.Namespace) -> int:
 _COMMANDS: dict[str, Callable[[argparse.Namespace], int]] = {
     "pipeline": _cmd_pipeline,
     "parse-input": _cmd_parse_input,
+    "pull": _cmd_pull,
     "analyze": _cmd_analyze,
     "runs": _cmd_runs,
     "report": _cmd_report,

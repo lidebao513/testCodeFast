@@ -165,16 +165,55 @@ class ReportFormat(Enum):
 REPORT_FORMATS = tuple(f.value for f in ReportFormat)
 
 
+# ============================ 鉴权接线模式（F8 · auth mode） ============================
+# 用途：安全用例（鉴权缺失 / 越权）的**期望值来源**。早期实现把期望写死成
+# 「无凭证访问被拒绝（401/403）」，对本来就该公开的接口会产出**假失败**、
+# 对真实需要鉴权的接口又等于没验证「接线是否正确」。
+# 现由 `engine/auth_scan.py` 扫源码推导，取值即本枚举。
+class AuthMode(Enum):
+    """接口的鉴权接线模式（决定安全用例断言什么）。"""
+
+    REQUIRED = "required"  # 检测到强制鉴权接线：无凭证应当被拒（401/403）
+    OPTIONAL = "optional"  # 有接线但「未配置即放行」（占位实现）：仍应被拒，但需点名是配置问题
+    ABSENT = "absent"  # 未检测到任何鉴权接线：按「公开接口」处理，断言可访问且不泄露敏感字段
+
+
+AUTH_MODES = tuple(m.value for m in AuthMode)
+
+
+# ============================ 取码动作形态（F1 · pull mode） ============================
+class PullMode(Enum):
+    """本次取码实际做了哪种动作（写 `pull()` 结果的 `mode` 字段）。
+
+    与 `PullStatus`（成败结论）正交：一次 `ok_offline` 的取码，其 mode 是 `OFFLINE`。
+    """
+
+    CLONE = "clone"  # 目录不存在 / 为空：从远端克隆
+    UPDATE = "update"  # 目录已是仓库：远端更新（并可按需加深）
+    OFFLINE = "offline"  # 远端不可达或无需联网：直接使用本地已有代码
+    NOOP = "noop"  # 未执行任何写操作（被安全网阻断 / 未提供仓库地址）
+
+
+# ============================ 远端更新结果（F1 · fetch status） ============================
+class FetchStatus(Enum):
+    """`git fetch` 的结果（仅落盘字段 `fetch_status`，**不是**最终 `PullStatus`）。"""
+
+    NONE = "none"  # 未尝试（克隆路径 / 离线路径）
+    OK = "ok"  # 更新成功
+    FAILED = "failed"  # 更新失败（已降级为使用本地代码）
+    SKIPPED = "skipped"  # 显式跳过（不需要更新）
+
+
 # ============================ 拉取状态（pull） ============================
 class PullStatus(Enum):
-    """拉取代码的结果状态（**外部前置契约**，取值与技能 `qa-code-pull` 的
-    `pull_code.py` 约定一致）。
+    """拉取代码的结果状态（**服务内实现**，取值与技能 `qa-code-pull` 的
+    `pull_code.py` 逐一兼容）。
 
-    归属说明（修正原失实 docstring）：取码能力**不在本服务内**——`scripts/pull_code.py`
-    与 `tests/test_pull_code.py` 均不属于 testgen-service（服务内不存在这两个文件，
-    原先声称「由测试守护」会误导接手人）。本枚举在服务内的唯一用途是
-    `/health` 的存活状态串（`PullStatus.OK`）；真正的取码由外部技能完成并把
-    代码落到 `--path`。F1 将决定是把它内聚成服务能力，还是明确标注为外部契约。
+    归属说明（F1 已内聚）：取码能力现由 `engine/pull.py` 在服务内提供
+    （`cli.main pull` / `POST /api/v1/pull`），产出与本枚举取值一致的结果结构；
+    `/health` 的存活状态串同样取自本枚举（`PullStatus.OK`）。
+    legacy 的 `work/test-accel/scripts/pull_code.py` 与本实现为**同契约的两套实现**，
+    由 `tests/test_pull.py` 守护取值一致性。
     """
 
     OK = "ok"

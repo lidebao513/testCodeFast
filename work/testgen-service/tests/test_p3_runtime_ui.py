@@ -165,8 +165,8 @@ def _opts(**kw: object) -> runtime_ui.RuntimeUiOptions:
 # ============================================================================
 # M3.1 可用性探测与配置映射
 # ============================================================================
-def test_has_playwright_returns_bool() -> None:
-    assert isinstance(runtime_ui._has_playwright(), bool)
+def testhas_playwright_returns_bool() -> None:
+    assert isinstance(runtime_ui.has_playwright(), bool)
 
 
 def test_options_from_settings_maps_all_fields() -> None:
@@ -336,7 +336,7 @@ def _elements() -> list[dict[str, object]]:
 
 def test_collect_page_parses_elements_and_drops_empty_selector() -> None:
     page = _StubCrawlPage(elements=_elements(), title="工作台")
-    sink = runtime_ui._ConsoleSink()
+    sink = runtime_ui.ConsoleSink()
     ui_page = runtime_ui._collect_page(page, "http://srv/pc/tasks", _opts(), sink, 0)
     assert ui_page.reachable is True
     assert ui_page.path == "/pc/tasks"
@@ -347,14 +347,14 @@ def test_collect_page_parses_elements_and_drops_empty_selector() -> None:
 
 def test_collect_page_marks_unreachable_on_goto_error() -> None:
     page = _StubCrawlPage(goto_error=RuntimeError("net down"))
-    sink = runtime_ui._ConsoleSink()
+    sink = runtime_ui.ConsoleSink()
     ui_page = runtime_ui._collect_page(page, "http://srv/x", _opts(), sink, 0)
     assert ui_page.reachable is False
     assert any("[goto]" in e for e in ui_page.console_errors)
 
 
 def test_collect_page_slices_console_errors_since_mark() -> None:
-    sink = runtime_ui._ConsoleSink()
+    sink = runtime_ui.ConsoleSink()
     sink.add("old-1")
     sink.add("old-2")
     page = _StubCrawlPage(elements=_elements())
@@ -364,7 +364,7 @@ def test_collect_page_slices_console_errors_since_mark() -> None:
 
 
 def test_console_sink_caps_total_entries() -> None:
-    sink = runtime_ui._ConsoleSink()
+    sink = runtime_ui.ConsoleSink()
     for i in range(600):
         sink.add(f"e{i}")
     assert len(sink.entries) == 500
@@ -404,12 +404,12 @@ def test_spa_without_anchor_tags_is_still_covered() -> None:
         assert attr in links_js
 
 
-def test_launch_browser_passes_channel_and_wraps_error() -> None:
+def testlaunch_browser_passes_channel_and_wraps_error() -> None:
     pw = _StubBrowserLauncher()
-    assert runtime_ui._launch_browser(pw, _opts(channel="msedge")) == "BROWSER"
+    assert runtime_ui.launch_browser(pw, _opts(channel="msedge")) == "BROWSER"
     assert pw.kwargs == {"headless": True, "channel": "msedge"}
     with pytest.raises(EngineError, match="浏览器启动失败"):
-        runtime_ui._launch_browser(
+        runtime_ui.launch_browser(
             _StubBrowserLauncher(exc=RuntimeError("no browser")), runtime_ui.RuntimeUiOptions()
         )
 

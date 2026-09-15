@@ -16,6 +16,7 @@ from __future__ import annotations
 import ast
 import re
 from dataclasses import dataclass, field
+from typing import Any
 
 from core.contracts import FunctionalPoint, fp_id_of
 from core.enums import BUSINESS_EXTRACT_STRICT, FType
@@ -99,6 +100,10 @@ class ExtractResult:
 
     functional_points: list[FunctionalPoint] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
+    # F6：被调用图吞并的业务函数数（仅作实现细节、不产出独立用例），
+    # 以及示例（`函数 @ 文件`），供运行备注「不静默」上报。
+    business_absorbed: int = 0
+    business_absorbed_examples: list[str] = field(default_factory=list)
 
     @property
     def counts(self) -> dict[str, int]:
@@ -309,43 +314,198 @@ def _file_is_business_noise(rel: str, mode: str, include_dirs: list[str]) -> boo
     return any(p in _BUSINESS_NOISE_DIR_PARTS for p in parts[:-1])
 
 
+# ---------------------------------------------------------------- F6 · 业务调用图
+def _called_names(node: ast.AST) -> set[str]:
+    """一个函数体里直接调用的**名字**（`f()` → `f`，`obj.m()` → `m`）。"""
+    out: set[str] = set()
+    for child in ast.walk(node):
+        if not isinstance(child, ast.Call):
+            continue
+        func = child.func
+        if isinstance(func, ast.Name):
+            out.add(func.id)
+        elif isinstance(func, ast.Attribute):
+            out.add(func.attr)
+    return out
+
+
+def _function_defs(
+    tree: ast.Module, qualnames: dict[int, str]
+) -> tuple[dict[str, ast.AST], dict[str, list[str]], list[str]]:
+    """收集 (限定名→定义, 裸名→限定名列表, 路由处理器限定名)。
+
+    抽出来是为了让 `_route_reachable_helpers` 只保留**判定逻辑**——
+    一起写时 mccabe 复杂度会越线，而复杂度正是「这段判定还能不能看懂」的信号。
+    """
+    defs: dict[str, ast.AST] = {}
+    by_name: dict[str, list[str]] = {}
+    routes: list[str] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        qname = qualnames.get(id(node), node.name)
+        defs[qname] = node
+        by_name.setdefault(node.name, []).append(qname)
+        if any(_route_decorator(dec) for dec in node.decorator_list):
+            routes.append(qname)
+    return defs, by_name, routes
+
+
+def _callers_in_file(
+    defs: dict[str, ast.AST], by_name: dict[str, list[str]]
+) -> dict[str, set[str]]:
+    """同文件调用图（被调用者 → 调用者集合）；只认本文件内的定义，跨文件不猜。"""
+    callers: dict[str, set[str]] = {}
+    for qname, node in defs.items():
+        for called in _called_names(node):
+            for target in by_name.get(called, ()):
+                callers.setdefault(target, set()).add(qname)
+    return callers
+
+
+def _reachable_from_routes(
+    routes: list[str], defs: dict[str, ast.AST], by_name: dict[str, list[str]]
+) -> set[str]:
+    """从路由处理器出发做调用图传递闭包（含路由自身）。"""
+    reachable: set[str] = set(routes)
+    queue: list[str] = list(routes)
+    while queue:
+        node = defs.get(queue.pop())
+        if node is None:
+            continue
+        for called in _called_names(node):
+            for target in by_name.get(called, ()):
+                if target in reachable:
+                    continue
+                reachable.add(target)
+                queue.append(target)
+    return reachable
+
+
+def _route_reachable_helpers(tree: ast.Module, qualnames: dict[int, str]) -> set[str]:
+    """F6：返回「只被本文件路由处理器调用链用到」的函数限定名（= 实现细节，不是独立能力）。
+
+    为什么需要：与 API 路由同文件的辅助函数（如路由里调用的 `compute_total`）各自
+    产出一条业务用例，会让功能点数**虚高**，且这些「用例」没有可独立验证的行为
+    （它们的正确性只在某个路由的上下文里成立）。
+
+    判定（保守，宁可少吞不可误吞）：
+      1. 从**路由处理器**出发，沿同文件调用图做传递闭包；
+      2. 只有「**全部**同文件调用者都落在该闭包内」的函数才算辅助函数；
+         —— 从不被调用的函数（真正入口，如 `main`）与同时被非路由调用的函数一律保留；
+      3. 带装饰器的函数一律保留（装饰器通常意味着框架入口，如 CLI 命令 / 任务）。
+    """
+    defs, by_name, routes = _function_defs(tree, qualnames)
+    callers = _callers_in_file(defs, by_name)
+    reachable = _reachable_from_routes(routes, defs, by_name)
+
+    helpers: set[str] = set()
+    for qname in reachable - set(routes):
+        node = defs.get(qname)
+        if node is None or getattr(node, "decorator_list", None):
+            continue
+        same_file_callers = callers.get(qname, set())
+        if same_file_callers and same_file_callers <= reachable:
+            helpers.add(qname)
+    return helpers
+
+
+def _first_route(node: ast.AST) -> tuple[str, str] | None:
+    """取函数上的第一个路由装饰器（`@router.get("/x")` → `("GET", "/x")`）。"""
+    for dec in getattr(node, "decorator_list", []):
+        route = _route_decorator(dec)
+        if route:
+            return route
+    return None
+
+
+def _api_functional_point(
+    sf: SourceFile,
+    module: str,
+    node: ast.FunctionDef | ast.AsyncFunctionDef,
+    prefix: str,
+    route: tuple[str, str],
+) -> FunctionalPoint:
+    """路由处理器 → API 功能点。"""
+    method, path = route
+    full = (prefix + path) if prefix and path.startswith("/") else (path or prefix)
+    full = full or "/"
+    name = f"{method} {full}"
+    return FunctionalPoint(
+        fp_id=fp_id_of(FType.API.value, sf.rel, name),
+        ftype=FType.API.value,
+        file_path=sf.rel,
+        name=name,
+        title=f"{module} · {_action_of(method, full)}{full}",
+        module=module,
+        semantic=_docstring_summary(node) or f"{method} {full}",
+        description=f"{node.name}() @ {sf.rel}:{node.lineno}",
+        commit_ref="",
+    )
+
+
+def _business_functional_point(
+    sf: SourceFile,
+    module: str,
+    node: ast.FunctionDef | ast.AsyncFunctionDef,
+    qualnames: dict[int, str],
+) -> FunctionalPoint:
+    """公开业务函数 → BUSINESS 功能点（机器键带类名前缀，避免同名方法撞号）。"""
+    qname = qualnames.get(id(node), node.name)
+    return FunctionalPoint(
+        fp_id=fp_id_of(FType.BUSINESS.value, sf.rel, qname),
+        ftype=FType.BUSINESS.value,
+        file_path=sf.rel,
+        name=qname,
+        title=f"{module} · {qname}",
+        module=module,
+        semantic=_docstring_summary(node) or node.name.replace("_", " "),
+        description=f"{qname}() @ {sf.rel}:{node.lineno}",
+    )
+
+
+def _absorbed_as_helper(
+    sf: SourceFile,
+    node: ast.FunctionDef | ast.AsyncFunctionDef,
+    qualnames: dict[int, str],
+    helpers: set[str],
+    absorb: dict[str, Any] | None,
+) -> bool:
+    """F6：该函数是否为「只被路由调用链用到的辅助函数」；命中即计数并返回 True。"""
+    qname = qualnames.get(id(node), node.name)
+    if qname not in helpers:
+        return False
+    if absorb is not None:
+        absorb["count"] = int(absorb.get("count", 0)) + 1
+        examples = absorb.setdefault("examples", [])
+        if len(examples) < 5:
+            examples.append(f"{qname} @ {sf.rel}")
+    return True
+
+
 def _extract_api_and_business(
     sf: SourceFile,
     tree: ast.Module,
     business_extract_mode: str = BUSINESS_EXTRACT_STRICT,
     business_include_dirs: list[str] | None = None,
+    absorb: dict[str, Any] | None = None,
 ) -> list[FunctionalPoint]:
+    """提取 API 路由功能点与公开业务函数功能点（P1 收窄 + F6 调用图吞并）。
+
+    `absorb` 为 F6 统计出口：命中吞并时累计 `count` 与 `examples`，
+    由 `extract_functional_points` 回写到 `ExtractResult`，最终由流水线写入运行备注。
+    """
     module = module_of(sf.rel)
     prefix = _router_prefix(tree)
     qualnames = _qualified_names(tree)
+    helpers = _route_reachable_helpers(tree, qualnames)
     out: list[FunctionalPoint] = []
     for node in ast.walk(tree):
         if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
-        route: tuple[str, str] | None = None
-        for dec in node.decorator_list:
-            route = _route_decorator(dec)
-            if route:
-                break
+        route = _first_route(node)
         if route:
-            method, path = route
-            full = (prefix + path) if prefix and path.startswith("/") else (path or prefix)
-            full = full or "/"
-            name = f"{method} {full}"
-            summary = _docstring_summary(node)
-            out.append(
-                FunctionalPoint(
-                    fp_id=fp_id_of(FType.API.value, sf.rel, name),
-                    ftype=FType.API.value,
-                    file_path=sf.rel,
-                    name=name,
-                    title=f"{module} · {_action_of(method, full)}{full}",
-                    module=module,
-                    semantic=summary or f"{method} {full}",
-                    description=f"{node.name}() @ {sf.rel}:{node.lineno}",
-                    commit_ref="",
-                )
-            )
+            out.append(_api_functional_point(sf, module, node, prefix, route))
             continue
         # 公开业务函数（无装饰器、非私有、非测试）
         if node.name.startswith(_SKIP_FUNC_PREFIXES):
@@ -354,20 +514,10 @@ def _extract_api_and_business(
         # 避免把测试套件/构建脚本/配置模式当成被测业务能力（详见 qa-test-points 技能 §十四）。
         if _file_is_business_noise(sf.rel, business_extract_mode, business_include_dirs or []):
             continue
-        qname = qualnames.get(id(node), node.name)  # 机器键：类内方法带类名前缀，避免同名碰撞
-        summary = _docstring_summary(node)
-        out.append(
-            FunctionalPoint(
-                fp_id=fp_id_of(FType.BUSINESS.value, sf.rel, qname),
-                ftype=FType.BUSINESS.value,
-                file_path=sf.rel,
-                name=qname,
-                title=f"{module} · {qname}",
-                module=module,
-                semantic=summary or node.name.replace("_", " "),
-                description=f"{qname}() @ {sf.rel}:{node.lineno}",
-            )
-        )
+        # F6 · 业务调用图吞并：只被本文件路由调用链用到的辅助函数不产出（避免功能点虚高）
+        if _absorbed_as_helper(sf, node, qualnames, helpers, absorb):
+            continue
+        out.append(_business_functional_point(sf, module, node, qualnames))
     return out
 
 
@@ -430,8 +580,13 @@ def extract_functional_points(  # noqa: C901, PLR0913
     business_extract_mode: str = BUSINESS_EXTRACT_STRICT,
     business_include_dirs: list[str] | None = None,
 ) -> ExtractResult:
-    """从已扫描文件集中提取功能点（同文件只解析一次 AST）。"""
+    """从已扫描文件集中提取功能点（同文件只解析一次 AST）。
+
+    F6：业务函数若只被本文件的路由调用链用到，会被「调用图吞并」（不计入功能点），
+    统计写入 `business_absorbed` / `business_absorbed_examples`，由上层写入运行备注。
+    """
     result = ExtractResult()
+    absorb: dict[str, Any] = {}
     for rel in sorted(files):
         sf = files[rel]
         if sf.is_noise:
@@ -443,7 +598,7 @@ def extract_functional_points(  # noqa: C901, PLR0913
                     result.errors.append(f"{rel}: AST 解析失败，已跳过")
                     continue
                 fns = _extract_api_and_business(
-                    sf, tree, business_extract_mode, business_include_dirs
+                    sf, tree, business_extract_mode, business_include_dirs, absorb
                 )
                 if not include_business:
                     fns = [f for f in fns if f.ftype == FType.API.value]
@@ -460,4 +615,6 @@ def extract_functional_points(  # noqa: C901, PLR0913
                     result.functional_points.extend(_extract_components(sf))
         except (SyntaxError, ValueError, AttributeError) as exc:
             result.errors.append(f"{rel}: {type(exc).__name__}: {exc}")
+    result.business_absorbed = int(absorb.get("count", 0))
+    result.business_absorbed_examples = list(absorb.get("examples", []))
     return result

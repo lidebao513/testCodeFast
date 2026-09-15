@@ -1,7 +1,7 @@
 """引擎 · 模块十一（P3）：用例执行器（接口层探活 / 浏览器交互）。
 
 设计定位：把生成的用例真正跑起来。接口层用例走 `requests` 探活 + 状态断言；
-UI 层用例走 Playwright 真实交互。
+UI 层用例走 Playwright 真实交互（判定细节在 `engine/ui_executor.py`）。
 
 落库现状（**如实说明，避免跟着文档踩空**）：本模块**只产出执行结论**（内存 +
 `PipelineResult.execution` / `counts["exec_*"]`），**不直接写库**；
@@ -10,18 +10,23 @@ UI 层用例走 Playwright 真实交互。
 这样分层的原因：执行是运行期活动，落库是存储职责；且必须等用例对账完成、`cases` 行就位后
 才能回填 `last_result`，否则首次运行会「无处可写」。
 
-A3 当前范围（本轮交付，见 `两条生成流程_链路梳理与补齐方案.md`）
+当前范围（A3 接口层 + F13 UI 层）
 -----------------------------------------------------------------
 - **接口层（`http_probe`）真实执行**：发真实 HTTP 请求，按行为维度判定状态码，
   产出 `pass / fail / error / skipped` 结论与证据；
-- **UI 层（`ui_probe`）仍为桩**：返回 `skipped` 并在 note 中**显式说明**「UI 执行器待实现」。
-  为什么不假装通过：静默通过会把「没跑」伪装成「跑过了」，比报错危险得多；
+- **UI 层（`ui_probe`）真实执行（F13）**：Playwright 打开页面 → 逐条断言
+  （页面渲染 / 元素可见 / 控制台基线 / 交互）→ 非 pass 落失败截图。
+  Playwright 未装或未给地址时如实 `skipped` 并给出安装指引，**绝不伪装通过**；
 - **写操作默认不执行**：POST/PUT/PATCH/DELETE 会改被测环境真实数据，默认 `skipped`；
   确认环境可写后再用 `ExecutorOptions.allow_write` / `EXECUTOR_ALLOW_WRITE=on` 放行。
+  UI 层的「真实点击」同理，由 `ui_click` 控制（默认关）；
 - **业务函数（`FUNC`）不可直连**：不是 HTTP 接口，如实 `skipped` 并说明需要单测/符号执行。
+- **安全断言按鉴权模式（F8）**：期望值不再写死 401/403，而是由 `engine/auth_scan.py`
+  推导的 `auth_mode` 决定（无鉴权接线的公开接口按「可访问」判定，避免假失败）。
 
-凭证红线：`auth_token` 只从调用方（环境变量 / 请求级参数）注入，**不进日志、不进结论文本**。
-依赖方向严格向下（只 import core）；`requests` 惰性导入。
+凭证红线：`auth_token` / `login_password` 只从调用方（环境变量 / 请求级参数）注入，
+**不进日志、不进结论文本**。
+依赖方向严格向下（只 import core 与同层模块）；`requests` / `playwright` 惰性导入。
 """
 
 from __future__ import annotations
@@ -33,8 +38,13 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from core.contracts import CaseSpec
-from core.enums import HTTP_METHODS, Dimension, ExecStatus, TPType, VerifyLayer
+from core.enums import HTTP_METHODS, AuthMode, Dimension, ExecStatus, TPType, VerifyLayer
 from core.errors import EngineError
+from core.log import get_logger
+from engine import ui_executor
+
+
+log = get_logger(__name__)
 
 
 # 路径参数（`/invoices/{invoice_id}`）：探测时替换为可请求的占位值
@@ -61,11 +71,21 @@ class ExecutorOptions:
 
     base_url: str = ""
     auth_token: str = ""  # 来自环境变量或请求级参数，不入库
-    headless: bool = True  # UI 层预留（本轮未使用）
+    headless: bool = True  # UI 层：是否无头浏览器
     timeout: int = 30
     verify_tls: bool = True
     allow_write: bool = False  # 是否放行写操作（默认否：防污染被测环境）
     path_param_value: str = "1"  # 路径参数探测填充值（`{id}` → `1`）
+    # —— F13：UI 层真实执行 ——
+    ui_enabled: bool = True  # 有 UI 用例时是否开启浏览器通道（关=全部如实 skipped）
+    channel: str = ""  # ""=自带 chromium；"msedge"/"chrome"=复用系统浏览器
+    ui_click: bool = False  # 是否执行真实点击（会改状态，默认关，与 allow_write 同思路）
+    screenshot_dir: str = ""  # 非 pass 时落失败截图的目录（空=不落）
+    console_slack: int = 0  # 允许超出控制台错误基线的条数
+    login_url: str = ""  # UI 层登录页（需登录态的被测系统）
+    login_user: str = ""
+    login_password: str = ""  # 不入库、不入日志
+    login_otp: str = ""  # 动态口令，不入库、不入日志
 
 
 @dataclass
@@ -89,6 +109,7 @@ class ExecutionResult:
     step_results: list[StepResult] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
     duration_ms: int = 0  # 本次执行耗时（毫秒）；落 runs.duration_ms 供报告/趋势使用
+    screenshot_path: str = ""  # F13：失败截图路径（落 runs.screenshot_path，供复盘）
 
     def ok(self) -> bool:
         """是否「已执行且通过」（skipped 不算通过）。"""
@@ -102,6 +123,7 @@ class ExecutionResult:
             "step_results": [s.to_dict() for s in self.step_results],
             "notes": self.notes,
             "duration_ms": self.duration_ms,
+            "screenshot_path": self.screenshot_path,
         }
 
 
@@ -114,6 +136,8 @@ _KIND_ABNORMAL = "abnormal"
 _KIND_AUTH = "auth"
 _KIND_PRIV_ESC = "priv_esc"
 _KIND_BOUNDARY = "boundary"
+# F8：未检测到鉴权接线的接口（公开接口）——按「可访问」判定，而不是判成「鉴权缺失失败」
+_KIND_PUBLIC = "public"
 
 _PASS_PREDICATES: dict[str, Callable[[int], bool]] = {
     _KIND_NORMAL: lambda s: _OK_MIN <= s < _OK_MAX,
@@ -121,6 +145,7 @@ _PASS_PREDICATES: dict[str, Callable[[int], bool]] = {
     _KIND_AUTH: lambda s: s in _SECURITY_REJECT or s in _SECURITY_REDIRECT,
     _KIND_PRIV_ESC: lambda s: s in _SECURITY_REJECT,
     _KIND_BOUNDARY: lambda s: s in _BOUNDARY_OK,
+    _KIND_PUBLIC: lambda s: _OK_MIN <= s < _OK_MAX,
 }
 
 # 种类 → (通过文案, 未通过文案)；状态码由调用方拼接
@@ -130,13 +155,23 @@ _VERDICT_DESC: dict[str, tuple[str, str]] = {
     _KIND_AUTH: ("无凭证访问被拒", "无凭证访问未被拒绝"),
     _KIND_PRIV_ESC: ("越权访问被拒", "越权访问未被拒绝"),
     _KIND_BOUNDARY: ("非法参数被校验拒绝", "非法参数未被校验"),
+    _KIND_PUBLIC: ("公开接口可正常访问", "公开接口未能正常访问"),
 }
 
 
-def _dimension_kind(category: str, dimension: str) -> str:
-    """把「行为维度 × 子维度」归一到判定种类。"""
+def _dimension_kind(category: str, dimension: str, auth_mode: str = "") -> str:
+    """把「行为维度 × 子维度」归一到判定种类。
+
+    `auth_mode`（F8）只影响安全维度的「鉴权缺失」：代码里没有鉴权接线时，
+    该接口本就是公开的，按「可访问」判定（`_KIND_PUBLIC`），
+    否则会把设计意图当成缺陷报假失败。
+    """
     if category == TPType.SECURITY.value:
-        return _KIND_PRIV_ESC if Dimension.PRIV_ESC.value in dimension else _KIND_AUTH
+        if Dimension.PRIV_ESC.value in dimension:
+            return _KIND_PRIV_ESC
+        if auth_mode == AuthMode.ABSENT.value:
+            return _KIND_PUBLIC
+        return _KIND_AUTH
     if category == TPType.BOUNDARY.value:
         return _KIND_BOUNDARY
     if category == TPType.ABNORMAL.value:
@@ -144,13 +179,13 @@ def _dimension_kind(category: str, dimension: str) -> str:
     return _KIND_NORMAL
 
 
-def _judge(category: str, dimension: str, status: int) -> tuple[bool, str]:
+def _judge(category: str, dimension: str, status: int, auth_mode: str = "") -> tuple[bool, str]:
     """按行为维度判定是否通过，返回 (是否通过, 人类可读说明)。
 
     规则与 `tp_expand._expect_of` 的预期文案**逐条对应**——预期写什么就断言什么，
     否则会出现「用例说期望 400、执行器却把 400 判成失败」的自相矛盾。
     """
-    kind = _dimension_kind(category, dimension)
+    kind = _dimension_kind(category, dimension, auth_mode)
     passed = _PASS_PREDICATES[kind](status)
     if passed and kind == _KIND_AUTH and status in _SECURITY_REDIRECT:
         return True, f"无凭证访问被重定向（{status}，疑似跳登录页）"
@@ -215,30 +250,60 @@ def execute_case(
     options: ExecutorOptions | None = None,
     *,
     session: Any = None,
+    ui_session: Any = None,
 ) -> ExecutionResult:
     """执行单条用例（按 `steps[0].layer` 选择接口 / UI 通道）。
 
-    `session` 可注入（测试用假会话）；为 None 时自建 requests 会话。
+    `session`（requests 假会话）与 `ui_session`（`ui_executor.UiSession`）可注入；
+    为 None 时接口层自建 requests 会话，UI 层如实 skipped（会话由调用方建立，
+    以便**跨用例复用同一个浏览器**——每条用例重启浏览器会让执行时间不可接受）。
     统一在此处测量耗时（落 `runs.duration_ms`），分派逻辑在 `_dispatch`。
     """
     opts = options or ExecutorOptions()
     started = time.monotonic()
-    result = _dispatch(case, opts, session)
+    result = _dispatch(case, opts, session, ui_session)
     result.duration_ms = int((time.monotonic() - started) * 1000)
     return result
 
 
-def _dispatch(case: CaseSpec, opts: ExecutorOptions, session: Any) -> ExecutionResult:
-    """按执行层分派：接口层真发请求，其余如实 skipped（绝不伪装通过）。"""
+def _dispatch(
+    case: CaseSpec, opts: ExecutorOptions, session: Any, ui_session: Any
+) -> ExecutionResult:
+    """按执行层分派：接口层真发请求，UI 层真开浏览器，其余如实 skipped。"""
     step = case.steps[0] if case.steps else {}
     layer = str(step.get("layer") or "")
+    if layer == VerifyLayer.UI.value:
+        return _probe_ui(case, ui_session, opts)
     if layer != VerifyLayer.INTERFACE.value:
+        return _skipped(case, f"未知执行层 {layer!r}：无法判定由哪条通道执行，请核对契约")
+    return _probe_http(case, step, opts, session)
+
+
+def _probe_ui(case: CaseSpec, ui_session: Any, opts: ExecutorOptions) -> ExecutionResult:
+    """UI 层：真实浏览器渲染 + 元素级断言（F13）。
+
+    `ui_session` 为空（未开启浏览器通道）时如实 `skipped`——**不伪装通过**。
+    """
+    if ui_session is None:
         return _skipped(
             case,
-            "UI 层执行器待实现（A3-UI 待做）：本次未执行，**不等于通过**；"
-            "请先按 doc_steps 人工执行或用 Playwright 通道复核",
+            "UI 层执行会话未建立（未启用浏览器通道或未提供被测地址）：本次未执行，**不等于通过**",
         )
-    return _probe_http(case, step, opts, session)
+    result: ui_executor.UiExecResult = ui_session.execute(case)
+    failed = [a for a in result.assertions if not a.get("ok")]
+    total = len(result.assertions)
+    detail = (
+        f"UI 断言全部通过（{total} 条）"
+        if not failed
+        else f"UI 断言未通过 {len(failed)}/{total} 条：{failed[0].get('detail')}"
+    )
+    return ExecutionResult(
+        tc_no=case.tc_no,
+        status=result.status,
+        step_results=[StepResult(seq=3, ok=result.status == ExecStatus.PASS.value, detail=detail)],
+        notes=result.notes,
+        screenshot_path=result.screenshot_path,
+    )
 
 
 def _skipped(case: CaseSpec, reason: str) -> ExecutionResult:
@@ -254,31 +319,58 @@ def _skipped(case: CaseSpec, reason: str) -> ExecutionResult:
     )
 
 
+def _not_executable(case: CaseSpec, step: dict[str, Any], opts: ExecutorOptions) -> str | None:
+    """接口层「不该发请求」的前置判定；返回原因（None = 可以执行）。
+
+    抽出来的两个理由：① 判定分支多，混在 `_probe_http` 里既超复杂度、又看不清
+    「到底哪些情形不执行」；② 这些判定**每一条都对应一种假结论风险**
+    （非 HTTP 来源硬发请求、写操作污染环境、占位地址被打成失败），
+    集中一处才便于逐条复核。
+    """
+    method = str(step.get("method") or "").upper().split(" ")[0]
+    path = str(step.get("path") or "")
+    if method not in HTTP_METHODS:
+        return "来源非 HTTP 接口（业务函数），接口层无法直连执行 → 需单测/符号执行"
+    if not opts.base_url:
+        return "未提供被测地址（--url / RUNTIME_BASE_URL），无法执行接口层用例"
+    if not path.startswith("/"):
+        return f"路径不可直接请求：{path!r}（接口层要求以 / 开头）"
+    if method in _WRITE_METHODS and not opts.allow_write:
+        return (
+            f"写操作（{method}）默认不执行：会在被测环境产生真实数据变更；"
+            "确认环境可写后用 --allow-write 或 EXECUTOR_ALLOW_WRITE=on 放行"
+        )
+    if (
+        case.case_type == TPType.SECURITY.value
+        and Dimension.PRIV_ESC.value in str(step.get("dimension") or "")
+        and str(step.get("auth_mode") or "") == AuthMode.ABSENT.value
+    ):
+        # 越权验证的前置是「接口存在有效鉴权」：代码里没有接线时，
+        # 断言 403 只会稳定产出假失败，如实跳过并说明缺什么。
+        return (
+            "该接口未检测到鉴权接线（auth_mode=absent）：越权防护无从验证，"
+            "需先在代码中接线鉴权（见 engine/auth_scan.py）"
+        )
+    return None
+
+
 def _probe_http(
     case: CaseSpec, step: dict[str, Any], opts: ExecutorOptions, session: Any
 ) -> ExecutionResult:
     """接口层探活：真实发请求 + 按行为维度断言。"""
+    reason = _not_executable(case, step, opts)
+    if reason:
+        return _skipped(case, reason)
+
     method = str(step.get("method") or "").upper().split(" ")[0]
     path = str(step.get("path") or "")
-    if method not in HTTP_METHODS:
-        return _skipped(case, "来源非 HTTP 接口（业务函数），接口层无法直连执行 → 需单测/符号执行")
-    if not opts.base_url:
-        return _skipped(case, "未提供被测地址（--url / RUNTIME_BASE_URL），无法执行接口层用例")
-    if not path.startswith("/"):
-        return _skipped(case, f"路径不可直接请求：{path!r}（接口层要求以 / 开头）")
-    if method in _WRITE_METHODS and not opts.allow_write:
-        return _skipped(
-            case,
-            f"写操作（{method}）默认不执行：会在被测环境产生真实数据变更；"
-            "确认环境可写后用 --allow-write 或 EXECUTOR_ALLOW_WRITE=on 放行",
-        )
-
     materialized, substituted = _materialize_path(path, opts.path_param_value)
     url = _join_url(opts.base_url, materialized)
     owns_session = session is None
     active = session or _new_session()
     category = case.case_type
     dimension = str(step.get("dimension") or "")
+    auth_mode = str(step.get("auth_mode") or "")
     try:
         response = _send(active, method, url, opts, _should_attach_auth(category, dimension))
         status_code = int(response.status_code)
@@ -293,12 +385,11 @@ def _probe_http(
         if owns_session:
             _close_session(active)
 
-    passed, detail = _judge(category, dimension, status_code)
+    passed, detail = _judge(category, dimension, status_code, auth_mode)
     notes = [f"{method} {materialized} → {status_code}：{detail}"]
     if substituted:
         notes.append(f"路径参数已用占位值 {opts.path_param_value!r} 探测（真实资源 ID 需人工提供）")
-    if category == TPType.SECURITY.value and Dimension.PRIV_ESC.value in dimension:
-        notes.append("越权未做资源归属识别，结论置信度较低（见 A3 已知限制）")
+    notes.extend(_auth_notes(category, dimension, auth_mode, status_code))
     return ExecutionResult(
         tc_no=case.tc_no,
         status=ExecStatus.PASS.value if passed else ExecStatus.FAIL.value,
@@ -307,25 +398,81 @@ def _probe_http(
     )
 
 
+def _auth_notes(category: str, dimension: str, auth_mode: str, status: int) -> list[str]:
+    """安全维度的归因说明（F8）：把「为什么这么判」写进结论，避免误读。
+
+    三种模式各自的含义不同，结论文案必须区分——否则「判通过」会被当成「安全没问题」。
+    """
+    if category != TPType.SECURITY.value:
+        return []
+    if auth_mode == AuthMode.ABSENT.value:
+        return [
+            "该接口未检测到鉴权接线（auth_mode=absent）：按『公开接口可访问』判定；"
+            "请人工确认它是否本就应当公开（如需鉴权，属代码缺陷，见 engine/auth_scan.py）"
+        ]
+    if auth_mode == AuthMode.OPTIONAL.value:
+        note = (
+            "鉴权接线为占位实现（未配置令牌即放行，auth_mode=optional）："
+            "默认部署即为未鉴权暴露；该结论与运行期配置相关，请核对被测环境的鉴权开关"
+        )
+        if status < _CLIENT_ERR_MAX:
+            note += "。**本次无凭证访问未被拒绝**"
+        return [note]
+    if Dimension.PRIV_ESC.value in dimension:
+        return ["越权未做资源归属识别，结论置信度较低（见 A3 已知限制）"]
+    return []
+
+
+def _layer_of(case: CaseSpec) -> str:
+    """用例的执行层（`steps[0].layer`）。"""
+    step = case.steps[0] if case.steps else {}
+    return str(step.get("layer") or "")
+
+
+def _ui_options(opts: ExecutorOptions) -> ui_executor.UiExecOptions:
+    """把执行器选项映射为 UI 层选项（凭证只做一次搬运，不入产物）。"""
+    return ui_executor.UiExecOptions(
+        base_url=opts.base_url,
+        headless=opts.headless,
+        channel=opts.channel,
+        timeout=opts.timeout,
+        screenshot_dir=opts.screenshot_dir,
+        ui_click=opts.ui_click,
+        console_slack=opts.console_slack,
+        auth_token=opts.auth_token,
+        login_url=opts.login_url,
+        login_user=opts.login_user,
+        login_password=opts.login_password,
+        login_otp=opts.login_otp,
+    )
+
+
 def execute_all(
     cases: list[CaseSpec],
     options: ExecutorOptions | None = None,
 ) -> dict[str, Any]:
-    """批量执行并汇总（单会话复用连接）。"""
+    """批量执行并汇总：HTTP 复用单会话连接，UI 复用单浏览器页面。
+
+    UI 会话**惰性建立**：只有真的存在 UI 层用例且开关打开时才启动浏览器——
+    接口层用例不该被迫为一次浏览器启动买单（那是数秒级开销）。
+    """
     opts = options or ExecutorOptions()
-    results: list[ExecutionResult] = []
     session: Any = None
-    need_http = any(
-        str((c.steps[0] if c.steps else {}).get("layer") or "") == VerifyLayer.INTERFACE.value
-        for c in cases
-    )
-    if need_http:
+    ui_session: Any = None
+    if any(_layer_of(c) == VerifyLayer.INTERFACE.value for c in cases):
         session = _new_session()
+    if opts.ui_enabled and any(_layer_of(c) == VerifyLayer.UI.value for c in cases):
+        ui_session = ui_executor.UiSession(_ui_options(opts))
+        if not ui_session.open():
+            log.warning("UI 层执行会话未建立，UI 用例将如实跳过")
+            ui_session = None  # 建不起来按「无会话」处理：UI 用例如实 skipped，绝不伪装通过
     try:
-        results = [execute_case(case, opts, session=session) for case in cases]
+        results = [execute_case(c, opts, session=session, ui_session=ui_session) for c in cases]
     finally:
         if session is not None:
             _close_session(session)
+        if ui_session is not None:
+            ui_session.close()
     return summarize(results)
 
 
