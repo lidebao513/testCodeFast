@@ -1,7 +1,7 @@
 """引擎测试：扫描 / 功能点提取 / 差异打标 / 测试点展开 / 用例生成。"""
 
 from core.contracts import FunctionalPoint
-from core.enums import FULL_SCOPE, HTTP_METHODS, Dimension, FType, Tag, TPType, VerifyLayer
+from core.enums import FULL_SCOPE, Dimension, FType, Tag, TPType, VerifyLayer
 from engine import case_gen, diff_tag, fp_extract, scan, tp_expand
 
 
@@ -269,18 +269,25 @@ def test_precondition_matches_layer(sample_repo):
 
 
 # ---------------------------------------------------------------- 安全维度
-def test_security_dimension_only_for_api(sample_repo):
-    """安全维度只在接口类功能点上展开（页面/组件/业务函数不产出安全测试点）。
+def test_security_dimension_scoped_to_api_page_ui(sample_repo):
+    """安全维度在 #222 后**有意**扩展到 api + page(未授权访问) + ui(输入注入)，但绝不泄漏到 component/business。
 
-    这条测试把**现状**钉住：若后续要扩到 UI/业务函数，必须同步改本断言，
-    避免「以为覆盖了、其实没覆盖」。
+    把关「安全测试点来自哪类功能点」：覆盖 api/page/ui 是设计内（对应接口鉴权缺失、
+    未登录直访受限页、向输入/表单注入脚本三类真实风险）；component/business 仍不产出
+    安全测试点，避免对纯展示组件/无鉴权语义的业务函数编造安全用例。
     """
+    from core.enums import FType
+
     _, result = _extract(sample_repo)
-    tps = tp_expand.expand_all(
-        result.functional_points, tp_expand.ExpandContext(scopes={TPType.SECURITY.value})
-    )
-    assert tps, "接口功能点应展开出安全测试点"
-    assert {tp.method for tp in tps} <= set(HTTP_METHODS), "安全测试点全部来自 HTTP 接口"
+    secured_ftypes: set[str] = set()
+    for fp in result.functional_points:
+        tps = tp_expand.expand_all([fp], tp_expand.ExpandContext(scopes={TPType.SECURITY.value}))
+        if tps:
+            secured_ftypes.add(fp.ftype)
+    assert secured_ftypes, "接口功能点应展开出安全测试点"
+    assert secured_ftypes <= {FType.API.value, FType.PAGE.value, FType.UI.value}
+    assert FType.COMPONENT.value not in secured_ftypes
+    assert FType.BUSINESS.value not in secured_ftypes
 
 
 def test_privilege_escalation_dimension_matches_legacy(sample_repo):
@@ -324,8 +331,17 @@ def test_expansion_plan_matches_legacy_parity_table():
             (TPType.ABNORMAL.value, Dimension.RES_NOT_FOUND.value),
             (TPType.SECURITY.value, Dimension.PRIV_ESC.value),
         ],
-        ("page", "/p"): [(TPType.NORMAL.value, Dimension.PAGE_REACH.value)],
+        ("page", "/p"): [
+            (TPType.NORMAL.value, Dimension.PAGE_REACH.value),
+            (TPType.SECURITY.value, Dimension.UI_UNAUTH_PAGE.value),
+            (TPType.BOUNDARY.value, Dimension.UI_POOR_VIEWPORT.value),
+        ],
         ("component", "X.tsx"): [(TPType.NORMAL.value, Dimension.INTERACTIVE.value)],
+        ("ui", "/p#input:查询|#q"): [
+            (TPType.NORMAL.value, Dimension.INTERACTIVE.value),
+            (TPType.SECURITY.value, Dimension.UI_INPUT_INJECT.value),
+            (TPType.BOUNDARY.value, Dimension.UI_LONG_INPUT.value),
+        ],
         ("business", "f"): [(TPType.NORMAL.value, Dimension.BIZ_LOGIC.value)],
     }
     for (ftype, name), expected in cases.items():

@@ -122,13 +122,20 @@ def semantic_key(fp: FunctionalPoint) -> str | None:
     返回 None 的项在合并时**原样保留**——这是「宁可重复，不可误删」的落点。
     """
     family = _MERGE_FAMILIES.get(str(getattr(fp, "ftype", "")))
-    if family is None:
-        return None
     name = str(getattr(fp, "name", "") or "").strip()
-    if not name:
+    if family is None or not name:
         return None
     if family == _FAMILY_API:
         return _api_key(name)
+    if str(getattr(fp, "ftype", "")) == FType.UI.value:
+        # ui 元素级功能点：名称形态为 `路径#类型:文字|选择器`，`#` 是**合成分隔符**
+        # 而非 URL fragment。若经 `normalize_path` 会按 `#` 截断，使整页元素功能点
+        # 全部塌成 `page|/路径` 与同页 `page` 功能点撞键被误并（#221 元素级分解在
+        # 完整流水线里被 F5 撤销）。故用完整名作判别键，保证「页面可达」与
+        # 「元素可交互」两类功能点各自保留、互不相吞。
+        if not name.startswith("/"):
+            return None
+        return f"{_FAMILY_PAGE}|ui|{name}"
     if not name.startswith("/"):
         return None  # 不像路由（如组件名 `SearchBar`）→ 不参与合并
     return f"{family}|{normalize_path(name)}"

@@ -57,6 +57,7 @@ from engine import (
     tp_expand,
 )
 from engine.scan import SourceFile
+from output import channel_writer  # 需求1：把「代码通道 / 地址通道」各自产出的用例分别落盘独立记录
 
 
 log = get_logger(__name__)
@@ -119,6 +120,7 @@ class PipelineOptions:
     extract_pages: bool = True
     llm: semantic_enrich.EnrichOptions = field(default_factory=semantic_enrich.EnrichOptions)
     persist: bool = True
+    write_channel_records: bool = True  # 需求1：落库后是否把各通道独立记录写到 outputs/<pid>/
     # 「URL + 账号密码」通道的请求级参数（A1）
     target_req: TargetRequest = field(default_factory=TargetRequest)
 
@@ -154,6 +156,16 @@ class PipelineResult:
     merge_conflicts: list[dict] = field(
         default_factory=list
     )  # F5：合并冲突清单（结构化，供报告标注「冲突的测试用例」）
+    # 需求1：按来源拆出的「代码通道 / 地址通道」独立记录（落库前由 _partition_channels 填充）
+    code_fps: list[FunctionalPoint] = field(default_factory=list, repr=False)
+    url_fps: list[FunctionalPoint] = field(default_factory=list, repr=False)
+    code_tps: list[TestPoint] = field(default_factory=list, repr=False)
+    url_tps: list[TestPoint] = field(default_factory=list, repr=False)
+    code_cases: list[CaseSpec] = field(default_factory=list, repr=False)
+    url_cases: list[CaseSpec] = field(default_factory=list, repr=False)
+    channel_summary: dict[str, Any] = field(
+        default_factory=dict
+    )  # {"code": {...}, "url": {...}, "source_kind": ...}
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -171,6 +183,7 @@ class PipelineResult:
             "auth_scan": self.auth_scan,
             "notes": self.notes,
             "merge_conflicts": self.merge_conflicts,
+            "channel_summary": self.channel_summary,
             "errors": self.errors,
         }
 
@@ -668,6 +681,52 @@ def _merge_runtime_fps(
     return fp_merge.merge_functional_points(static_fps, runtime_fps)
 
 
+# 地址通道功能点的 file_path 已脱敏为 `runtime:<url>`（绝不泄露账号密码），
+# 与 `fp_merge._RUNTIME_PREFIX` 同源；此处单独声明以避免跨模块依赖。
+_RUNTIME_PREFIX = "runtime:"
+
+
+def _partition_channels(result: PipelineResult) -> None:
+    """按来源把合并后的产物拆回「代码通道 / 地址通道」两组（需求1：分别保存记录）。
+
+    拆分依据（单一真值源）：功能点的 `file_path`——地址通道发现的项以 `runtime:` 前缀开头，
+    其余为代码通道。合并（F5）已把同名项收敛为一条并保留存活方，故不会出现「同一条 FP
+    既属 code 又属 url」的歧义：存活 FP 归属哪条通道，它派生出的 TP / Case 就归哪条通道。
+
+    测试点 / 用例按 `fp_contract_id` 指回的「存活功能点」归属通道：
+    - TP：看 `tp.fp_contract_id` 落在 code / url 哪组 fp_id 集合；
+    - Case：看 `case.fp_contract_id` 落在哪组。
+    纯代码 / 纯地址运行：对应通道为空组（仅保留非空通道的独立记录，见 channel_writer）。
+    """
+    fps = result.functional_points
+    code_fp_ids = {fp.fp_id for fp in fps if not fp.file_path.startswith(_RUNTIME_PREFIX)}
+    url_fp_ids = {fp.fp_id for fp in fps if fp.file_path.startswith(_RUNTIME_PREFIX)}
+    result.code_fps = [fp for fp in fps if fp.fp_id in code_fp_ids]
+    result.url_fps = [fp for fp in fps if fp.fp_id in url_fp_ids]
+
+    tps = result.test_points
+    result.code_tps = [tp for tp in tps if tp.fp_contract_id in code_fp_ids]
+    result.url_tps = [tp for tp in tps if tp.fp_contract_id in url_fp_ids]
+
+    cases = result.cases
+    result.code_cases = [c for c in cases if c.fp_contract_id in code_fp_ids]
+    result.url_cases = [c for c in cases if c.fp_contract_id in url_fp_ids]
+
+    result.channel_summary = {
+        "code": {
+            "fp": len(result.code_fps),
+            "tp": len(result.code_tps),
+            "case": len(result.code_cases),
+        },
+        "url": {
+            "fp": len(result.url_fps),
+            "tp": len(result.url_tps),
+            "case": len(result.url_cases),
+        },
+        "source_kind": result.source_kind,
+    }
+
+
 def _screenshot_dir(project_id: int | None) -> str:
     """UI 失败截图目录（`outputs/<pid>/screenshots/`）；无项目 ID 时不落盘。
 
@@ -909,7 +968,7 @@ def _resolve_sources(opts: PipelineOptions, settings: Any) -> tuple[bool, Any, b
     return has_code, runtime_options, runtime_enabled
 
 
-def run_pipeline(  # noqa: PLR0915 - 编排函数，阶段多为合理；冲突标注仅其中一步
+def run_pipeline(  # noqa: PLR0915, C901 - 编排函数，阶段多为合理；通道拆分仅其中一步
     opts: PipelineOptions,
     *,
     progress: ProgressFn | None = None,
@@ -994,7 +1053,12 @@ def run_pipeline(  # noqa: PLR0915 - 编排函数，阶段多为合理；冲突�
             stage_execute(opts, result, progress, runtime_options)
         except EngineError as exc:
             result.errors.append(f"用例执行失败：{exc.message}")
+    # 需求1：落库前先把合并产物按来源拆成「代码通道 / 地址通道」两组
+    _partition_channels(result)
     stage_persist(opts, result, progress)
+    # 需求1：把各通道独立记录落盘（仅非空通道写文件）；e2e 等场景可置 False 后用自定义 base 重写出
+    if opts.write_channel_records and result.project_id:
+        channel_writer.write_channel_records(result.project_id, result, get_settings().output_dir)
 
     _emit(progress, "done", **result.counts)
     return result

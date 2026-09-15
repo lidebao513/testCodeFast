@@ -855,15 +855,16 @@ def _ui_pages() -> list[runtime_ui.UiPage]:
     ]
 
 
-def test_to_functional_points_emits_page_and_component() -> None:
+def test_to_functional_points_emits_page_and_element_fps() -> None:
     result = runtime_ui.RuntimeUiResult(base_url="http://srv", pages=_ui_pages())
     fps = runtime_ui.to_functional_points(result)
     keys = {(fp.ftype, fp.name) for fp in fps}
     assert (FType.PAGE.value, "/pc/tasks") in keys
-    assert (FType.COMPONENT.value, "/pc/tasks") in keys
-    # 无「可见」元素的页面只产 page，不产 component
+    # #221 元素级分解：可见 input 元素 → 1 条 ui 功能点（带文字/selector，名称含合成 #）
+    assert (FType.UI.value, "/pc/tasks#input:查询|#q") in keys
+    # 无「可见」元素的页面只产 page，不产 ui（不可见元素跳过）
     assert (FType.PAGE.value, "/blank") in keys
-    assert (FType.COMPONENT.value, "/blank") not in keys
+    assert (FType.UI.value, "/blank#button:隐藏|#h") not in keys
     # 不可达页不产功能点
     assert not any(fp.name == "/dead" for fp in fps)
     page_fp = next(fp for fp in fps if fp.ftype == FType.PAGE.value and fp.name == "/pc/tasks")
@@ -889,7 +890,8 @@ def test_to_functional_points_feed_existing_expansion_rules() -> None:
     for fp in runtime_ui.to_functional_points(result):
         dims.setdefault(fp.ftype, set()).update(d for _, d in tp_expand.plan_of(fp))
     assert Dimension.PAGE_REACH.value in dims[FType.PAGE.value]
-    assert Dimension.INTERACTIVE.value in dims[FType.COMPONENT.value]
+    # #221 元素级分解产出的 ui 功能点被 INTERACTIVE 维度消费（交互元素可用）
+    assert Dimension.INTERACTIVE.value in dims[FType.UI.value]
 
 
 def test_merge_runtime_fps_runtime_wins_on_same_key() -> None:

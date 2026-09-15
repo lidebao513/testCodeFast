@@ -46,14 +46,23 @@ def test_normalize_path(raw: str, expected: str) -> None:
     assert fp_merge.normalize_path(raw) == expected
 
 
-def test_semantic_key_aligns_layer_family_and_placeholder_syntax() -> None:
+def test_semantic_key_aligns_api_syntax_variants() -> None:
+    """api 功能点的语义键对占位符语法/大小写/尾斜杠不敏感（不同写法合并为同键）。"""
     api_a = _fp(FType.API.value, "GET /invoices/{invoice_id}", "backend/api.py")
     api_b = _fp(FType.API.value, "get /invoices/<int:invoice_id>/", "other/api.py")
     assert fp_merge.semantic_key(api_a) == fp_merge.semantic_key(api_b)
 
+
+def test_semantic_key_keeps_ui_separate_from_page() -> None:
+    """#221 修复：ui 元素级功能点（名称含合成分隔符 `#`）必须**不与**同路径的 page 功能点撞键，
+
+    否则整页元素功能点会被 F5 语义合并掉，元素级分解在完整流水线里被撤销（首跑曾塌成 33 FP）。
+    """
     page = _fp(FType.PAGE.value, "/pc/tasks", "web/App.tsx")
     ui = _fp(FType.UI.value, "/pc/tasks", "web/legacy.js")
-    assert fp_merge.semantic_key(page) == fp_merge.semantic_key(ui)
+    assert fp_merge.semantic_key(page) != fp_merge.semantic_key(ui)
+    assert fp_merge.semantic_key(page) == "page|/pc/tasks"
+    assert fp_merge.semantic_key(ui) == "page|ui|/pc/tasks"
 
 
 def test_component_and_business_have_no_semantic_key() -> None:

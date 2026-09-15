@@ -63,10 +63,78 @@ _DIMENSION_SLOTS: dict[str, dict[str, int]] = {
         Dimension.INTERACTIVE.value: 0,
     },
     TPType.ABNORMAL.value: {Dimension.RES_NOT_FOUND.value: 0},
-    TPType.SECURITY.value: {Dimension.AUTH_MISS.value: 0, Dimension.PRIV_ESC.value: 1},
-    TPType.BOUNDARY.value: {Dimension.PARAM_ILLEGAL.value: 0},
+    TPType.SECURITY.value: {
+        Dimension.AUTH_MISS.value: 0,
+        Dimension.PRIV_ESC.value: 1,
+        # #222：运行时 UI 元素级安全子维度（独立槽位，避免与鉴权缺失/越权撞号）
+        Dimension.UI_INPUT_INJECT.value: 2,
+        Dimension.UI_UNAUTH_PAGE.value: 3,
+    },
+    TPType.BOUNDARY.value: {
+        Dimension.PARAM_ILLEGAL.value: 0,
+        # #222：运行时 UI 元素级边界子维度
+        Dimension.UI_LONG_INPUT.value: 1,
+        Dimension.UI_ILLEGAL_OPTION.value: 2,
+        Dimension.UI_REPEAT_CLICK.value: 3,
+        Dimension.UI_DEEPLINK.value: 4,
+        Dimension.UI_POOR_VIEWPORT.value: 5,
+    },
 }
 _ORDINAL_STRIDE = 10
+
+# #222：运行时 UI 元素级功能点 → 按元素 kind 展开「正常 + 安全 + 边界」维度。
+# kind 取自功能点 name 的 `#{kind}:` 段（to_functional_points 的 _element_fp_name 约定），
+# 无法解析时退回通用计划。语义与 DEFAULT_SCOPE（正常/安全/边界）对齐。
+_UI_KIND_RE = re.compile(r"#(\w+):")
+_UI_PLAN_BY_KIND: dict[str, list[tuple[str, str]]] = {
+    # 数据录入类：正常输入 + 注入安全 + 超长边界
+    "input": [
+        (TPType.NORMAL.value, Dimension.INTERACTIVE.value),
+        (TPType.SECURITY.value, Dimension.UI_INPUT_INJECT.value),
+        (TPType.BOUNDARY.value, Dimension.UI_LONG_INPUT.value),
+    ],
+    "textarea": [
+        (TPType.NORMAL.value, Dimension.INTERACTIVE.value),
+        (TPType.SECURITY.value, Dimension.UI_INPUT_INJECT.value),
+        (TPType.BOUNDARY.value, Dimension.UI_LONG_INPUT.value),
+    ],
+    "edit": [
+        (TPType.NORMAL.value, Dimension.INTERACTIVE.value),
+        (TPType.SECURITY.value, Dimension.UI_INPUT_INJECT.value),
+        (TPType.BOUNDARY.value, Dimension.UI_LONG_INPUT.value),
+    ],
+    "form": [
+        (TPType.NORMAL.value, Dimension.INTERACTIVE.value),
+        (TPType.SECURITY.value, Dimension.UI_INPUT_INJECT.value),
+        (TPType.BOUNDARY.value, Dimension.UI_LONG_INPUT.value),
+    ],
+    # 选择类：正常选择 + 非法选项边界
+    "select": [
+        (TPType.NORMAL.value, Dimension.INTERACTIVE.value),
+        (TPType.BOUNDARY.value, Dimension.UI_ILLEGAL_OPTION.value),
+    ],
+    # 点击类：正常点击 + 重复点击边界
+    "button": [
+        (TPType.NORMAL.value, Dimension.INTERACTIVE.value),
+        (TPType.BOUNDARY.value, Dimension.UI_REPEAT_CLICK.value),
+    ],
+    # 导航类：正常跳转 + 深链直达边界
+    "nav": [
+        (TPType.NORMAL.value, Dimension.INTERACTIVE.value),
+        (TPType.BOUNDARY.value, Dimension.UI_DEEPLINK.value),
+    ],
+}
+# 通用回退（kind 无法解析时）：正常 + 超长边界
+_UI_PLAN_DEFAULT: list[tuple[str, str]] = [
+    (TPType.NORMAL.value, Dimension.INTERACTIVE.value),
+    (TPType.BOUNDARY.value, Dimension.UI_LONG_INPUT.value),
+]
+
+
+def _ui_kind_of(fp: FunctionalPoint) -> str:
+    """从 ui 功能点 name 的 `#{kind}:` 段解析元素 kind（无法解析返回空串）。"""
+    m = _UI_KIND_RE.search(fp.name)
+    return m.group(1) if m else ""
 
 
 def _ordinal_of(category: str, dimension: str) -> int:
@@ -135,6 +203,22 @@ def _security_expect(dimension: str, auth_mode: str) -> str:
     return "未携带或携带无效凭证时返回 401/403，且不泄露资源内容（越权访问同样被拒）"
 
 
+# UI 专属子维度的预期文案（#222：页面/元素套 DEFAULT_SCOPE 后需要可判定的边界/安全预期）。
+# 抽成字典：避免 _expect_of 因「逐维度 if」膨胀到圈复杂度上限。
+_UI_EXPECT: dict[str, str] = {
+    Dimension.UI_INPUT_INJECT.value: (
+        "向该输入/表单提交含脚本或特殊字符的内容 → 系统应转义或拦截，"
+        "不执行注入脚本、页面不出现 XSS/布局错乱"
+    ),
+    Dimension.UI_UNAUTH_PAGE.value: "未登录/无权限直接访问该页面 → 应跳转登录或返回 403，不泄露受限内容",
+    Dimension.UI_LONG_INPUT.value: "输入超长或含特殊字符 → 系统应截断或明确提示，不溢出、不产生 5xx",
+    Dimension.UI_ILLEGAL_OPTION.value: "选择未列出或越界选项 → 系统应拒绝或回退默认，不产生脏数据",
+    Dimension.UI_REPEAT_CLICK.value: "快速重复点击/提交 → 应幂等或防重，不产生重复创建/重复提交",
+    Dimension.UI_DEEPLINK.value: "直接以 URL 访问该路由 → 应正常渲染或按权限跳转，不 404/白屏",
+    Dimension.UI_POOR_VIEWPORT.value: "极端视口（极小/极大）或弱网下 → 页面可渲染、关键功能可用，不白屏",
+}
+
+
 def _expect_of(fp: FunctionalPoint, category: str, dimension: str = "", auth_mode: str = "") -> str:
     """按维度给出可判定的预期结果文案。
 
@@ -148,8 +232,11 @@ def _expect_of(fp: FunctionalPoint, category: str, dimension: str = "", auth_mod
             "返回 4xx（资源不存在 404 / 状态非法 409），响应体为结构化错误信息，服务不抛未捕获异常"
         )
     if category == TPType.SECURITY.value:
+        if dimension in (Dimension.UI_INPUT_INJECT.value, Dimension.UI_UNAUTH_PAGE.value):
+            return _UI_EXPECT[dimension]
         return _security_expect(dimension, auth_mode)
-    return "参数缺失或越界时返回 400/422，校验信息明确指出非法字段"
+    # 边界：接口参数维度走通用文案；UI 维度走 _UI_EXPECT。
+    return _UI_EXPECT.get(dimension, "参数缺失或越界时返回 400/422，校验信息明确指出非法字段")
 
 
 def _semantic_of(fp: FunctionalPoint, category: str) -> str:
@@ -190,7 +277,15 @@ def plan_of(fp: FunctionalPoint) -> list[tuple[str, str]]:
             plan.append((TPType.SECURITY.value, Dimension.PRIV_ESC.value))
         return plan
     if fp.ftype == FType.PAGE.value:
-        return [(TPType.NORMAL.value, Dimension.PAGE_REACH.value)]
+        # #222：页面套 DEFAULT_SCOPE → 正常(可达) + 安全(未授权访问) + 边界(极端视口)
+        return [
+            (TPType.NORMAL.value, Dimension.PAGE_REACH.value),
+            (TPType.SECURITY.value, Dimension.UI_UNAUTH_PAGE.value),
+            (TPType.BOUNDARY.value, Dimension.UI_POOR_VIEWPORT.value),
+        ]
+    if fp.ftype == FType.UI.value:
+        # #222：元素级功能点按 kind 展开「正常 + 安全 + 边界」（解决地址通道只到正常维度）
+        return _UI_PLAN_BY_KIND.get(_ui_kind_of(fp), _UI_PLAN_DEFAULT)
     if fp.ftype == FType.COMPONENT.value:
         return [(TPType.NORMAL.value, Dimension.INTERACTIVE.value)]
     return [(TPType.NORMAL.value, Dimension.BIZ_LOGIC.value)]

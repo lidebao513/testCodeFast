@@ -31,9 +31,10 @@ Playwright 采用**惰性导入**：未安装时不影响主链路（默认关�
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass, field
 from typing import Any
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin, urlparse, urlunparse
 
 from core.contracts import FunctionalPoint, fp_id_of
 from core.enums import RUNTIME_UI_MODE_CHOICES, RUNTIME_UI_PLAYWRIGHT, FType
@@ -184,6 +185,7 @@ class RuntimeUiOptions:
     timeout: int = 30
     # --- M3.2 新增（Additive）---
     channel: str = ""  # ""=自带 chromium；"msedge"/"chrome"=复用系统浏览器
+    proxy: str = ""  # 浏览器出口代理（内网目标需经沙箱代理）；空=直连
     login_user: str = ""  # 表单登录账号
     login_password: str = ""  # 表单登录密码（不入库 / 不日志）
     login_url: str = ""  # 登录页地址；为空回退到 base_url
@@ -203,6 +205,17 @@ class UiElement:
     kind: str = ""
     text: str = ""
     visible: bool = False
+    deep: bool = False  # 是否来自 click-through 深层视图（弹窗/Tab/表单提交后）
+
+
+@dataclass
+class ApiEndpoint:
+    """运行时拦截到的后端接口（#223：XHR/fetch 响应监听）。"""
+
+    method: str
+    path: str
+    url: str = ""
+    status: int = 0
 
 
 @dataclass
@@ -230,6 +243,8 @@ class RuntimeUiResult:
     logged_in: bool = False  # 是否执行了表单登录并成功（匿名访问为 False）
     # --- M3.3 新增（Additive）---
     discovered_routes: list[str] = field(default_factory=list)  # 菜单点击发现的路由
+    # --- #223 新增（Additive）---
+    api_endpoints: list[ApiEndpoint] = field(default_factory=list)  # 运行时拦截到的后端接口
 
     def reachable_pages(self) -> list[UiPage]:
         """可达页面（`reachable=True`）。"""
@@ -314,13 +329,25 @@ def has_playwright() -> bool:
 
 
 def options_from_settings(settings: Any) -> RuntimeUiOptions:
-    """从 `core.config.Settings` 构造选项（凭证只在此处做一次搬运，不落任何产物）。"""
+    """从 `core.config.Settings` 构造选项（凭证只在此处做一次搬运，不落任何产物）。
+
+    浏览器出口代理：内网目标经沙箱代理可达（直连常在 TCP 层之后挂起）。优先用
+    `RUNTIME_UI_PROXY`，回退到通用的 `HTTPS_PROXY` / `HTTP_PROXY` 环境变量。
+    """
+    proxy = (
+        str(getattr(settings, "runtime_ui_proxy", "") or "")
+        or os.environ.get("RUNTIME_UI_PROXY")
+        or os.environ.get("HTTPS_PROXY")
+        or os.environ.get("HTTP_PROXY")
+        or ""
+    )
     return RuntimeUiOptions(
         headless=bool(settings.playwright_headless),
         base_url=str(settings.runtime_base_url or ""),
         auth_token=str(settings.runtime_auth_token or ""),
         timeout=int(settings.runtime_ui_timeout),
         channel=str(settings.playwright_channel or ""),
+        proxy=str(proxy or ""),
         login_user=str(settings.runtime_login_user or ""),
         login_password=str(settings.runtime_login_password or ""),
         login_otp=str(getattr(settings, "runtime_login_otp", "") or ""),
@@ -478,9 +505,11 @@ def _fill_otp_if_present(page: Any, options: RuntimeUiOptions) -> bool:
 def _click_submit(page: Any, submit: Any, options: RuntimeUiOptions) -> None:
     try:
         submit.click()
-        page.wait_for_load_state("networkidle", timeout=timeout_ms(options))
-    except Exception as exc:  # 提交过程任何失败都归为登录失败
-        raise EngineError(f"登录失败：提交登录表单出错（{exc}）") from exc
+        # 不等地 networkidle：SPA（福享 Agent 等）普遍有长轮询/心跳，networkidle 永不满足，
+        # 照超时等会把登录误判为失败。真实成败由「提交后密码框是否消失」判定（见 _login）。
+        page.wait_for_load_state("domcontentloaded", timeout=timeout_ms(options))
+    except Exception:  # 加载态超时/异常不致命——后续密码框消失判定才是成败依据
+        return
 
 
 def _maybe_submit_otp(page: Any, options: RuntimeUiOptions, result: RuntimeUiResult) -> None:
@@ -497,7 +526,8 @@ def _maybe_submit_otp(page: Any, options: RuntimeUiOptions, result: RuntimeUiRes
     try:
         otp.fill(options.login_otp)
         submit.click()
-        page.wait_for_load_state("networkidle", timeout=timeout_ms(options))
+        # 同 _click_submit：不等地 networkidle，SPA 心跳会让其永不满足
+        page.wait_for_load_state("domcontentloaded", timeout=timeout_ms(options))
         result.notes.append("已执行二次验证（动态口令，取值不记录）")
     except Exception:  # 二次提交失败由调用方的「仍在登录页」判定统一兜底
         return
@@ -561,6 +591,15 @@ def _login(page: Any, options: RuntimeUiOptions, result: RuntimeUiResult) -> boo
     if not otp_filled_first:
         _maybe_submit_otp(page, options, result)
 
+    # SPA 客户端跳转有延迟：提交后登录表单不会瞬间卸载，需等其消失再判定，
+    # 否则会把「刚提交、尚未跳转」误判成「停留在登录页」→ 假失败（实测福享 Agent 即如此）。
+    try:
+        page.wait_for_function(
+            "() => !document.querySelector('input[type=password]')",
+            timeout=min(timeout_ms(options), 12000),
+        )
+    except Exception:  # 超时则交由下面的密码框判定兜底
+        pass
     if _first_match(page, _PASSWORD_SELECTORS) is not None:
         raise EngineError(
             "登录失败：提交后仍停留在登录页，请核对账号密码 / 动态口令是否正确、"
@@ -953,6 +992,202 @@ def _sweep_pages(
 
 
 # ============================================================================
+# #223 click-through 深度发现（弹窗 / Tab / 表单提交后的子视图）
+# ============================================================================
+_TRIGGER_SELECTORS_JS = """
+(function(){
+  function cssPath(el){
+    if(!(el instanceof Element)) return null;
+    var path=[];
+    while(el && el.nodeType===1){
+      var nm=el.nodeName.toLowerCase();
+      if(nm==='body'||nm==='html'){ path.unshift(nm); break; }
+      var sel=nm;
+      if(el.id){ sel+='#'+el.id; path.unshift(sel); break; }
+      var sib=el.parentNode?Array.prototype.slice.call(el.parentNode.children):[];
+      var cnt=0, idx=0;
+      for(var i=0;i<sib.length;i++){ if(sib[i].nodeName.toLowerCase()===nm){ cnt++; if(sib[i]===el) idx=cnt; } }
+      if(cnt>1) sel+=':nth-of-type('+idx+')';
+      if(el.className && typeof el.className==='string' && el.className.trim()){
+        sel+='.'+el.className.trim().split(/\\s+/).join('.');
+      }
+      path.unshift(sel);
+      el=el.parentNode;
+    }
+    return path.join(' > ');
+  }
+  var verbs=__VERBS__;
+  var nodes=Array.from(document.querySelectorAll('button,a,input[type="submit"],[role="button"]')).filter(function(e){
+    if(e.offsetParent===null) return false;
+    var t=(e.innerText||e.textContent||e.getAttribute('title')||'').trim();
+    return verbs.some(function(v){ return t.indexOf(v)!==-1; });
+  });
+  return nodes.map(function(n){ return cssPath(n); }).filter(function(s){ return !!s; });
+})()
+"""
+
+
+def _goto_settle(page: Any, url: str, opts: RuntimeUiOptions) -> None:
+    """导航并等待首屏渲染（不重新收集基线元素，供 click-through 复用）。"""
+    try:
+        page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms(opts))
+        try:
+            page.wait_for_load_state("networkidle", timeout=SETTLE_AFTER_GOTO_MS)
+        except Exception:
+            pass
+    except Exception:  # 单页跳转失败由调用方跳过该页
+        pass
+
+
+def _rescan_elements(page: Any) -> list[UiElement]:
+    """不导航地重新抓取当前页可见元素（点击后页面状态变了但没跳转）。"""
+    try:
+        got = page.evaluate(_build_extract_js())
+    except Exception:
+        return []
+    if not isinstance(got, list):
+        return []
+    return [
+        UiElement(
+            selector=str(item.get("selector") or ""),
+            kind=str(item.get("kind") or ""),
+            text=str(item.get("text") or ""),
+            visible=bool(item.get("visible")),
+        )
+        for item in got
+        if item.get("selector")
+    ]
+
+
+def _find_trigger_selectors(page: Any, verbs: tuple[str, ...]) -> list[str]:
+    """找出文本命中动词、可能打开弹窗/子视图的按钮选择器（按 CSS 路径稳定定位）。"""
+    js = _TRIGGER_SELECTORS_JS.replace("__VERBS__", json.dumps(list(verbs)))
+    try:
+        got = page.evaluate(js)
+    except Exception:
+        return []
+    return [s for s in got if isinstance(s, str) and s] if isinstance(got, list) else []
+
+
+@dataclass
+class _DeepCtx:
+    """click-through 单页上下文（减少 _capture_deep 参数个数，规避 PLR0913/PLR0917）。"""
+
+    uip: UiPage
+    path: str
+    base: set[tuple[str, str]]
+    global_seen: set[tuple[str, str, str]]
+    result: RuntimeUiResult
+
+
+def _capture_deep(pw_page: Any, ctx: _DeepCtx) -> int:
+    """点击后重新扫描，把新出现的元素记为深层（deep）元素，返回新增数。"""
+    new_els = _rescan_elements(pw_page)
+    added = 0
+    for ne in new_els:
+        if not ne.visible:
+            continue
+        key = (ctx.path, ne.kind, ne.selector)
+        if key in ctx.base or key in ctx.global_seen:
+            continue
+        ctx.global_seen.add(key)
+        ne.deep = True
+        ctx.uip.elements.append(ne)
+        added += 1
+    if added:
+        ctx.result.notes.append(f"click-through 在 {ctx.path} 发现 {added} 个深层元素")
+    return added
+
+
+def _click_tabs(pw_page: Any, opts: RuntimeUiOptions, ctx: _DeepCtx) -> int:
+    """Tab 原地切换（不导航，句柄有效）；返回本次新增交互次数。"""
+    try:
+        tabs = pw_page.query_selector_all("[role='tab']")
+    except Exception:
+        return 0
+    count = 0
+    for h in tabs:
+        if count >= MAX_CLICKTHROUGH_PER_PAGE:
+            break
+        try:
+            if not h.is_visible():
+                continue
+            h.click(timeout=5000)
+            pw_page.wait_for_timeout(800)
+            _capture_deep(pw_page, ctx)
+            count += 1
+        except Exception:  # 单点失败仅跳过，不中断
+            continue
+    return count
+
+
+def _click_triggers(pw_page: Any, opts: RuntimeUiOptions, ctx: _DeepCtx) -> int:
+    """弹窗/子视图触发按钮（文本命中 _OPEN_VERBS）：每次重置后重查句柄，避免导航后失效。"""
+    count = 0
+    while count < MAX_CLICKTHROUGH_PER_PAGE:
+        try:
+            _goto_settle(pw_page, ctx.uip.url, opts)
+            sels = _find_trigger_selectors(pw_page, _OPEN_VERBS)
+        except Exception:
+            break
+        if count >= len(sels):
+            break
+        sel = sels[count]
+        count += 1
+        try:
+            h = pw_page.query_selector(sel)
+            if h is None or not h.is_visible():
+                continue
+            h.click(timeout=5000)
+            pw_page.wait_for_timeout(800)
+            _capture_deep(pw_page, ctx)
+            try:
+                pw_page.keyboard.press("Escape")
+            except Exception:
+                pass
+        except Exception:  # 单点失败仅跳过
+            continue
+    return count
+
+
+def _click_through(
+    session: _Session,
+    opts: RuntimeUiOptions,
+    result: RuntimeUiResult,
+    sink: ConsoleSink,
+) -> None:
+    """#223 深度发现：对可达页面做有界 click-through，把弹窗/Tab/表单提交后出现的深层元素记为功能点。
+
+    设计原则（与 runtime_ui 整体「降级优先、故障隔离」一致）：
+    - 每页先加载到干净态，逐一点击 Tabs / 弹窗触发按钮；Tab 原地切换（句柄有效），
+      弹窗触发每次重置后重查句柄（避免导航导致句柄失效）；
+    - 新出现的 selector（不在该页基线 + 全局已见集合）记为 deep 元素，追加到 page.elements；
+    - 全程 try/except 故障隔离：任一交互异常仅跳过并记 degraded，绝不中断整轮发现；
+    - 受 MAX_CLICKTHROUGH_* 护栏约束，保证运行时长与产物量级可控。
+    """
+    pw_page = session.page
+    pages = list(result.reachable_pages())[:MAX_CLICKTHROUGH_PAGES]
+    global_seen: set[tuple[str, str, str]] = set()
+    total = 0
+    for p in pages:
+        if total >= MAX_CLICKTHROUGH_TOTAL:
+            break
+        path = p.path or "/"
+        _goto_settle(pw_page, p.url, opts)
+        ctx = _DeepCtx(
+            uip=p,
+            path=path,
+            base={(e.kind, e.selector) for e in p.elements},
+            global_seen=global_seen,
+            result=result,
+        )
+        total += _click_tabs(pw_page, opts, ctx)
+        total += _click_triggers(pw_page, opts, ctx)
+    if total:
+        result.notes.append(f"click-through 深度发现完成：共 {total} 次交互")
+
+
+# ============================================================================
 # 产出：运行时发现 → 功能点（M3.4）
 # ============================================================================
 def _module_of_path(path: str) -> str:
@@ -961,58 +1196,325 @@ def _module_of_path(path: str) -> str:
     return segs[0] if segs else "root"
 
 
+def _desensitize_runtime_source(url: str) -> str:
+    """地址通道来源脱敏：剥离 URL 中的 `userinfo`（账号:密码@），保证 `runtime:<url>`
+    这种 file_path **绝不**含明文账号密码（凭证红线，与 core.config 同一红线）。
+
+    登录走表单提交，页面 URL 通常不含凭据；但万一用户用 `https://user:pass@host` 直达，
+    这里兜底剥离 userinfo，仅保留 scheme / host / port / path，避免凭证随产物落盘。
+    """
+    try:
+        p = urlparse(url)
+        if not p.netloc or "@" not in p.netloc:
+            return url
+        # urlparse 用「最后一个 @」区分 userinfo 与 host，故密码里若含 @ 也能正确剥离
+        netloc = p.hostname or ""
+        if p.port is not None:
+            netloc = f"{netloc}:{p.port}"
+        return urlunparse((p.scheme, netloc, p.path, p.params, p.query, p.fragment))
+    except Exception:  # 解析失败则原样返回，不阻断主链路
+        return url
+
+
+# 元素 kind → 动作类型（中文，写入功能点语义，供用例步骤推断「点击/输入/选择/提交」）
+_ELEMENT_ACTION_CN: dict[str, str] = {
+    "nav": "点击",
+    "button": "点击",
+    "input": "输入",
+    "textarea": "输入",
+    "select": "选择",
+    "form": "提交",
+    "edit": "输入",
+}
+
+
+def _element_action(kind: str) -> str:
+    return _ELEMENT_ACTION_CN.get(kind, "操作")
+
+
+# #224 量级护栏（防爆炸与噪声）：单页元素上限 + 单项目功能点总量上限。
+# 元素级分解（#221）后单页可达数十~数百元素，全量易破千；护栏保证产物落在
+# 「数百」合理区间，且高价值路径排在前面。
+MAX_ELEMENTS_PER_PAGE = 150  # 单页可见元素上限（超出截断，防单页刷量）
+MAX_FP_TOTAL = 800  # 单项目功能点总量上限（超出按业务价值截断）
+# #223 click-through 深度发现（弹窗/Tab/表单）护栏：有界、故障隔离
+MAX_CLICKTHROUGH_PAGES = 10  # 参与深度点击的页面上限（保运行时长可控）
+MAX_CLICKTHROUGH_PER_PAGE = 8  # 单页尝试的交互（Tab + 弹窗触发）上限
+MAX_CLICKTHROUGH_TOTAL = 40  # 总交互次数上限（防爆炸）
+# 文本命中即视为「可能打开弹窗/子视图」的按钮（命中才点，避免误触导航/提交）
+_OPEN_VERBS = (
+    "新建",
+    "添加",
+    "新增",
+    "创建",
+    "设置",
+    "详情",
+    "查看",
+    "更多",
+    "编辑",
+    "修改",
+    "打开",
+    "展开",
+    "筛选",
+    "搜索",
+    "导出",
+    "上传",
+    "导入",
+    "配置",
+    "管理",
+)
+
+# 功能点业务价值排序（越小越优先）：页面结构 > 后端接口 > 交互元素 > 组件 > 业务函数
+_FP_VALUE_RANK: dict[str, int] = {
+    FType.PAGE.value: 0,
+    FType.API.value: 1,
+    FType.UI.value: 2,
+    FType.COMPONENT.value: 3,
+    FType.BUSINESS.value: 4,
+}
+# 交互元素 kind 的二次排序：数据录入类（form/input/textarea/edit）优先于点击/导航
+_UI_KIND_RANK: dict[str, int] = {
+    "form": 0,
+    "input": 1,
+    "textarea": 2,
+    "edit": 3,
+    "button": 4,
+    "select": 5,
+    "nav": 6,
+}
+
+
+def _fp_sort_key(fp: FunctionalPoint) -> tuple[int, str, int, str]:
+    """功能点业务价值排序键（确定性，便于复跑顺序稳定）。"""
+    kind = ""
+    if fp.ftype == FType.UI.value:
+        # name 形如 /chat#button:发送|#send-btn → 取首个 '#xxx:' 的 xxx
+        idx = fp.name.find("#")
+        if idx != -1:
+            seg = fp.name[idx + 1 :].split(":", 1)[0]
+            if seg.isalpha():
+                kind = seg
+    return (_FP_VALUE_RANK.get(fp.ftype, 9), fp.module or "", _UI_KIND_RANK.get(kind, 9), fp.name)
+
+
+_STATIC_ASSET_EXT = (
+    ".js",
+    ".css",
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".svg",
+    ".webp",
+    ".woff",
+    ".woff2",
+    ".ttf",
+    ".ico",
+    ".webmanifest",
+    ".map",
+)
+
+
+def _attach_api_listener(page: Any, result: RuntimeUiResult, base_url: str) -> None:
+    """监听页面 XHR/fetch 响应，把同源后端接口记为 api 功能点来源（#223）。
+
+    判定：同源 +（content-type 含 json 或路径含 /api/）视为接口；排除静态资源与
+    跨域请求。按 (method, path) 去重（忽略 query，避免同接口不同参数刷量）。
+    监听失败一律静默，不阻断主发现链路。
+    """
+    from urllib.parse import urlparse
+
+    base = urlparse(base_url)
+    seen: set[tuple[str, str]] = set()
+
+    def on_response(response: Any) -> None:
+        try:
+            u = urlparse(response.url)
+            if not u.netloc or u.netloc != base.netloc:
+                return
+            path = u.path.split("?")[0]
+            if path.endswith(_STATIC_ASSET_EXT):
+                return
+            ct = (response.headers.get("content-type") or "").lower()
+            is_api = ("application/json" in ct) or ("/api/" in u.path) or u.path.startswith("/api")
+            if not is_api:
+                return
+            method = (response.request.method or "GET").upper()
+            key = (method, path)
+            if key in seen:
+                return
+            seen.add(key)
+            result.api_endpoints.append(
+                ApiEndpoint(method=method, path=path, url=response.url, status=response.status)
+            )
+        except Exception:  # 监听异常不应阻断主链路
+            return
+
+    page.on("response", on_response)
+
+
+def _element_fp_name(page_path: str, el: UiElement) -> str:
+    """元素级功能点的稳定机器键（决定 fp_id 稳定）。
+
+    键 = 页面路径 + kind + 可见文字(截断) + selector。同页面内 (kind, selector)
+    唯一即可保证编号不撞号；文字仅用于消歧，不参与稳定性（文字变化不改编号，
+    符合「内容指纹」契约）。
+    """
+    text_part = (el.text or "").strip().replace("\n", " ")[:24]
+    return f"{page_path}#{el.kind}:{text_part or 'el'}|{el.selector}"
+
+
+def _element_fp_title(page_path: str, el: UiElement, label: str) -> str:
+    kind_cn = _ELEMENT_KIND_CN.get(el.kind, "元素")
+    text = (el.text or "").strip().replace("\n", " ")
+    if text:
+        return f"{kind_cn}「{text}」@ {label}"
+    return f"{kind_cn}（{el.selector}）@ {label}"
+
+
+@dataclass
+class _EmitCtx:
+    """to_functional_points 的跨页面共享上下文（减少 _emit_* 参数个数，规避 PLR0913/PLR0917）。"""
+
+    uip: UiPage
+    path: str
+    src: str
+    label: str
+    module: str
+    out: list[FunctionalPoint]
+    seen: set[tuple[str, str]]
+    seen_element: set[tuple[str, str, str]]
+
+
 def to_functional_points(result: RuntimeUiResult) -> list[FunctionalPoint]:
     """把运行时发现结果转成功能点（复用既有契约，**不新造字段**）。
 
-    规则（见 `P3_UI生成_详细设计.md` §8.4）：
-    - 每个**可达页面** → 1 条 `page` 功能点（`name` = 路径）；
-    - 每个**含可见交互元素的可达页面** → 1 条 `component` 功能点（同一路径，`ftype` 不同）；
-    - `file_path` = `runtime:<url>`（非真实文件路径，便于与静态来源区隔）；
-    - `fp_id` = `fp_id_of(ftype, runtime:<url>, name)` → 同一环境重复跑编号稳定。
+    规则（#221 元素级分解 + #223 接口拦截 + #224 量级护栏）：
+    - 每个**可达页面** → 1 条 `page` 功能点（验证页面可达）；
+    - 每个**可见交互元素** → 1 条 `ui` 功能点（button/input/select/textarea/edit/nav/form
+      各自成点，带文字 / selector / 动作类型），解决「整页元素被打包成一条」导致地址通道
+      用例极少的问题（G0-2）；单页元素超 `MAX_ELEMENTS_PER_PAGE` 截断，防单页刷量；
+    - 运行时拦截到的**同源后端接口** → 1 条 `api` 功能点（#223，覆盖参数/鉴权边界）；
+    - 同 (kind, selector) / (method, path) 去重，避免近乎重复刷量；
+    - 全部功能点按**业务价值排序**（页面 > 接口 > 表单/输入 > 按钮/导航），超
+      `MAX_FP_TOTAL` 截断（#224 护栏，保证落「数百」合理区间）；
+    - `file_path` = `runtime:<url>`（脱敏，不含凭证）；
+    - `fp_id` = `fp_id_of(ftype, runtime:<url>, name)` → 同环境重复跑编号稳定。
 
     只产出**可达**页面，不可达页（goto 失败）不产出功能点，避免生成必然失败的用例。
     """
     out: list[FunctionalPoint] = []
-    seen: set[tuple[str, str]] = set()
+    seen: set[tuple[str, str]] = set()  # (ftype, name) 全局去重
+    seen_element: set[tuple[str, str, str]] = set()  # (page_path, kind, selector) 元素去重
     for page in result.reachable_pages():
         path = page.path or "/"
         module = _module_of_path(path)
-        src = f"runtime:{page.url}"
+        src = f"runtime:{_desensitize_runtime_source(page.url)}"
         page_title = (page.title or "").strip()
         label = f"{page_title}｜{path}" if page_title else path
-        candidates = [
-            FunctionalPoint(
-                fp_id=fp_id_of(FType.PAGE.value, src, path),
-                ftype=FType.PAGE.value,
-                file_path=src,
-                name=path,
-                title=f"页面 {label}",
-                module=module,
-                semantic=f"运行时发现页面 {path}（{page_title or '无标题'}）",
-                description=page.url,
-            )
-        ]
-        visible = [e for e in page.elements if e.visible]
-        if visible:
-            candidates.append(
-                FunctionalPoint(
-                    fp_id=fp_id_of(FType.COMPONENT.value, src, path),
-                    ftype=FType.COMPONENT.value,
-                    file_path=src,
-                    name=path,
-                    title=f"页面 {path}｜可交互元素（{len(visible)} 个）",
-                    module=module,
-                    semantic=f"运行时发现页面 {path} 含 {len(visible)} 个可见可交互元素",
-                    description=page.url,
-                )
-            )
-        for fp in candidates:
-            key = (fp.ftype, fp.name)
-            if key in seen:
-                continue
-            seen.add(key)
-            out.append(fp)
+        ctx = _EmitCtx(
+            uip=page,
+            path=path,
+            src=src,
+            label=label,
+            module=module,
+            out=out,
+            seen=seen,
+            seen_element=seen_element,
+        )
+        _emit_page_fp(ctx)
+        _emit_element_fps(ctx)
+    _emit_api_fps(result, out, seen)
+    # #224 量级护栏：业务价值排序 + 总量上限截断
+    out.sort(key=_fp_sort_key)
+    if len(out) > MAX_FP_TOTAL:
+        out = out[:MAX_FP_TOTAL]
+        result.notes.append(f"功能点超总量上限 {MAX_FP_TOTAL}，已按业务价值截断")
     return out
+
+
+def _emit_page_fp(ctx: _EmitCtx) -> None:
+    """每条可达页产出 1 条 `page` 功能点（验证页面可达）。"""
+    page_fp = FunctionalPoint(
+        fp_id=fp_id_of(FType.PAGE.value, ctx.src, ctx.path),
+        ftype=FType.PAGE.value,
+        file_path=ctx.src,
+        name=ctx.path,
+        title=f"页面 {ctx.label}",
+        module=ctx.module,
+        semantic=f"运行时发现页面 {ctx.path}（{(ctx.uip.title or '').strip() or '无标题'}）",
+        description=ctx.uip.url,
+    )
+    if (page_fp.ftype, page_fp.name) not in ctx.seen:
+        ctx.seen.add((page_fp.ftype, page_fp.name))
+        ctx.out.append(page_fp)
+
+
+def _emit_element_fps(ctx: _EmitCtx) -> None:
+    """#221 元素级分解：每个可见交互元素 1 条 `ui` 功能点（带文字/selector/动作）。
+
+    单页元素超 `MAX_ELEMENTS_PER_PAGE` 截断（#224 防单页刷量）；同 (kind, selector)
+    去重。深层视图（click-through）元素带 `deep` 标记，语义注明「深层视图」。
+    """
+    page_ui_count = 0
+    for el in ctx.uip.elements:
+        if not el.visible:
+            continue
+        if page_ui_count >= MAX_ELEMENTS_PER_PAGE:
+            break
+        dk = (ctx.path, el.kind, el.selector)
+        if dk in ctx.seen_element:
+            continue
+        ctx.seen_element.add(dk)
+        name = _element_fp_name(ctx.path, el)
+        if (FType.UI.value, name) in ctx.seen:
+            continue
+        ctx.seen.add((FType.UI.value, name))
+        action = _element_action(el.kind)
+        kind_cn = _ELEMENT_KIND_CN.get(el.kind, "元素")
+        deep_note = "（深层视图·click-through）" if el.deep else ""
+        ctx.out.append(
+            FunctionalPoint(
+                fp_id=fp_id_of(FType.UI.value, ctx.src, name),
+                ftype=FType.UI.value,
+                file_path=ctx.src,
+                name=name,
+                title=_element_fp_title(ctx.path, el, ctx.label),
+                module=ctx.module,
+                semantic=(
+                    f"页面 {ctx.path} 可见{kind_cn}交互元素{deep_note}："
+                    f"文字={el.text or '（无文字）'}，动作={action}，选择器={el.selector}"
+                ),
+                description=el.selector,
+            )
+        )
+        page_ui_count += 1
+
+
+def _emit_api_fps(
+    result: RuntimeUiResult, out: list[FunctionalPoint], seen: set[tuple[str, str]]
+) -> None:
+    """#223 运行时拦截到的同源后端接口 → 1 条 `api` 功能点（覆盖参数/鉴权边界）。"""
+    api_src = f"runtime:{_desensitize_runtime_source(result.base_url)}"
+    for ep in result.api_endpoints:
+        name = f"{ep.method} {ep.path}"
+        if (FType.API.value, name) in seen:
+            continue
+        seen.add((FType.API.value, name))
+        out.append(
+            FunctionalPoint(
+                fp_id=fp_id_of(FType.API.value, api_src, name),
+                ftype=FType.API.value,
+                file_path=api_src,
+                name=name,
+                title=f"接口 {ep.method} {ep.path}（运行时拦截）",
+                module=_module_of_path(ep.path),
+                semantic=(
+                    f"运行时拦截到后端接口 {ep.method} {ep.path}（样例响应状态 {ep.status}）"
+                ),
+                description=ep.url,
+            )
+        )
 
 
 def to_runtime_index(result: RuntimeUiResult | None) -> dict[str, RuntimePageInfo]:
@@ -1073,10 +1575,23 @@ def open_authenticated_page(
 
 
 def launch_browser(playwright: Any, options: RuntimeUiOptions) -> Any:
-    """启动浏览器：优先配置的 channel（可复用系统 Edge，免 150MB 内核下载）。"""
+    """启动浏览器：优先配置的 channel（可复用系统 Edge，免 150MB 内核下载）。
+
+    浏览器出口代理（内网目标经沙箱代理可达）：`proxy` 非空时透传给 Playwright 的
+    `launch(proxy=...)`。直连在 HTTP 层常挂起，故缺省从环境变量推断代理。
+
+    Chromium 自有沙箱：在 CI / 受限容器 / 沙箱化运行环境里常因权限不足启动失败。
+    由 `PLAYWRIGHT_CHROMIUM_SANDBOX=0`（或 false/off/no）显式关闭；缺省不关，
+    保持普通机器上的安全默认。关闭后附带 `--disable-dev-shm-usage` 规避 /dev/shm 过小。
+    """
     kwargs: dict[str, Any] = {"headless": bool(options.headless)}
     if options.channel:
         kwargs["channel"] = options.channel
+    if options.proxy:
+        kwargs["proxy"] = {"server": options.proxy}
+    sandbox_flag = str(os.environ.get("PLAYWRIGHT_CHROMIUM_SANDBOX", "")).strip().lower()
+    if sandbox_flag in ("0", "false", "off", "no"):
+        kwargs["args"] = ["--no-sandbox", "--disable-dev-shm-usage"]
     try:
         return playwright.chromium.launch(**kwargs)
     except Exception as exc:  # 启动失败要带上环境信息提示用户
@@ -1151,10 +1666,17 @@ def discover_ui(
             page, logged_in = open_authenticated_page(
                 context, opts, result, attach=lambda p: attach_console_listeners(p, sink)
             )
+            _attach_api_listener(page, result, opts.base_url)  # #223：监听 XHR/fetch
             session = _Session(page, context)
             reachable = _sweep_pages(session, opts, result, sink, static_paths)
             if reachable == 0:
                 raise EngineError(f"运行时 UI 发现失败：所有页面均不可达（{opts.base_url}）")
+            # #223 深度发现：click-through 弹窗/Tab/表单，故障隔离（异常仅记 degraded）
+            try:
+                _click_through(session, opts, result, sink)
+            except Exception as exc:  # 深度发现失败绝不阻断主链路
+                result.degraded = True
+                result.notes.append(f"click-through 深度发现降级：{exc}")
             _record_summary(result, logged_in, reachable)
     except EngineError:
         raise
