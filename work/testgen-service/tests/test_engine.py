@@ -383,7 +383,7 @@ def test_default_scope_includes_security(sample_repo):
     """默认范围含「安全」——不显式指定也会生成安全用例（2026-09-14 变更）。
 
     变更前默认 `{正常, 边界}`，不显式指定就一条安全用例都没有，极易被误当成
-    「已覆盖」；现默认 `{正常, 安全, 边界}`（见 core.enums.DEFAULT_SCOPE）。
+    「已覆盖」；现默认 `{正常, 安全, 边界, 异常}`（见 core.enums.DEFAULT_SCOPE）。
     """
     _, result = _extract(sample_repo)
     tps = tp_expand.expand_all(result.functional_points, tp_expand.ExpandContext())

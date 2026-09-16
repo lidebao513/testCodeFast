@@ -146,8 +146,14 @@ class PullStatus(Enum):
 # ============================ 范围常量（Scope · 唯一真值） ============================
 # 行为维度全集（顺序即展示顺序）
 ALL_TP_TYPES = [t.value for t in TPType]
-# 默认范围：正常 + 边界
-DEFAULT_SCOPE = {TPType.NORMAL.value, TPType.BOUNDARY.value}
+# 默认范围：正常 + 安全 + 边界 + 异常（与 testgen-service 真值源对齐 · G-14 · 2026-09-16）
+# 安全自 2026-09-14 起默认纳入；异常自 2026-09-15 起默认纳入（G-5 修复异常流）。
+DEFAULT_SCOPE = {
+    TPType.NORMAL.value,
+    TPType.SECURITY.value,
+    TPType.BOUNDARY.value,
+    TPType.ABNORMAL.value,
+}
 # 全选范围
 FULL_SCOPE = set(ALL_TP_TYPES)
 # 「全部」同义词（resolve_scope 识别为全选，不注册为枚举值）

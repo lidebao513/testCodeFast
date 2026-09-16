@@ -82,7 +82,7 @@ def _trunc(s: str, n: int) -> str:
 
 # ============ 测试点范围参数（Scope） ============
 # 行为维度（tp_type）可选值：正常 / 异常 / 安全 / 边界（见 backend.core.enums.TPType）
-# 默认范围：正常 + 边界（行为维度），不限来源
+# 默认范围：正常 + 安全 + 边界 + 异常（行为维度），不限来源（与 testgen-service 对齐 · G-14）
 # 枚举以 backend.core.enums 为唯一真值源；本文件仅引用，不再硬编码常量。
 # 注意：「接口」**不是**范围关键词（历史上曾用作来源筛选）。现改为独立执行层枚举
 # VerifyLayer；接口来源筛选可由 verify_layer=接口（=ftype∈{api,business}）等价覆盖。
@@ -417,7 +417,7 @@ def _write_new_md(data, changed=None, scopes=None):
         "> 生成方式：`code_analyzer.generate_comprehensive_test_points()` "
         "对完整仓库静态扫描派生。\n",
         f"> **测试点范围（Scope）**：{scope_str}（可选项：正常 / 异常 / 安全 / 边界；"
-        f"默认 正常+边界）。\n",
+        f"默认 正常+安全+边界+异常）。\n",
         f"> 总计 **{data['total']}** 条测试点；按类型："
         + "、".join(f"{k} {v}" for k, v in data["by_type"].items())
         + "\n",
@@ -501,7 +501,7 @@ def _write_compare_md(data, scopes=None):
     )
     L.append(
         f"> **本轮测试点范围（Scope）**：{scope_str}"
-        f"（可选项：正常 / 异常 / 安全 / 边界；默认 正常+边界）。\n"
+        f"（可选项：正常 / 异常 / 安全 / 边界；默认 正常+安全+边界+异常）。\n"
     )
 
     # 旧版
@@ -672,7 +672,7 @@ tr:nth-child(even) td{{background:#13171e}}
 </style></head><body>
 <h1>测试点生成 · 旧版 vs 新版 对比</h1>
 <div class="sub">优化 code_analyzer 的测试点生成逻辑（v2 全面生成），依据完整代码重新生成，覆盖更充分。<br>
-本轮测试点范围（Scope）：<b style="color:var(--acc)">{scope_str}</b>（可选：正常 / 异常 / 安全 / 边界；默认 正常+边界）。</div>
+本轮测试点范围（Scope）：<b style="color:var(--acc)">{scope_str}</b>（可选：正常 / 异常 / 安全 / 边界；默认 正常+安全+边界+异常）。</div>
 
 <div class="kpi">
   <div>旧版合计<b>{len(OLD)}</b>条模块级</div>
