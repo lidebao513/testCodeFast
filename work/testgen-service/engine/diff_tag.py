@@ -105,16 +105,29 @@ def repo_escape_blocked(repo: str | Path) -> bool:
     return top_path != target and top_path not in target.parents
 
 
+# G1-2 修复：缩写 SHA（不完整 40 位 hex）会被 `git rev-parse` 做前缀模糊匹配，
+# 误判为「可用」→ build_context 不报错 → 算出错误增量（更新标签失真）。
+# 此类必须显式拒绝：只有完整 40 位 SHA 才走 rev-parse 校验；HEAD / 分支名 /
+# 标签名 / HEAD~N / main~2 等相对表达不受影响。
+_SHA_HEX = re.compile(r"^[0-9a-fA-F]{4,}$")
+_FULL_SHA = re.compile(r"^[0-9a-fA-F]{40}$")
+
+
 def refs_available(repo: str | Path, *refs: str) -> bool:
     """给定的 base/target ref 是否**逐个**都能解析为 commit。
 
     注意：`git rev-parse --verify` 一次只接受**一个** revision，
     传多个会以 "Needed a single revision" 失败（rc=1）——必须逐个校验，
     否则任何增量运行都会被误判为「ref 不可解析」而静默降级为全量。
+
+    G1-2：缩写 SHA（4–39 位 hex）一律拒绝——git 会对其前缀模糊匹配成功，
+    若放任会让 `--base <误截SHA>` 静默产出错误增量。完整 40 位 SHA 仍正常校验。
     """
     if not refs:
         return False
     for ref in refs:
+        if _SHA_HEX.match(ref) and not _FULL_SHA.match(ref):
+            return False
         try:
             cp = run_git(repo, ["rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"])
         except (OSError, subprocess.SubprocessError):

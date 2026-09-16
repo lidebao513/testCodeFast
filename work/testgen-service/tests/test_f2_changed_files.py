@@ -91,6 +91,34 @@ def test_refs_available_on_real_repo():
     assert diff_tag.refs_available(str(REPO_ROOT), "HEAD", "no_such_ref") is False
 
 
+def test_refs_available_rejects_abbreviated_sha(monkeypatch):
+    """G1-2 回归：缩写 SHA 即便能被 git 模糊匹配，也必须被拒绝。
+
+    用 monkeypatch 让 run_git 对任何 revision 都返回 rc=0（模拟 git 前缀模糊
+    匹配成功），证明 refs_available 的缩写 SHA 拦截不依赖 git 自身行为。
+    """
+
+    class _CP:
+        returncode = 0
+        stdout = "0" * 40 + "\n"
+        stderr = ""
+
+    def fake_run_git(repo, args, **kwargs):
+        return _CP()
+
+    monkeypatch.setattr(diff_tag, "run_git", fake_run_git)
+    repo = str(REPO_ROOT)
+    # HEAD / 完整 40 位 SHA / 分支名：不应被缩写规则拦截
+    assert diff_tag.refs_available(repo, "HEAD") is True
+    assert diff_tag.refs_available(repo, "0" * 40) is True
+    assert diff_tag.refs_available(repo, "main") is True
+    # 缩写 SHA（7 位 / 8 位 hex）：即使 git 会模糊匹配成功，也必须拒绝
+    assert diff_tag.refs_available(repo, "abc1234") is False
+    assert diff_tag.refs_available(repo, "deadbeef") is False
+    # 混合：一个合法 + 一个缩写 → 整体 False
+    assert diff_tag.refs_available(repo, "HEAD", "abc1234") is False
+
+
 def test_build_context_worktree_uses_working_tree():
     """WORKTREE 模式：与当前工作区比较，且只校验 base（不把哨兵当 ref 去解析）。"""
     if not shutil.which("git"):
