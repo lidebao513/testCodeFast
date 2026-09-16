@@ -68,6 +68,41 @@ _FORM_SELECTOR = "form, input, select, textarea, [contenteditable='true']"
 _NAV_LABELS_JS = (
     "els => els.map(e => (e.innerText || '').trim().replace(/\\s+/g, ' ').slice(0, 40))"
 )
+# 广搜兜底：CSS 启发式（_NAV_SELECTOR）常匹配不到真实菜单（类名千变万化 / 图标菜单无文字）。
+# 这里直接枚举「导航容器内」的可见叶子项文字，不依赖任何特定类名，亦不依赖 LLM——
+# 菜单点击路由发现的 LLM-free 治本兜底，保证 routes 不被静默压成 0。
+_MAX_NAV_HARVEST = 60
+_NAV_HARVEST_JS = r"""
+() => {
+  const MAX = __MAX__;
+  const containers = document.querySelectorAll(
+    'nav, aside, header, [role="navigation"], [role="menu"], .sidebar, .menu, .ant-menu, .el-menu, [class*="menu"], [class*="nav"], [class*="sidebar"], [class*="MenuItem"], [class*="NavItem"], [class*="SubMenu"]'
+  );
+  const seen = new Set();
+  const out = [];
+  const textOf = (el) => String(el.innerText || el.getAttribute('aria-label') || el.getAttribute('title') || el.getAttribute('alt') || '').trim().replace(/\\s+/g, ' ').slice(0, 40);
+  const visible = (el) => {
+    const r = el.getBoundingClientRect();
+    if (r.width <= 0 || r.height <= 0) return false;
+    const s = window.getComputedStyle(el);
+    return s.visibility !== 'hidden' && s.display !== 'none' && s.opacity !== '0';
+  };
+  containers.forEach((c) => {
+    c.querySelectorAll('a, button, [role="menuitem"], [role="tab"], [role="button"], li, div').forEach((el) => {
+      if (out.length >= MAX) return;
+      const t = textOf(el);
+      if (!t || seen.has(t)) return;
+      if (el.querySelector('a, button, [role="menuitem"], [role="tab"]')) return;
+      if (!visible(el)) return;
+      seen.add(t);
+      out.push(t);
+    });
+  });
+  return out;
+}
+"""
+# 危险菜单项（点击会退出登录 / 触发副作用），路由发现阶段跳过，避免把会话踢下线
+_DANGER_LABEL_HINTS = ("退出", "注销", "登出", "退出登录", "sign out", "log out", "logout")
 
 # 单页元素上限（防爆：超长列表页可达数千个元素）
 MAX_ELEMENTS_PER_PAGE = 200
@@ -739,6 +774,25 @@ def _nav_labels(page: Any) -> list[str]:
     return [str(t) for t in raw] if isinstance(raw, list) else []
 
 
+def _harvest_nav_labels(page: Any) -> list[str]:
+    """LLM-free 兜底：广搜导航容器内可见叶子项文字（CSS 启发式漏抓时启用）。
+
+    不依赖任何特定菜单类名，也不依赖 LLM——只要页面真有导航区，就能把菜单项文字
+    取回来驱动点击路由发现，从而把 `routes=0` 修成真实菜单数（治本，非臆造）。
+    """
+    try:
+        raw = page.evaluate(_build_nav_harvest_js())
+    except Exception:
+        return []
+    return [str(t) for t in raw] if isinstance(raw, list) else []
+
+
+def _is_danger_label(label: str) -> bool:
+    """菜单项是否疑似退出登录等危险操作（路由发现阶段应跳过）。"""
+    low = (label or "").lower()
+    return any(h in low for h in _DANGER_LABEL_HINTS)
+
+
 def _wait_nav_ready(page: Any, options: RuntimeUiOptions) -> None:
     """等 SPA 把导航菜单挂载出来。
 
@@ -771,7 +825,11 @@ def _nav_handles(page: Any) -> list[Any]:
 
 
 def _locate_nav(page: Any, label: str, idx: int) -> Any:
-    """在当前 DOM 里定位导航项：优先按文本匹配，退回按索引（SPA 跳转后元素会重建）。"""
+    """在当前 DOM 里定位导航项：优先按文本匹配 CSS 句柄（SPA 跳转后元素会重建）。
+
+    未命中 CSS 句柄时返回 None，交回 `_click_label` 的**文本兜底**点击——这是修复
+    `routes=0` 的关键：CSS 启发式漏掉的菜单项，靠可见文字点击仍能驱动 SPA 路由跳转。
+    """
     handles = _nav_handles(page)
     if not handles:
         return None
@@ -779,7 +837,7 @@ def _locate_nav(page: Any, label: str, idx: int) -> Any:
         current = _nav_labels(page)
         if label in current and current.index(label) < len(handles):
             return handles[current.index(label)]
-    return handles[idx] if idx < len(handles) else None
+    return None  # 未命中：不靠索引误点，交给文本兜底
 
 
 def _menu_href_route(handle: Any, base_url: str) -> str:
@@ -846,11 +904,53 @@ def _route_of_nav_item(page: Any, handle: Any, options: RuntimeUiOptions, popups
     return route
 
 
+def _click_label(page: Any, label: str, options: RuntimeUiOptions, popups: list[Any]) -> str:
+    """按 label 点击导航项并读回路由：先 CSS 句柄，未命中则按可见文字点击（S0 治本兜底）。
+
+    CSS 启发式（`_NAV_SELECTOR`）匹配不到真实菜单时，专家 S0 反推出的菜单文字也无法用
+    CSS 句柄定位——此时退回 `page.get_by_text` 文本点击，仍能驱动 SPA 路由跳转，
+    把 `routes=0` 修成真实菜单数。任何异常均返回空串，不影响主链路。
+    """
+    popups.clear()
+    handle = _locate_nav(page, label, 0)
+    if handle is not None:
+        route = _route_of_nav_item(page, handle, options, popups)
+        if route:
+            return route
+    # 文本兜底：CSS 启发式漏掉的菜单项靠可见文字点击
+    try:
+        el = page.get_by_text(label, exact=False).first
+    except Exception:
+        el = None
+    if el is None:
+        return ""
+    before = _route_of(page)
+    try:
+        if not el.is_visible():
+            return ""
+        el.click(timeout=timeout_ms(options), no_wait_after=True)
+    except Exception:
+        return ""
+    try:
+        page.wait_for_function(
+            "prev => location.pathname + location.search !== prev",
+            arg=before,
+            timeout=SPA_SETTLE_MS + 2000,
+        )
+    except Exception:
+        pass
+    after = _route_of(page)
+    return "" if after == before else after
+
+
 def _probe_menu_routes(probe: _MenuProbe) -> list[str]:
     """**单会话**逐个导航项探测路由（不逐项重新打开页面）。
 
     真实环境实测：菜单在 SPA 外壳里跨路由常驻，单会话点击 + 按「文本 → 索引」重新定位
     即可；逐项 `goto` 重开不仅慢，还会撞上首屏异步挂载导致句柄为空、静默丢掉全部路由。
+
+    点击优先用 CSS 句柄（`_click_label` 内部），CSS 未命中时自动退回**可见文字点击**
+    （S0 专家反推的菜单项多属此类），保证漏抓的菜单也能被遍历到。
     """
     page = probe.session.page
     popups: list[Any] = []
@@ -867,15 +967,12 @@ def _probe_menu_routes(probe: _MenuProbe) -> list[str]:
     seen: set[str] = set()
     limit = max(1, int(probe.options.max_pages))
     try:
-        for idx, label in enumerate(probe.labels[:limit]):
-            handle = _locate_nav(page, label, idx)
-            if handle is None:  # 导航被跳转带走了 → 回起点重试一次
+        for _idx, label in enumerate(probe.labels[:limit]):
+            raw = _click_label(page, label, probe.options, popups)
+            if not raw:  # CSS 与文本点击都失败 → 回起点后重试一次（导航可能被跳转带走）
                 if not _return_to(page, probe.start_url, probe.options):
                     break
-                handle = _locate_nav(page, label, idx)
-            if handle is None:
-                continue
-            raw = _route_of_nav_item(page, handle, probe.options, popups)
+                raw = _click_label(page, label, probe.options, popups)
             route = _normalize_route(raw, probe.options.base_url)
             if route and route != probe.start_route and route not in seen:
                 seen.add(route)
@@ -894,10 +991,12 @@ def _discover_menu_routes(
     context: Any,
     options: RuntimeUiOptions,
     result: RuntimeUiResult,
+    extra_labels: list[str] | None = None,
 ) -> list[str]:
     """SPA 路由发现：逐一点击导航项，记录 URL 变化。
 
     点击本身不计入结果元素，只用于发现路由；收尾回起点供后续抓取落地页。
+    `extra_labels`：专家 S0 反推出的、CSS 启发式漏掉的菜单文字，并入后一并遍历（治本）。
     """
     if not options.discover_by_menu:
         return []
@@ -905,6 +1004,13 @@ def _discover_menu_routes(
     if not labels:  # 导航还没挂出来 → 等一等再看（首批菜单要等接口）
         _wait_nav_ready(page, options)
         labels = _nav_labels(page)
+    # S0 治本：把专家反推的菜单文字并入（CSS 启发式漏掉的导航项），去重
+    if extra_labels:
+        merged = list(labels)
+        for lb in extra_labels:
+            if lb and lb not in merged:
+                merged.append(lb)
+        labels = merged
     if not labels:
         return []
     start_url = _safe_url(page) or options.base_url
@@ -997,6 +1103,11 @@ def _build_links_js() -> str:
     return _LINKS_JS_TEMPLATE.replace("__MAX__", str(MAX_HOME_LINKS))
 
 
+def _build_nav_harvest_js() -> str:
+    """广搜导航菜单项文字的脚本（不依赖特定类名，亦不依赖 LLM）。"""
+    return _NAV_HARVEST_JS.replace("__MAX__", str(_MAX_NAV_HARVEST))
+
+
 def _crawl_links(page: Any) -> list[str]:
     """抓取当前页所有 `<a href>` 与 data-* 路由提示（供路由兜底）。"""
     try:
@@ -1072,18 +1183,201 @@ def _absorb(result: RuntimeUiResult, ui_page: UiPage) -> None:
     result.console_errors.extend(ui_page.console_errors)
 
 
-def _sweep_pages(
+def _collect_current_page(
+    page: Any,
+    key: str,
+    options: RuntimeUiOptions,
+    sink: ConsoleSink,
+    mark: int,
+) -> UiPage:
+    """就地采集当前页元素（不跳转）：用于状态驱动 SPA 的「面板切换」发现。
+
+    路由驱动 SPA 用 `page.goto(route)` 逐页采集；但状态驱动 SPA（如 福享Work AI工作台）
+    点击菜单只切换右侧面板、URL 不变，只能就地采集当前 DOM，并用内容签名区分不同面板。
+    """
+    try:
+        title = str(page.title() or "")
+    except Exception:  # 标题取值失败不影响元素抓取
+        title = ""
+    raw_elements: list[dict[str, Any]] = []
+    try:
+        got = page.evaluate(_build_extract_js())
+        if isinstance(got, list):
+            raw_elements = [x for x in got if isinstance(x, dict)]
+    except Exception:  # 元素抓取失败仍保留该页（可达性已确立）
+        raw_elements = []
+    elements = [
+        UiElement(
+            selector=str(item.get("selector") or ""),
+            kind=str(item.get("kind") or ""),
+            text=str(item.get("text") or ""),
+            visible=bool(item.get("visible")),
+        )
+        for item in raw_elements
+        if item.get("selector")
+    ]
+    return UiPage(
+        url=key,
+        path=key,
+        title=title,
+        reachable=True,
+        console_errors=sink.since(mark),
+        elements=elements,
+    )
+
+
+_PANEL_SIG_JS = """
+() => {
+  // 优先用「当前选中的菜单项」作为状态驱动 SPA 的区域签名（最稳定、最贴近功能分区）
+  const sel = document.querySelector(
+    '.ant-menu-item-selected, .ant-menu-submenu-selected, [class*=menu-item-selected], [class*=MenuItem-selected], [aria-selected="true"]'
+  );
+  if (sel) {
+    const t = String(sel.innerText || sel.getAttribute('aria-label') || '').trim().replace(/\\s+/g, ' ').slice(0, 30).toLowerCase();
+    if (t) return t;
+  }
+  // 兜底：主内容区标题
+  const m = document.querySelector('main, [role=main], .ant-layout-content, .content, [class*=content]');
+  if (!m) return '';
+  const h = m.querySelector('h1, h2, h3, [role=heading]');
+  const t = (h ? h.innerText : m.innerText) || '';
+  return t.trim().replace(/\\s+/g, ' ').slice(0, 30).toLowerCase();
+}
+"""
+
+
+def _panel_signature(page: Any) -> str:
+    """当前主内容面板的稳定签名（标题 / 首段文本）；用于识别「状态驱动 SPA」的面板切换。
+
+    路由驱动 SPA 靠 URL 区分页面；状态驱动 SPA（菜单点击只换面板、URL 不变）须靠内容签名
+    区分不同功能区域，否则所有菜单项都被压成「1 个页面」，用例覆盖严重偏少。
+    """
+    try:
+        sig = page.evaluate(_PANEL_SIG_JS)
+    except Exception:
+        return ""
+    return str(sig or "").strip()
+
+
+def _page_dom_text(page: Any) -> str:
+    """抓取页面可见正文文本（供专家 S0 反推菜单时作为 LLM 输入；失败返回空串）。"""
+    try:
+        return str(
+            page.evaluate(
+                "() => (document.body && document.body.innerText) ? document.body.innerText : ''"
+            )
+            or ""
+        )
+    except Exception:
+        return ""
+
+
+def _page_capture_from_uipage(page: Any, landing: UiPage, result: RuntimeUiResult) -> Any:
+    """把已抓取的落地页（UiPage）+ 当前 DOM 文本组装成 PageCapture，供专家 S0 反推菜单。
+
+    不依赖 engine.expert 类型（保持解耦）；返回其 PageCapture dataclass 实例。
+    """
+    from engine.expert.page_expert import PageCapture
+
+    elements = [
+        {"selector": e.selector, "kind": e.kind, "text": e.text, "visible": e.visible}
+        for e in landing.elements
+    ]
+    xhr = [{"method": ep.method, "path": ep.path} for ep in result.api_endpoints]
+    return PageCapture(
+        url=landing.url,
+        path=landing.path,
+        title=landing.title,
+        dom_text=_page_dom_text(page),
+        elements=elements,
+        console_errors=list(landing.console_errors),
+        xhr_list=xhr,
+        auth_mode="required",
+        discovered_routes=list(result.discovered_routes),
+    )
+
+
+def _absorb_panel_areas(  # noqa: PLR0913, PLR0917 - 面板发现器参数多但职责单一，已收敛
+    page: Any,
+    options: RuntimeUiOptions,
+    result: RuntimeUiResult,
+    sink: ConsoleSink,
+    labels: list[str],
+    start_url: str,
+) -> int:
+    """状态驱动 SPA 兜底：点击菜单项切换面板、URL 不变时，用内容签名就地发现不同功能区域。
+
+    返回实际采集到的面板区域数。仅当面板签名变化且为新区域时才采集，避免重复 / 抖动。
+    危险菜单项（退出登录等）跳过；点击若只是展开子菜单（签名不变）也跳过，零副作用。
+    """
+    seen: set[str] = set()
+    landing_sig = _panel_signature(page)
+    seen.add(landing_sig)
+    collected = 0
+    limit = max(1, int(options.max_pages))
+    for label in labels:
+        if _is_danger_label(label):
+            continue
+        if collected >= limit:
+            break
+        before = _panel_signature(page)
+        _click_label(page, label, options, [])
+        try:
+            page.wait_for_timeout(SPA_SETTLE_MS)
+        except Exception:
+            pass
+        sig = _panel_signature(page)
+        if not sig or sig == before or sig in seen:
+            continue
+        seen.add(sig)
+        mark = len(sink.entries)
+        up = _collect_current_page(page, f"area::{sig}", options, sink, mark)
+        if up.elements:
+            _absorb(result, up)
+            collected += 1
+            result.notes.append(
+                f"面板区域发现：{label} → {sig}（就地采集 {len(up.elements)} 元素）"
+            )
+    _return_to(page, start_url, options)
+    if collected:
+        result.notes.append(
+            f"状态驱动面板区域发现 {collected} 个（菜单点击未改 URL，按内容签名区分）"
+        )
+    return collected
+
+
+def _sweep_pages(  # noqa: PLR0913, PLR0917 - 探索器签名参数多但职责单一，已收敛
     session: _Session,
     opts: RuntimeUiOptions,
     result: RuntimeUiResult,
     sink: ConsoleSink,
     static_paths: list[str] | None,
+    expert_options: Any = None,
 ) -> int:
     """抓取登录后落地页与各路由（含菜单点击发现），返回可达页数。"""
     page = session.page
     landing = _collect_page(page, _safe_url(page) or opts.base_url, opts, sink, len(sink.entries))
     _absorb(result, landing)
-    menu_paths = _discover_menu_routes(page, session.context, opts, result)
+    # S0 治本：专家反推菜单（仅当启用且可用），补 CSS 启发式漏掉的导航项
+    extra_labels: list[str] = []
+    if expert_options and getattr(expert_options, "enabled", False):
+        try:
+            from engine.expert.page_expert import PageExpert
+
+            cap = _page_capture_from_uipage(page, landing, result)
+            expert = PageExpert(expert_options)
+            extra_labels, meta = expert.propose_routes(cap)
+            if meta.get("note"):
+                result.notes.append(f"[专家S0] {meta['note']}")
+            if extra_labels:
+                result.notes.append(
+                    f"[专家S0] 反推菜单 {len(extra_labels)} 项：{', '.join(extra_labels[:10])}"
+                )
+        except Exception as exc:  # 专家失败不阻断主链路
+            result.notes.append(f"[专家S0] 反推菜单失败，已降级：{exc}")
+    menu_paths = _discover_menu_routes(
+        page, session.context, opts, result, extra_labels=extra_labels
+    )
     result.discovered_routes = list(menu_paths)
     routes = _resolve_routes(opts, static_paths, _crawl_links(page), menu_paths)
     for route in routes:
@@ -1091,6 +1385,13 @@ def _sweep_pages(
             continue
         mark = len(sink.entries)
         _absorb(result, _collect_page(page, urljoin(opts.base_url, route), opts, sink, mark))
+    # 状态驱动 SPA 兜底：菜单点击只换面板不改 URL → 用内容签名就地发现不同功能区域
+    panel_labels = list(_nav_labels(page))
+    try:
+        panel_labels.extend(_harvest_nav_labels(page))
+    except Exception:
+        pass
+    _absorb_panel_areas(page, opts, result, sink, panel_labels, _safe_url(page) or opts.base_url)
     return sum(1 for p in result.pages if p.reachable)
 
 
@@ -1961,10 +2262,12 @@ def discover_ui(
     options: RuntimeUiOptions | None = None,
     *,
     static_paths: list[str] | None = None,
+    expert_options: Any = None,
 ) -> RuntimeUiResult:
     """打开被测环境，登录并遍历路由，抓取可交互元素与控制台错误。
 
     `static_paths` 为静态分析已提取的页面路径（路由优先级第 3 档）。
+    `expert_options` 为 PageExpert 选项（测试专家系统 · S0 治本）；不传则不做专家反推。
     """
     opts = options or RuntimeUiOptions()
     if opts.mode not in RUNTIME_UI_MODE_CHOICES:
@@ -1990,7 +2293,7 @@ def discover_ui(
             )
             _attach_api_listener(page, result, opts.base_url)  # #223：监听 XHR/fetch
             session = _Session(page, context)
-            reachable = _sweep_pages(session, opts, result, sink, static_paths)
+            reachable = _sweep_pages(session, opts, result, sink, static_paths, expert_options)
             if reachable == 0:
                 raise EngineError(f"运行时 UI 发现失败：所有页面均不可达（{opts.base_url}）")
             # G-10：首屏抓完后若会话已过期被弹回登录页，先原地重登录再进深度发现
