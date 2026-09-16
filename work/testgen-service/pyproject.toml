@@ -99,7 +99,7 @@ skips = ["B101", "B311", "B105", "B603", "B607", "B608"]
 source = ["core", "engine", "service", "workspace", "output"]
 omit = ["*/venv/*", "*/tests/*"]
 [tool.coverage.report]
-fail_under = 5
+fail_under = 60
 show_missing = true
 
 # ---------------------------------------------------------------------------
