@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any
 
 from core.config import get_settings
-from core.enums import ExecStatus
+from core.enums import REPORT_FORMATS, ExecStatus, ReportFormat
 
 
 # 状态 → (中文展示名, 颜色)。颜色仅用于 HTML；通过=绿、失败=红（测试报告惯例）。
@@ -589,3 +589,133 @@ def render_html(report: dict[str, Any]) -> str:
         "</body></html>",
     ]
     return "\n".join(parts) + "\n"
+
+
+# ============================================================================
+# 可选导出格式（G-11）：PDF / Word / Excel —— 依赖按需引入，缺依赖给友好提示
+# ============================================================================
+class ReportExportError(ValueError):
+    """导出失败：缺失可选依赖（reportlab / python-docx / openpyxl）或非受支持格式。
+
+    继承自 ValueError（而非 RuntimeError），便于 HTTP 层统一转 422 并附 `pip install` 提示。
+    """
+
+
+def export_report(report: dict[str, Any], fmt: str, path: str) -> str:
+    """把报告结构导出为指定格式落盘，返回写出路径。
+
+    - `json` / `md` / `html`：内置渲染器，无需额外依赖；
+    - `pdf` / `docx` / `xlsx`：按需 `importlib` 引入可选依赖，**缺依赖则抛
+      `ReportExportError`（附 pip install 命令）**，绝不静默产出半截文件。
+
+    所有格式均来自同一份 `report` 字典（DB 事实的纯函数），口径与 `engine/report.py`
+    完全一致。凭证 / 令牌不进入报告内容，故导出物天然不含敏感字段。
+    """
+    from core.enums import REPORT_FORMAT_OPTIONAL_DEPS
+
+    fmt = (fmt or "").lower().strip()
+    if fmt not in REPORT_FORMATS:
+        raise ReportExportError(f"不支持的报告格式：{fmt!r}（允许 {sorted(REPORT_FORMATS)}）")
+
+    if fmt in (ReportFormat.JSON.value, ReportFormat.MARKDOWN.value, ReportFormat.HTML.value):
+        if fmt == ReportFormat.JSON.value:
+            rendered = json.dumps(report, ensure_ascii=False, indent=2)
+        elif fmt == ReportFormat.MARKDOWN.value:
+            rendered = render_markdown(report)
+        else:
+            rendered = render_html(report)
+        Path(path).write_text(rendered + "\n", encoding="utf-8")
+        return path
+
+    # 可选格式：缺依赖直接报错（不再尝试回退，避免误导用户以为导出成功）
+    dep = REPORT_FORMAT_OPTIONAL_DEPS[fmt]
+    try:
+        if fmt == ReportFormat.PDF.value:
+            _render_pdf(report, path)
+        elif fmt == ReportFormat.WORD.value:
+            _render_docx(report, path)
+        else:  # xlsx
+            _render_xlsx(report, path)
+    except ImportError as exc:  # 缺依赖：明确提示
+        raise ReportExportError(
+            f"导出 {fmt} 需要安装可选依赖 `{dep}`（pip install {dep}）；"
+            f"当前环境未安装，无法导出：{exc}"
+        ) from exc
+    return path
+
+
+def _render_pdf(report: dict[str, Any], path: str) -> None:
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+    from reportlab.lib.units import mm
+    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
+
+    body = getSampleStyleSheet()["BodyText"]
+    h1 = ParagraphStyle("h1", parent=body, fontSize=15, spaceAfter=8)
+    doc = SimpleDocTemplate(path, pagesize=A4, leftMargin=18 * mm, rightMargin=18 * mm)
+    story: list[Any] = [Paragraph(_plain_title(report), h1), Spacer(1, 6)]
+    story.append(Paragraph(_plain_summary(report).replace("\n", "<br/>"), body))
+    for line in _plain_lines(report):
+        story.append(Paragraph(_esc(line), body))
+    doc.build(story)
+
+
+def _render_docx(report: dict[str, Any], path: str) -> None:
+    from docx import Document
+
+    doc = Document()
+    doc.add_heading(_plain_title(report), level=1)
+    doc.add_paragraph(_plain_summary(report))
+    for line in _plain_lines(report):
+        doc.add_paragraph(line)
+    doc.save(path)
+
+
+def _render_xlsx(report: dict[str, Any], path: str) -> None:
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "测试报告"
+    ws.append([_plain_title(report)])
+    ws.append([_plain_summary(report)])
+    ws.append([])
+    for line in _plain_lines(report):
+        ws.append([line])
+    wb.save(path)
+
+
+def _plain_title(report: dict[str, Any]) -> str:
+    project = report.get("project") or {}
+    return f"测试报告 · {project.get('name') or '未命名'}（#{project.get('id')}）"
+
+
+def _plain_summary(report: dict[str, Any]) -> str:
+    generated = report.get("generated_at", "")
+    batch = (report.get("batch") or {}).get("batch_id") or "（无执行批次）"
+    return f"生成时间：{generated}　批次：{batch}　报告版本：{report.get('report_version')}"
+
+
+def _plain_lines(report: dict[str, Any]) -> list[str]:
+    """把报告中可结构化的部分铺平成纯文本行（用于 pdf/docx/xlsx 同源渲染）。"""
+    lines: list[str] = []
+    summary = report.get("summary") or {}
+    if summary:
+        lines.append("## 概要")
+        for k, v in summary.items():
+            lines.append(f"- {k}: {v}")
+    coverage = report.get("coverage") or {}
+    if coverage:
+        lines.append("## 覆盖率")
+        for k, v in coverage.items():
+            lines.append(f"- {k}: {v}")
+    cases = report.get("cases") or []
+    if cases:
+        lines.append("## 用例清单")
+        for c in cases[:500]:  # 防 XLSX 单行数爆炸；完整清单以 DB 为准
+            lines.append(
+                f"- [{c.get('case_type')}] {c.get('title')} → {c.get('exec_status') or '未执行'}"
+            )
+    if not lines:
+        lines.append("（报告无可结构化条目）")
+    return lines

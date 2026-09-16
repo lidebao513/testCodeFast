@@ -137,6 +137,7 @@ class Settings:
     runtime_login_user: str = ""
     runtime_login_password: str = ""
     runtime_login_otp: str = ""  # 动态口令 / 一次性验证码（不入库 / 不入日志）
+    runtime_login_otp_refresh_cmd: str = ""  # G-10：OTP 过期时取新 OTP 的命令（可选）
     runtime_auth_token: str = ""  # 值取自 runtime_auth_token_env 指向的环境变量
     runtime_auth_token_env: str = "RUNTIME_AUTH_TOKEN"  # 令牌来源环境变量名（不入库）
     executor_enabled: bool = False  # P3：用例执行器（接口探活 / 浏览器交互）
@@ -272,6 +273,7 @@ def load_settings(env: dict[str, str] | None = None) -> Settings:
         runtime_login_user=(g("RUNTIME_LOGIN_USER") or "").strip(),
         runtime_login_password=g("RUNTIME_LOGIN_PASSWORD") or "",
         runtime_login_otp=g("RUNTIME_LOGIN_OTP") or "",
+        runtime_login_otp_refresh_cmd=g("RUNTIME_LOGIN_OTP_REFRESH_CMD") or "",
         runtime_auth_token=g(token_env_name) or "",
         runtime_auth_token_env=token_env_name,
         executor_enabled=_as_bool(g("EXECUTOR_ENABLED"), False),

@@ -183,11 +183,33 @@ class ReviewStatus(Enum):
 # 注意：PDF / Word / Excel 需要额外依赖（reportlab / python-docx / openpyxl），
 # 主链路默认不引入（见任务清单 §11）——需要时再作为可选导出格式扩展本枚举。
 class ReportFormat(Enum):
-    """报告导出格式：机读 JSON、人读 Markdown、可分享自包含 HTML。"""
+    """报告导出格式：机读 JSON、人读 Markdown、可分享自包含 HTML。
+
+    PDF / Word / Excel 为**可选导出格式**——需要额外依赖（reportlab / python-docx /
+    openpyxl），主链路默认不引入；未安装时 `output.report_writer.export_report` 会给出
+    明确的「需 pip install」提示，而不是崩。依赖映射见 `REPORT_FORMAT_OPTIONAL_DEPS`。
+    """
 
     JSON = "json"
     MARKDOWN = "md"
     HTML = "html"
+    PDF = "pdf"
+    WORD = "docx"
+    EXCEL = "xlsx"
+
+
+# 可选导出格式 → 需要的第三方依赖（pip 包名）。主链路不引入，缺依赖时导出给出友好提示。
+REPORT_FORMAT_OPTIONAL_DEPS: dict[str, str] = {
+    ReportFormat.PDF.value: "reportlab",
+    ReportFormat.WORD.value: "python-docx",
+    ReportFormat.EXCEL.value: "openpyxl",
+}
+# 已内置渲染器、无需额外依赖的格式
+REPORT_FORMAT_BUILTIN = (
+    ReportFormat.JSON.value,
+    ReportFormat.MARKDOWN.value,
+    ReportFormat.HTML.value,
+)
 
 
 REPORT_FORMATS = tuple(f.value for f in ReportFormat)

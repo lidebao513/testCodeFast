@@ -32,7 +32,7 @@ from core.errors import AppError, NotFoundError, UnauthorizedError, ValidationEr
 from core.log import get_logger, log_extra, set_request_id
 from engine import pipeline
 from engine import report as report_engine
-from output.report_writer import render_html, render_markdown
+from output.report_writer import ReportExportError, export_report, render_html, render_markdown
 from output.writer import OutputWriter
 from service.tasks import BackgroundExecutor, GenerationTask, TaskState, TaskStore, stage_fraction
 from workspace.manager import WorkspaceManager
@@ -739,6 +739,16 @@ def get_report(
         return Response(content=render_markdown(body), media_type="text/markdown; charset=utf-8")
     if fmt == ReportFormat.HTML.value:
         return HTMLResponse(content=render_html(body))
+    # G-11：可选导出格式（pdf / docx / xlsx）经 export_report 落盘后返回下载地址；
+    # 缺可选依赖时 export_report 抛 ReportExportError → 转 422 + pip install 提示。
+    if fmt in (ReportFormat.PDF.value, ReportFormat.WORD.value, ReportFormat.EXCEL.value):
+        out_dir = get_settings().output_dir / str(pid)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            out_path = export_report(body, fmt, str(out_dir / f"REPORT.{fmt}"))
+        except ReportExportError as exc:
+            raise ValidationError(str(exc)) from exc
+        return {"project_id": pid, "format": fmt, "download": out_path, "report": body}
     payload: dict[str, Any] = {"project_id": pid, "report": body}
     if built["outputs"]:
         payload["outputs"] = built["outputs"]

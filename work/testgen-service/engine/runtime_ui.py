@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import urljoin, urlparse, urlunparse
@@ -194,6 +195,9 @@ class RuntimeUiOptions:
     degraded: bool = False  # 是否降级为 requests 抓取（M3.5 落地，占位）
     # --- M3.3 新增（Additive）---
     login_otp: str = ""  # 动态口令 / 一次性验证码（不入库 / 不日志）
+    # G-10：OTP 刷新命令（可选）。code 扫描先于 url 登录时差可能让 OTP 过期；
+    # 配置后首次登录失败会自动执行该命令取其 stdout 首行作为新 OTP 重试一次。
+    login_otp_refresh_cmd: str = ""
     discover_by_menu: bool = True  # 是否靠点菜单发现 SPA 路由（无正确 href 时的唯一途径）
     # G-7：移动端/响应式发现（默认关：需显式开启 RUNTIME_UI_MOBILE_ENABLED）
     mobile_enabled: bool = False
@@ -354,6 +358,7 @@ def options_from_settings(settings: Any) -> RuntimeUiOptions:
         login_user=str(settings.runtime_login_user or ""),
         login_password=str(settings.runtime_login_password or ""),
         login_otp=str(getattr(settings, "runtime_login_otp", "") or ""),
+        login_otp_refresh_cmd=str(getattr(settings, "runtime_login_otp_refresh_cmd", "") or ""),
         login_url=str(settings.runtime_login_url or ""),
         routes=list(settings.runtime_routes or []),
         max_pages=int(settings.runtime_max_pages),
@@ -492,6 +497,34 @@ def _first_match(page: Any, selectors: tuple[str, ...]) -> Any:
 # ============================================================================
 # 登录（M3.2 两字段 → M3.3 三字段 + 可选二次验证）
 # ============================================================================
+def _fetch_otp(options: RuntimeUiOptions, *, refresh: bool = False) -> str:
+    """取动态口令（G-10）。
+
+    - `refresh=False`：返回静态配置的 `login_otp`；
+    - `refresh=True` 且配置了 `login_otp_refresh_cmd`：执行该命令取其 **stdout 首行**
+      作为新 OTP（用于登录失败时的自动续期）。
+
+    命令输出只取首行并去除首尾空白，**绝不回显、绝不落日志**——与账号密码同一红线。
+    命令执行失败 / 无输出时返回空串（交由调用方回退到静态 OTP 或判登录失败）。
+    """
+    if refresh and options.login_otp_refresh_cmd:
+        try:
+            out = subprocess.run(
+                options.login_otp_refresh_cmd,
+                shell=True,  # nosec B602 受控：命令来自环境变量 RUNTIME_LOGIN_OTP_REFRESH_CMD，由运维可信配置，非用户输入
+                capture_output=True,
+                text=True,
+                timeout=30,
+                check=False,
+            )
+            lines = [ln.strip() for ln in (out.stdout or "").splitlines() if ln.strip()]
+            if lines:
+                return lines[0]
+        except Exception:  # 刷新失败不致命：回退静态 OTP / 由登录成败判定兜底
+            return ""
+    return options.login_otp
+
+
 def _fill_otp_if_present(page: Any, options: RuntimeUiOptions) -> bool:
     """若配置了动态口令且页面存在口令输入框则填入；返回是否填入。"""
     if not options.login_otp:
@@ -590,11 +623,50 @@ def _login(page: Any, options: RuntimeUiOptions, result: RuntimeUiResult) -> boo
     except Exception as exc:  # 填值失败归为登录失败
         raise EngineError(f"登录失败：无法填入账号密码（{exc}）") from exc
 
-    otp_filled_first = _fill_otp_if_present(page, options)
+    # G-10：OTP 可能过期（code 扫描先于 url 登录时差 / 长流水线合并路径）。
+    # 首次提交若仍停在登录页，且配置了刷新命令，则取新 OTP 重试一次（至多 1 次，防死循环）。
+    succeeded = _login_with_retry(page, submit, options, result)
+    if not succeeded:
+        raise EngineError(
+            "登录失败：提交后仍停留在登录页（含 OTP 自动续期重试），请核对账号密码 / "
+            "动态口令是否正确，或被测系统是否存在图片验证码 / 风控"
+        )
+    result.notes.append(
+        f"表单登录成功（账号 {options.login_user}，密码与动态口令均不记录）；"
+        f"跳转 {before_url} → {_safe_url(page)}"
+    )
+    return True
+
+
+def _login_with_retry(
+    page: Any, submit: Any, options: RuntimeUiOptions, result: RuntimeUiResult
+) -> bool:
+    """最多两次登录尝试（首屏 + 可选 OTP 续期重试），返回是否最终成功。"""
+    for attempt in range(2):
+        if _login_attempt(page, submit, options, result, attempt):
+            return True
+        # 是否已无重试手段：无刷新命令则首屏失败即终止；刷新命令取不到新 OTP 也终止
+        if not options.login_otp_refresh_cmd:
+            return False
+        if attempt > 0 and not _fetch_otp(options, refresh=True):
+            return False
+    return False
+
+
+def _login_attempt(
+    page: Any, submit: Any, options: RuntimeUiOptions, result: RuntimeUiResult, attempt: int
+) -> bool:
+    """单次登录提交尝试；返回 True 表示密码框已消失（登录成功）。
+
+    G-10：attempt>0 时取刷新后的 OTP 重填；仅首屏且未配置 OTP 时才走二次验证兜底。
+    """
+    otp = _fetch_otp(options, refresh=(attempt > 0))
+    # 首屏若已有口令框（单屏流程）则填入；两屏流程（账号密码 → 下一步 → 动态口令）
+    # 首屏无口令框，_fill_otp_with 返回 False，提交后由 _maybe_submit_otp 兜底二次提交。
+    otp_filled_first = _fill_otp_with(page, options, otp)
     _click_submit(page, submit, options)
     if not otp_filled_first:
         _maybe_submit_otp(page, options, result)
-
     # SPA 客户端跳转有延迟：提交后登录表单不会瞬间卸载，需等其消失再判定，
     # 否则会把「刚提交、尚未跳转」误判成「停留在登录页」→ 假失败（实测福享 Agent 即如此）。
     try:
@@ -604,16 +676,21 @@ def _login(page: Any, options: RuntimeUiOptions, result: RuntimeUiResult) -> boo
         )
     except Exception:  # 超时则交由下面的密码框判定兜底
         pass
-    if _first_match(page, _PASSWORD_SELECTORS) is not None:
-        raise EngineError(
-            "登录失败：提交后仍停留在登录页，请核对账号密码 / 动态口令是否正确、"
-            "或被测系统是否存在图片验证码 / 风控"
-        )
-    result.notes.append(
-        f"表单登录成功（账号 {options.login_user}，密码与动态口令均不记录）；"
-        f"跳转 {before_url} → {_safe_url(page)}"
-    )
-    return True
+    return _first_match(page, _PASSWORD_SELECTORS) is None
+
+
+def _fill_otp_with(page: Any, options: RuntimeUiOptions, otp: str) -> bool:
+    """用指定 OTP 填入口令框（G-10：支持刷新后重试）。返回是否填入。"""
+    if not otp:
+        return False
+    otp_box = _first_match(page, _OTP_SELECTORS)
+    if otp_box is None:
+        return False
+    try:
+        otp_box.fill(otp)
+        return True
+    except Exception:
+        return False
 
 
 def _apply_token(context: Any, options: RuntimeUiOptions, result: RuntimeUiResult) -> None:
@@ -626,6 +703,28 @@ def _apply_token(context: Any, options: RuntimeUiOptions, result: RuntimeUiResul
         result.notes.append(f"令牌注入失败，已按匿名继续（{exc}）")
         return
     result.notes.append("已注入令牌鉴权头（Authorization: Bearer ***）")
+
+
+def _relogin_if_needed(page: Any, options: RuntimeUiOptions, result: RuntimeUiResult) -> bool:
+    """G-10：发现过程中若被重定向回登录页（会话过期 / OTP 时效），原地重登录一次。
+
+    调用点在「已完成首屏登录、正在进行深度发现」的间隙——此时若会话已失效，
+    继续抓取只会得到登录页、污染功能点。返回 True 表示「无需登录或重登录成功」，
+    False 表示重登录失败（调用方据此降级而非静默产出错误功能点）。
+    """
+    login_target = options.login_url or options.base_url
+    # 当前不在登录域 → 无需处理
+    if _origin(_safe_url(page)) != _origin(login_target):
+        return True
+    # 当前页面没有密码框 → 不在登录页 → 无需处理
+    if _first_match(page, _PASSWORD_SELECTORS) is None:
+        return True
+    try:
+        return _login(page, options, result)
+    except EngineError as exc:
+        result.degraded = True
+        result.notes.append(f"会话过期重登录失败（降级继续）：{exc.message}")
+        return False
 
 
 # ============================================================================
@@ -1894,6 +1993,8 @@ def discover_ui(
             reachable = _sweep_pages(session, opts, result, sink, static_paths)
             if reachable == 0:
                 raise EngineError(f"运行时 UI 发现失败：所有页面均不可达（{opts.base_url}）")
+            # G-10：首屏抓完后若会话已过期被弹回登录页，先原地重登录再进深度发现
+            _relogin_if_needed(page, opts, result)
             # #223 深度发现：click-through 弹窗/Tab/表单，故障隔离（异常仅记 degraded）
             try:
                 _click_through(session, opts, result, sink)

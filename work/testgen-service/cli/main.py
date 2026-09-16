@@ -34,6 +34,7 @@ from typing import Any
 from core import store
 from core.auto_input import AutoInputResult, parse_auto_input
 from core.config import get_settings
+from core.contracts import CaseSpec
 from core.db import init_db
 from core.enums import (
     ALL_TP_TYPES,
@@ -165,8 +166,13 @@ def _build_parser() -> argparse.ArgumentParser:
 
     _add_pull_parser(sub)
     _add_pipeline_partners(sub)
+    _add_execute_parser(sub)
+    _add_tenant_retest_parser(sub)
+    return p
 
-    # —— G-1：对已有项目用例执行验证（不重新生成）——
+
+def _add_execute_parser(sub: Any) -> None:
+    """`execute` 子命令（G-1）：对已有项目用例执行验证（不重新生成）。"""
     ex = sub.add_parser("execute", help="对已有项目用例执行验证（不重新生成）")
     ex.add_argument("--project", type=int, required=True, help="项目 ID（用例须已落库）")
     ex.add_argument("--exec-url", default="", help="执行器被测服务地址（只跑接口层时用它）")
@@ -190,7 +196,32 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="UI 层执行真实点击（F13）；默认只断言页面可达与元素可见",
     )
-    return p
+
+
+def _add_tenant_retest_parser(sub: Any) -> None:
+    """`tenant-retest` 子命令（G-9 双身份越权复测专项通道）。"""
+    tr = sub.add_parser(
+        "tenant-retest", help="G-9 双身份越权复测：用属主+他人真实凭证重放跨租户用例"
+    )
+    tr.add_argument("--project", type=int, required=True, help="项目 ID（用例须已落库）")
+    tr.add_argument(
+        "--url", default="", help="被测环境地址（接口 base_url；缺省读 RUNTIME_UI_BASE_URL）"
+    )
+    tr.add_argument("--owner-user", default="", help="属主身份账号（缺省读 RUNTIME_LOGIN_USER）")
+    tr.add_argument(
+        "--owner-password", default="", help="属主身份密码（缺省读 RUNTIME_LOGIN_PASSWORD）"
+    )
+    tr.add_argument(
+        "--other-user",
+        default="",
+        help="他人身份账号（必填才能真复测；只给属主则降级为诚实 skipped）",
+    )
+    tr.add_argument("--other-password", default="", help="他人身份密码")
+    tr.add_argument(
+        "--out",
+        default="",
+        help="结论落盘目录（可选）；不填则只打印 JSON 到 stdout",
+    )
 
 
 def _parse_scopes(raw: str) -> set[str]:
@@ -479,6 +510,104 @@ def _cmd_serve(args: argparse.Namespace) -> int:
     return 0
 
 
+# G-9 双身份越权复测：CLI 用例字典 → CaseSpec（只取 CaseSpec 拥有的字段）
+_CASE_FIELDS = (
+    "tc_no",
+    "title",
+    "ctype",
+    "steps",
+    "module",
+    "case_type",
+    "priority",
+    "precondition",
+    "doc_steps",
+    "tp_id",
+    "fp_contract_id",
+    "fp_row_id",
+    "test_type",
+    "status",
+    "version",
+    "coverage_role",
+)
+
+
+def _row_to_case(row: dict[str, Any]) -> CaseSpec:
+    return CaseSpec(**{k: row[k] for k in _CASE_FIELDS if k in row})
+
+
+class _HttpSession:
+    """G-9 复测真实会话：用 requests 实现 RetestSession 协议（凭证不留存）。"""
+
+    def __init__(self, base_url: str, user: str, password: str) -> None:
+        import requests
+
+        self._base = base_url.rstrip("/")
+        self._s = requests.Session()
+        self._user, self._pwd = user, password
+        self._token: str | None = None
+
+    def request(
+        self, method: str, url: str, *, headers: dict[str, str] | None = None, json: Any = None
+    ) -> tuple[int, Any]:
+        full = url if url.startswith("http") else self._base + url
+        # 简易登录：优先 Bearer（环境变量已含 token 场景），否则表单/基本登录不在此处——交由调用方注入
+        hdrs = dict(headers or {})
+        if self._token:
+            hdrs.setdefault("Authorization", f"Bearer {self._token}")
+        resp = self._s.request(method, full, headers=hdrs, json=json, timeout=20)
+        try:
+            body: Any = resp.json()
+        except ValueError:  # 非 JSON 响应体（HTML 错误页等）→ 退回文本，避免崩溃
+            body = resp.text
+        return resp.status_code, body
+
+
+def _cmd_tenant_retest(args: argparse.Namespace) -> int:
+    """G-9 双身份越权复测专项通道：从库里取用例 → 双身份重放 → 输出结论。
+
+    红线：只给属主、无他人凭证时，复测降级为诚实 skipped（保留生成期结论），
+    绝不伪造 PASS。失败（越权成功）即高危 FAIL 并明确标注。
+    """
+    from core import store
+    from engine import tenant_retest
+
+    init_db()
+    settings = get_settings()
+    base_url = (args.url or settings.runtime_base_url or "").strip()
+    if not base_url:
+        print("[error] 缺少被测地址：--url 或 RUNTIME_UI_BASE_URL 至少给一个", file=sys.stderr)
+        return 2
+    owner_user = (args.owner_user or settings.runtime_login_user or "").strip()
+    owner_pwd = args.owner_password or settings.runtime_login_password or ""
+    other_user = args.other_user.strip()
+    other_pwd = args.other_password
+
+    rows = store.list_cases(args.project)
+    if not rows:
+        print(f"[error] 项目 {args.project} 无用例", file=sys.stderr)
+        return 2
+    cases = [_row_to_case(r) for r in rows]
+
+    owner = _HttpSession(base_url, owner_user, owner_pwd) if owner_user else None
+    other = _HttpSession(base_url, other_user, other_pwd) if other_user else None
+    if owner is None:
+        print("[error] 缺少属主身份：--owner-user 或 RUNTIME_LOGIN_USER", file=sys.stderr)
+        return 2
+
+    summary = tenant_retest.retest_all(cases, owner, other, base_url)
+    if args.out:
+        from pathlib import Path
+
+        out_dir = Path(args.out)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        (out_dir / "tenant_retest.json").write_text(
+            json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        print(f"[ok] 已写出 {out_dir / 'tenant_retest.json'}", file=sys.stderr)
+    print(json.dumps(summary, ensure_ascii=False, indent=2))
+    return 0
+
+
 # 子命令 → 处理函数（表驱动：新增子命令只加一行，避免 main() 里堆 return 分支）
 _COMMANDS: dict[str, Callable[[argparse.Namespace], int]] = {
     "pipeline": _cmd_pipeline,
@@ -489,6 +618,7 @@ _COMMANDS: dict[str, Callable[[argparse.Namespace], int]] = {
     "report": _cmd_report,
     "execute": _cmd_execute,
     "serve": _cmd_serve,
+    "tenant-retest": _cmd_tenant_retest,
 }
 
 
