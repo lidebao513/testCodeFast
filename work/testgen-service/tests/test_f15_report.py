@@ -613,5 +613,5 @@ def test_cli_report_command(fresh_db, capsys):
 
 # ---------------------------------------------------------------- 枚举单一真值源
 def test_report_format_enum_single_source():
-    assert REPORT_FORMATS == ("json", "md", "html")
+    assert REPORT_FORMATS == ("json", "md", "html", "pdf", "docx", "xlsx")
     assert set(REPORT_FORMATS) == {f.value for f in ReportFormat}
