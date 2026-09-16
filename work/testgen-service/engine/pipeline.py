@@ -56,6 +56,12 @@ from engine import (
     semantic_enrich,
     tp_expand,
 )
+from engine.expert.page_expert import (
+    PageCapture,
+    PageExpert,
+    PageExpertOptions,
+    expert_to_test_point,
+)
 from engine.scan import SourceFile
 from output import channel_writer  # 需求1：把「代码通道 / 地址通道」各自产出的用例分别落盘独立记录
 
@@ -120,6 +126,8 @@ class PipelineOptions:
     extract_pages: bool = True
     llm: semantic_enrich.EnrichOptions = field(default_factory=semantic_enrich.EnrichOptions)
     persist: bool = True
+    # 测试专家系统（D3）：默认开；CLI `--expert-off` 置 False → 降级纯规则基线
+    expert_mode: bool = True
     write_channel_records: bool = True  # 需求1：落库后是否把各通道独立记录写到 outputs/<pid>/
     # 「URL + 账号密码」通道的请求级参数（A1）
     target_req: TargetRequest = field(default_factory=TargetRequest)
@@ -166,6 +174,8 @@ class PipelineResult:
     channel_summary: dict[str, Any] = field(
         default_factory=dict
     )  # {"code": {...}, "url": {...}, "source_kind": ...}
+    # 测试专家系统：本次运行专家(URL/PageExpert)贡献摘要（供报告/CLI 输出，#274）
+    expert_summary: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -184,6 +194,7 @@ class PipelineResult:
             "notes": self.notes,
             "merge_conflicts": self.merge_conflicts,
             "channel_summary": self.channel_summary,
+            "expert": self.expert_summary,
             "errors": self.errors,
         }
 
@@ -569,6 +580,179 @@ def _design_options(settings: Any) -> llm_design.DesignOptions:
     )
 
 
+# ============================================================================
+# 阶段 5.6（测试专家系统 · Phase 1 URL 通道）：PageExpert 审阅增补
+# ============================================================================
+def _expert_options(settings: Any) -> PageExpertOptions:
+    """从全局配置构造 PageExpert 选项（D1/D3/D4）。"""
+    configured = bool(
+        settings.expert_api_key and settings.expert_base_url and settings.expert_model
+    )
+    return PageExpertOptions(
+        enabled=bool(settings.expert_mode and configured),
+        provider=settings.expert_provider,
+        base_url=settings.expert_base_url,
+        model=settings.expert_model,
+        api_key=settings.expert_api_key,
+        timeout=settings.expert_timeout,
+        use_vision=settings.expert_vision,
+        max_tps_per_page=settings.expert_max_tps_per_page,
+    )
+
+
+def _capture_from_runtime_page(page: Any, runtime_result: Any) -> PageCapture:
+    """把一条已发现页面（UiPage）+ 运行时接口清单组装成 PageCapture（PageExpert 输入）。"""
+    xhr = [{"method": ep.method, "path": ep.path} for ep in (runtime_result.api_endpoints or [])]
+    return PageCapture(
+        url=page.url,
+        path=page.path,
+        title=page.title,
+        elements=[
+            {"selector": e.selector, "kind": e.kind, "text": e.text, "visible": e.visible}
+            for e in page.elements
+        ],
+        console_errors=list(page.console_errors),
+        xhr_list=xhr,
+        discovered_routes=list(runtime_result.discovered_routes or []),
+    )
+
+
+def _resolve_expert_area_to_fp(area: str, page_path: str, fps: list[FunctionalPoint]) -> str:
+    """把专家测试点的 `area` 解析到真实功能点 fp_id（保证溯源不孤儿）。
+
+    匹配优先级：页面路径 → 接口 `METHOD path` → UI 元素选择器（fp.name 末段 `|selector`）。
+    都未命中返回空串（调用方据此 reject，绝不产生孤儿用例）。
+    """
+    a = (area or "").strip()
+    for fp in fps:
+        if fp.ftype == FType.PAGE.value and fp.name == a:
+            return fp.fp_id
+        if fp.ftype == FType.API.value and fp.name == a:
+            return fp.fp_id
+    for fp in fps:
+        if fp.ftype == FType.UI.value:
+            sel = fp.name.split("|", 1)[-1] if "|" in fp.name else ""
+            if sel and sel == a:
+                return fp.fp_id
+    if a == page_path:
+        for fp in fps:
+            if fp.ftype == FType.PAGE.value and fp.name == page_path:
+                return fp.fp_id
+    return ""
+
+
+def _review_one_page(
+    page: Any,
+    expert: PageExpert,
+    fps: list[FunctionalPoint],
+    result: PipelineResult,
+) -> tuple[list[TestPoint], int, list[str], bool, str]:
+    """专家审阅单页（提质 S1–S6），返回 (新增测试点, 拒绝数, 覆盖缺口, 是否用视觉, 视觉说明)。
+
+    抽出独立函数以保持 `stage_expert_review` 复杂度达标；area 经护栏校验后才转契约，
+    未命中真实锚点 / 未解析到功能点的进 rejected（不静默）。
+    """
+    cap = _capture_from_runtime_page(page, result.runtime_ui)
+    res = expert.review_page(cap)
+    result.notes.extend(res.notes)
+    added: list[TestPoint] = []
+    rejected_delta = len(res.rejected)
+    for etp in res.added:
+        fp_id = _resolve_expert_area_to_fp(etp.area, page.path, fps)
+        if not fp_id:
+            rejected_delta += 1
+            continue
+        fp = next((f for f in fps if f.fp_id == fp_id), None)
+        if fp is None:
+            rejected_delta += 1
+            continue
+        added.append(expert_to_test_point(etp, fp_id, fp.name, fp.module))
+    return added, rejected_delta, list(res.coverage_gaps), bool(res.used_vision), res.vision_note
+
+
+def stage_expert_review(
+    opts: PipelineOptions,
+    result: PipelineResult,
+    progress: ProgressFn | None,
+) -> None:
+    """测试专家系统 · URL 通道（PageExpert，S1–S6 提质）。
+
+    对运行时发现的每个可达页面，让专家审视渲染并产出「专家增补测试点」；每条 area 经护栏
+    命中真实锚点后才保留，再解析到功能点 fp_id 转成 TestPoint（origin=expert_page）。
+    未启用 / 未配 LLM / 无运行时结果 → 降级纯规则，不静默（notes 说明）。
+    """
+    s = get_settings()
+    if not (s.expert_mode and opts.expert_mode):
+        result.expert_summary = {
+            "enabled": False,
+            "channel": "url",
+            "expert": "PageExpert",
+            "reason": "expert_mode 关闭（--expert-off 或配置关闭）",
+        }
+        return
+    if result.runtime_ui is None:
+        result.expert_summary = {
+            "enabled": False,
+            "channel": "url",
+            "expert": "PageExpert",
+            "reason": "未启用运行时 UI 通道（Phase 1 仅 URL 通道专家）",
+        }
+        result.notes.append("专家审阅跳过：未启用运行时 UI 通道（Phase 1 仅 URL 通道专家）")
+        return
+    expert_opts = _expert_options(s)
+    if not expert_opts.enabled:
+        result.expert_summary = {
+            "enabled": False,
+            "channel": "url",
+            "expert": "PageExpert",
+            "reason": "未配置 LLM（EXPERT_API_KEY/BASE_URL/MODEL 或缺省 LLM_*），已降级纯规则",
+        }
+        result.notes.append(
+            "专家(URL)未启用：未配置 LLM（EXPERT_API_KEY/BASE_URL/MODEL 或缺省 LLM_*），"
+            "已降级为纯规则用例"
+        )
+        return
+
+    expert = PageExpert(expert_opts)
+    fps = result.functional_points
+    added_tps: list[TestPoint] = []
+    rejected = 0
+    coverage_gaps: list[str] = []
+    pages_reviewed = 0
+    vision_used = False
+    vision_note = ""
+    for page in result.runtime_ui.reachable_pages():
+        page_added, page_rej, page_gaps, page_vis, page_vnote = _review_one_page(
+            page, expert, fps, result
+        )
+        added_tps.extend(page_added)
+        rejected += page_rej
+        coverage_gaps.extend(page_gaps)
+        pages_reviewed += 1
+        vision_used = vision_used or page_vis
+        if page_vnote:
+            vision_note = page_vnote
+    if added_tps:
+        result.test_points = [*result.test_points, *added_tps]
+    result.counts["expert_page_tps"] = len(added_tps)
+    result.counts["expert_page_rejected"] = rejected
+    result.expert_summary = {
+        "enabled": True,
+        "channel": "url",
+        "expert": "PageExpert",
+        "pages_reviewed": pages_reviewed,
+        "tps_added": len(added_tps),
+        "rejected": rejected,
+        "vision_used": vision_used,
+        "vision_note": vision_note,
+        "coverage_gaps": coverage_gaps[:50],
+    }
+    if added_tps or rejected:
+        result.notes.append(
+            f"专家(URL)增补测试点 {len(added_tps)} 条（拒绝 {rejected} 条未命中真实锚点/未解析到功能点）"
+        )
+
+
 def stage_llm_design(
     opts: PipelineOptions,
     result: PipelineResult,
@@ -652,9 +836,12 @@ def stage_runtime_ui(
     凭证经「请求级参数 / .env」注入，不落库、不入产物。
     """
     _emit(progress, "runtime_ui", base_url=runtime_options.base_url)
+    # 测试专家系统 · S0 治本：把专家反推的菜单文字并入遍历（治本 routes=0）。
+    expert_opts = _expert_options(get_settings())
     found = runtime_ui.discover_ui(
         runtime_options,
         static_paths=_static_page_paths(result.functional_points),
+        expert_options=expert_opts,
     )
     result.runtime_ui = found
     result.notes.extend(f"运行时 UI：{n}" for n in found.notes)
@@ -1161,6 +1348,9 @@ def run_pipeline(  # noqa: PLR0915, C901 - 编排函数，阶段多为合理；�
         progress,
     )
     result.test_points = stage_enrich(opts, result, tps, result.functional_points, progress)
+    # 测试专家系统 · URL 通道（PageExpert，S1–S6 提质）：在功能点 + 测试点就绪后、用例生成前，
+    # 让专家审视运行时渲染增补测试点（每条经护栏命中真实锚点后才保留，绝不孤儿）。
+    stage_expert_review(opts, result, progress)
     # P2：PRD 通道（默认关闭）——先解析需求并派生「业务规则」测试点，须在用例生成之前并入。
     if s.prd_enabled and opts.prd_source:
         result.prd_doc = stage_prd_ingest(opts, result, progress)

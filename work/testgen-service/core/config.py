@@ -145,6 +145,21 @@ class Settings:
     # 必须由使用者显式确认环境可写后才放行，否则接口层只执行 GET/HEAD 等只读请求。
     executor_allow_write: bool = False
 
+    # ===== 测试专家系统（URL 通道 PageExpert / 代码通道 CodeExpert）=====
+    # D3：expert_mode 默认开；CLI `--expert-off` 可整体关闭，降级到纯规则基线。
+    # D1：expert_vision 多模态截图；模型非视觉（如 deepseek-chat）时自动降级 DOM 并 notes。
+    # D4：expert_agent_mode 自主 Agent（本期仅留配置开关，不实现）。
+    # 凭证默认复用 LLM 通道（deepseek），未单独配时与 llm_* 同值，开箱即用。
+    expert_mode: bool = True
+    expert_vision: bool = True
+    expert_provider: str = "deepseek"
+    expert_base_url: str = ""
+    expert_model: str = ""
+    expert_api_key: str = ""
+    expert_timeout: int = 60
+    expert_max_tps_per_page: int = 8
+    expert_agent_mode: bool = False  # 预留：自主 Agent 开关（Phase 4 实现）
+
     # 鉴权：为空表示不校验（仅限内网/开发）
     auth_token: str = ""
 
@@ -191,6 +206,16 @@ class Settings:
             ),
             "runtime_otp_configured": bool(self.runtime_login_otp),
             "runtime_token_configured": bool(self.runtime_auth_token),
+            # 测试专家系统
+            "expert_mode": self.expert_mode,
+            "expert_vision": self.expert_vision,
+            "expert_enabled": bool(
+                self.expert_mode
+                and self.expert_api_key
+                and self.expert_base_url
+                and self.expert_model
+            ),
+            "expert_agent_mode": self.expert_agent_mode,
         }
 
     def ensure_dirs(self) -> None:
@@ -278,6 +303,16 @@ def load_settings(env: dict[str, str] | None = None) -> Settings:
         runtime_auth_token_env=token_env_name,
         executor_enabled=_as_bool(g("EXECUTOR_ENABLED"), False),
         executor_allow_write=_as_bool(g("EXECUTOR_ALLOW_WRITE"), False),
+        # 测试专家系统（凭证默认复用 LLM 通道 deepseek，未单独配时与 llm_* 同值，开箱即用）
+        expert_mode=_as_bool(g("EXPERT_MODE"), True),
+        expert_vision=_as_bool(g("EXPERT_VISION"), True),
+        expert_provider=(g("EXPERT_PROVIDER") or "deepseek").strip().lower(),
+        expert_base_url=(g("EXPERT_BASE_URL") or g("LLM_BASE_URL") or "").strip(),
+        expert_model=(g("EXPERT_MODEL") or g("LLM_MODEL") or "").strip(),
+        expert_api_key=(g("EXPERT_API_KEY") or g("LLM_API_KEY") or "").strip(),
+        expert_timeout=_as_int(g("EXPERT_TIMEOUT"), 60, "EXPERT_TIMEOUT"),
+        expert_max_tps_per_page=_as_int(g("EXPERT_MAX_TPS_PER_PAGE"), 8, "EXPERT_MAX_TPS_PER_PAGE"),
+        expert_agent_mode=_as_bool(g("EXPERT_AGENT_MODE"), False),  # 预留：自主 Agent 开关
         auth_token=g("AUTH_TOKEN") or "",
         business_extract_mode=_as_choice(
             g("BUSINESS_EXTRACT_MODE"),

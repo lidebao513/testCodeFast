@@ -26,6 +26,23 @@ CONTRACT_VERSION = "1.0"
 # 报告是**只读派生物**（DB 事实的纯函数），故其版本只约束「结构」，不参与三方契约冻结。
 REPORT_VERSION = "1.0"
 
+# 测试点 / 用例「来源」取值（Additive：新增取值域，旧消费方忽略未知值）。
+# - rule：规则引擎确定性产出（稳定溯源基线，内容指纹 md5 不变）；
+# - llm_enrich：语义增强通道补点（semantic_enrich）；
+# - llm_design：用例设计通道（llm_design，F10b）；
+# - llm_implicit / llm_verified：语义增强对隐性规则的两类标记；
+# - expert_page：测试专家系统·URL 通道（PageExpert，S0–S6 全环节 LLM）；
+# - expert_code：测试专家系统·代码通道（CodeExpert，Phase 2）。
+ORIGIN_RULE = "rule"
+ORIGIN_LLM_ENRICH = "llm_enrich"
+ORIGIN_LLM_DESIGN = "llm_design"
+ORIGIN_LLM_IMPLICIT = "llm_implicit"
+ORIGIN_LLM_VERIFIED = "llm_verified"
+ORIGIN_EXPERT_PAGE = "expert_page"
+ORIGIN_EXPERT_CODE = "expert_code"
+# 专家来源取值集合（供护栏 / 报告识别「专家增补」）
+EXPERT_ORIGINS = (ORIGIN_EXPERT_PAGE, ORIGIN_EXPERT_CODE)
+
 # 用例八要素（顺序即展示顺序；缺一不可）
 EIGHT_ELEMENTS: tuple[str, ...] = (
     "tc_no",
@@ -163,6 +180,9 @@ class TestPoint:
     # 缺省空串即「未识别归属」，执行器据此给出诚实的低把握结论而非假装高置信。
     resource: str = ""
     owner_scoped: bool = False
+    # v1.3：专家归因（测试专家系统）：标记该测试点由哪个专家模块产出
+    # （"PageExpert" / "CodeExpert"），缺省空串表示非专家产出。旧消费方忽略。
+    expert: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)

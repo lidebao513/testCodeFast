@@ -163,6 +163,11 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="UI 层执行真实点击（F13）；默认只断言页面可达与元素可见，防污染被测环境",
     )
+    pipe.add_argument(
+        "--expert-off",
+        action="store_true",
+        help="关闭测试专家系统（URL 通道 PageExpert）；默认开启（D3），此开关用于无损降级对照",
+    )
 
     _add_pull_parser(sub)
     _add_pipeline_partners(sub)
@@ -334,6 +339,8 @@ def _cmd_pipeline(args: argparse.Namespace) -> int:
     opts.extract_pages = not args.no_pages
     opts.persist = not args.no_persist
     opts.llm.enabled = args.llm and get_settings().llm_enhance
+    # D3：测试专家系统默认开；--expert-off 用于无损降级对照（验收第五条）。
+    opts.expert_mode = not args.expert_off
 
     if opts.persist:
         init_db()
