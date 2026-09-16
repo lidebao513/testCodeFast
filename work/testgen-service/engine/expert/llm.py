@@ -45,7 +45,7 @@ class ExpertLLMOptions:
     base_url: str = ""
     model: str = ""
     api_key: str = ""
-    timeout: int = 60
+    timeout: int = 300
     # D1：多模态开关；即使为 True，若模型非视觉（见 is_vision_model）也会自动降级 DOM 并 notes。
     use_vision: bool = True
     # 专用于读图的视觉模型名；为空则与 model 同值（由 is_vision_model 判定能否吃图）。

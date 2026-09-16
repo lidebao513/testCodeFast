@@ -67,6 +67,21 @@ SKIP_NO_TARGET = (
     "本次未执行，**不等于通过**"
 )
 
+# 状态驱动面板区域：发现阶段存的是内容签名 `area::<签名>`，不是可导航路由。
+# 执行器只会 `page.goto(路由)`，直接 goto 签名会抛错并污染成「error」假结论。
+# 诚实转为 skip（写明需父路由+签名协同），既不假通过也不假失败。
+_PANEL_AREA_PREFIXES = ("area::", "runtime:area::")
+SKIP_PANEL_AREA = (
+    "状态驱动面板区域用例（area:: 签名）：执行器暂不支持按内容签名重定位面板"
+    "（需发现侧补记父路由 + 执行侧按签名定位），本次跳过，**不等于通过**"
+)
+
+
+def _is_panel_area_url(url: str) -> bool:
+    """判断目标地址是否面板内容签名（非可导航路由）。"""
+    u = str(url or "").strip().lower()
+    return any(u.startswith(p) for p in _PANEL_AREA_PREFIXES)
+
 
 # ============================================================================
 # 选项与结果
@@ -378,6 +393,10 @@ class UiSession:
         url = target_url(step, self.options)
         if not url:
             return UiExecResult(status=ExecStatus.SKIPPED.value, notes=[SKIP_NO_TARGET])
+        if _is_panel_area_url(url):
+            return UiExecResult(
+                status=ExecStatus.SKIPPED.value, notes=[*self.notes, SKIP_PANEL_AREA]
+            )
 
         mark = len(self.console_errors)
         failure = self._navigate(url)

@@ -87,7 +87,7 @@ class PageExpertOptions:
     base_url: str = ""
     model: str = ""
     api_key: str = ""
-    timeout: int = 60
+    timeout: int = 300
     use_vision: bool = True  # D1：多模态；模型非视觉时自动降级 DOM 并 notes
     vision_model: str = ""
     max_tps_per_page: int = DEFAULT_MAX_TPS_PER_PAGE
