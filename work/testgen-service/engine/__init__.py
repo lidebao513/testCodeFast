@@ -28,5 +28,6 @@ __all__ = [
     "runtime_ui",
     "scan",
     "semantic_enrich",
+    "stage_registry",
     "tp_expand",
 ]
