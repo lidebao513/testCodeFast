@@ -1,0 +1,70 @@
+# testCodeFast 未完成任务清单（BACKLOG）
+
+> 生成日期：2026-09-17 ｜ 基准：`main` / `dev/modularization` 均 = `76bb1f7`（已推 origin）
+> 范围：仅本仓库（test-accel 旧线 + testgen-service 新线）。aiSitePilot / 督办系统 / 无纸化办公 / 邮件监听 属独立工作区，不在此列。
+> 执行节奏：选定任务 → 八环门禁 → 提交（必要时 push）→ 重钉 `packed-refs`。
+
+---
+
+## 一、本轮已闭环（无需再动）
+
+- [x] **模块化全链路**：批次 1–3 + C1–C4 收尾，已落 `origin/main`。
+- [x] **P0-2 test-accel 工程治理**：远程 CI（`.github/workflows/ci.yml`，分别跑 testgen-service 八环 + test-accel 七环，含 secret scan）+ PR 模板 + `CONTRIBUTING.md`（提交 `76bb1f7`，已推 origin）。
+- [x] **P0-1 仓库侧解耦**：`tokens.json` 取消跟踪 + `.gitignore` 屏蔽（提交 `14a81c6`）。源系统凭据轮换走**方案 A**（用户在 ft.cntaiping.com 后台作废重发），git 历史不重写。
+- [x] **P2-8 live_llm 测试隔离**：`tests/test_a2_runtime_cases.py` 3 个真实 LLM 用例已打 `@pytest.mark.live_llm`，门禁 `-m "not live_llm"` 默认跳过，不会拖垮门禁。
+- [x] **P2-14 文档归位**：两份中文文档移入 `docs/`。
+
+---
+
+## 二、P1 · 集成联调（多依赖外部系统 / 凭证，需你提供目标与凭据）
+
+| ID | 任务 | 阻塞点 | 状态 |
+|---|---|---|---|
+| P1-3 | 接口层 HTTP executor 真目标端到端验证（代码就绪，从未对真实目标跑过） | 需真实被测目标可达 | ⬜ |
+| P1-4 | testhub 远程真实联调：`/api/v1/generate`、`/execute`、webhook 真实调用 | 需 testhub 服务可联 | ⬜ |
+| P1-5 | 发布流水线 webhook 事件钩子联调（部署后自动验证） | 需流水线环境 | ⬜ |
+| P1-6 | 福享 Agent 双账号「用例生成 + 合并」 | 阻塞于**当下有效动态码 + 确认 B 账号可登 ft 主机** | ⬜ |
+| P1-7 | 测试专家系统 #278 验收：配 `EXPERT_API_KEY`/`EXPERT_BASE_URL`/`EXPERT_MODEL` 后重跑 `101.43.2.52:9001`，验证 routes 0→10+ | 无 LLM 凭证时专家 S0 降级 no-op | ⬜ |
+
+---
+
+## 三、P2 · 质量 / 技术债 / 收尾
+
+| ID | 任务 | 备注 | 状态 |
+|---|---|---|---|
+| P2-9 | 报告导出依赖预装 / 文档化 | `reportlab`/`python-docx`/`openpyxl` 未预装，按需 `pip install` 方可导出 pdf/docx/xlsx | ⬜ |
+| P2-10 | G-13 量级稳定性回归守护 | 运行时量级（520 FP / 2138 元素）缺膨胀守护，重构后可能无声膨胀 | ⬜ |
+| P2-11 | 散脚本清理 / 迁移 | `diagnose_login.py`/`diagnose_menu.py`/`merge_scenarios.py`/`run_scenario.py`/`run_ui_only_execute.py` → 迁入 `scripts/` 或删除（你曾表示先不删，保留） | ⬜ |
+| P2-12 | 测试产物归档 / 清理 | `output/reports/8/8/*`、`output/screenshots/8/*`（含真实失败 `TP-6cd14168` 截图，可保留作缺陷证据）；保留待确认 | ⬜ |
+| P2-13 | 创建 `dev/modularization` 的 GitHub PR | 本机无 `gh`，需网页手动建或先装 `gh` | ⬜ |
+
+---
+
+## 四、P3 · 增强 / 可选（高价值非阻塞）
+
+| ID | 任务 | 状态 |
+|---|---|---|
+| P3-15 | 专家系统 Phase 2：#272 CodeExpert / #273 代码流水线接入 / #275 自主 Agent 开关（D4 后置） | ⬜ |
+| P3-16 | UI 真实执行进阶：G-6 click-through 深层真实点击、G-7 移动端真机 / 模拟器点击（当前诚实 SKIPPED） | ⬜ |
+| P3-17 | 诚实 SKIPPED 专项闭环：故障注入执行 / 并发真实压测 / 双身份越权真复测（需专项 harness + 审批 + 隔离账号） | ⬜ |
+| P3-18 | testgen-service 合并进 testhub：设计文档已完成，实现待排期 | ⬜ |
+| P3-19 | 执行服务自愈 / 自修复路线评估：in-service 代码自愈 vs WorkBuddy 集成 | ⬜ |
+
+---
+
+## 五、你方待办（非代码，需本人操作）
+
+- [ ] **P0-1 收尾**：登 ft.cntaiping.com 后台作废并重新签发 `tokens.json` 对应凭据；更新本地磁盘副本（该文件已 gitignore，仅本地存）。
+- [ ] **main 分支保护**：GitHub 网页开启（步骤见 `CONTRIBUTING.md` 第 6 节）；建议 CI 在 GitHub 跑稳前先不勾 *Require status checks*。
+- [ ] **保留项处置**：决定是否清理 P2-11（调试脚本）/ P2-12（测试产物）。
+
+---
+
+## 附：执行顺序建议
+
+1. 你先完成「你方待办」里的凭据轮换与分支保护（无代码动作）。
+2. 接着做 **P1-3 / P1-4 / P1-5** 集成联调（价值最高、但需你给目标与凭证）。
+3. 并行推进 **P2-9 / P2-10**（纯仓库内技术债，我可独立做）。
+4. P2-11 / P2-12 / P2-13 与 P3 系列按你排期。
+
+> 选取任意项告诉我，我即按「选定 → 八环门禁 → 提交（必要时 push）→ 重钉 packed-refs」节奏执行。
