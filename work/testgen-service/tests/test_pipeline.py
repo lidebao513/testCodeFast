@@ -124,9 +124,20 @@ def test_llm_design_enabled_reports_no_effect(fresh_db, sample_repo):
 
     能力已实现（F10b），但开启后若 LLM 未配置 / 候选全被护栏拒绝，必须如实写进
     `result.errors` 说明「未新增任何 LLM 用例」，而非让人误以为生效。
+
+    本测试为 hermetic：mock `engine.llm_design.design_cases` 返回空 added（等同 LLM 不可用），
+    避免依赖真实 LLM 调用成败，且完全不触网；重点校验 stage_llm_design 的「诚实上报」逻辑。
     """
+    from unittest.mock import patch
+
+    from engine.llm_design import DesignResult
+
     get_settings().llm_design_enabled = True
-    result = _run(sample_repo)
+    with patch(
+        "engine.llm_design.design_cases",
+        return_value=DesignResult(added=[], notes=["LLM 调用失败（mock 不可用）"]),
+    ):
+        result = _run(sample_repo)
 
     joined = " ".join(result.errors)
     assert "LLM 用例设计" in joined, result.errors

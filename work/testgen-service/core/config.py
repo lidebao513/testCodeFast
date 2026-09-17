@@ -102,6 +102,9 @@ class Settings:
     llm_model: str = ""
     llm_api_key: str = ""
     llm_timeout: int = 60
+    # 降级链：LLM 增强通道模型不可用（免费额度 AllocationQuota.FreeTierOnly.）时按顺序切换的备选模型。
+    # 未设 LLM_MODEL_CHAIN 时回退复用专家链（同一 key）。
+    llm_model_chain: list[str] = field(default_factory=list)
 
     # 业务函数提取模式（P1 · 收窄）：strict=排除测试/脚手架/构建脚本/配置模式类文件中的
     # 业务函数；loose=保留全部（legacy 行为）。详见 qa-test-points 技能 §十四。
@@ -159,6 +162,8 @@ class Settings:
     expert_timeout: int = 60
     expert_max_tps_per_page: int = 8
     expert_agent_mode: bool = False  # 预留：自主 Agent 开关（Phase 4 实现）
+    # 降级链：专家通道模型不可用（免费额度 AllocationQuota.FreeTierOnly.）时按顺序切换的备选模型。
+    expert_model_chain: list[str] = field(default_factory=list)
 
     # 鉴权：为空表示不校验（仅限内网/开发）
     auth_token: str = ""
@@ -181,6 +186,7 @@ class Settings:
             "llm_enhance": self.llm_enhance,
             "llm_provider": self.llm_provider,
             "llm_model": self.llm_model,
+            "llm_model_chain": self.llm_model_chain,
             "llm_key_configured": bool(self.llm_api_key),
             "auth_enabled": bool(self.auth_token),
             "business_extract_mode": self.business_extract_mode,
@@ -216,6 +222,7 @@ class Settings:
                 and self.expert_model
             ),
             "expert_agent_mode": self.expert_agent_mode,
+            "expert_model_chain": self.expert_model_chain,
         }
 
     def ensure_dirs(self) -> None:
@@ -261,6 +268,19 @@ def load_settings(env: dict[str, str] | None = None) -> Settings:
     def g(key: str) -> str | None:
         return env.get(key)
 
+    # 降级链解析：未显式设 *_MODEL_CHAIN 时，以主模型为单元素链；
+    # LLM 通道未设则复用专家链（同一 key，统一顺序）。
+    _expert_model = (g("EXPERT_MODEL") or g("LLM_MODEL") or "").strip()
+    _llm_model = (g("LLM_MODEL") or "").strip()
+    expert_model_chain = _split_list(
+        g("EXPERT_MODEL_CHAIN"),
+        [_expert_model] if _expert_model else [],
+    )
+    llm_model_chain = _split_list(
+        g("LLM_MODEL_CHAIN"),
+        expert_model_chain if expert_model_chain else ([_llm_model] if _llm_model else []),
+    )
+
     prd_dir_env = g("PRD_DIR")
     # 令牌取值来源：先定环境变量名，再从该名下取真实令牌（令牌本身不入 public_dict）。
     token_env_name = (g("RUNTIME_AUTH_TOKEN_ENV") or "RUNTIME_AUTH_TOKEN").strip()
@@ -282,6 +302,7 @@ def load_settings(env: dict[str, str] | None = None) -> Settings:
         llm_model=g("LLM_MODEL") or "",
         llm_api_key=g("LLM_API_KEY") or "",
         llm_timeout=_as_int(g("LLM_TIMEOUT"), 60, "LLM_TIMEOUT"),
+        llm_model_chain=llm_model_chain,
         prd_enabled=_as_bool(g("PRD_ENABLED"), False),
         prd_dir=(Path(prd_dir_env).expanduser().resolve() if prd_dir_env else PROJECT_ROOT / "prd"),
         llm_design_enabled=_as_bool(g("LLM_DESIGN_ENABLED"), False),
@@ -313,6 +334,7 @@ def load_settings(env: dict[str, str] | None = None) -> Settings:
         expert_timeout=_as_int(g("EXPERT_TIMEOUT"), 60, "EXPERT_TIMEOUT"),
         expert_max_tps_per_page=_as_int(g("EXPERT_MAX_TPS_PER_PAGE"), 8, "EXPERT_MAX_TPS_PER_PAGE"),
         expert_agent_mode=_as_bool(g("EXPERT_AGENT_MODE"), False),  # 预留：自主 Agent 开关
+        expert_model_chain=expert_model_chain,
         auth_token=g("AUTH_TOKEN") or "",
         business_extract_mode=_as_choice(
             g("BUSINESS_EXTRACT_MODE"),

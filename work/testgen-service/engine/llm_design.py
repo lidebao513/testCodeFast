@@ -44,6 +44,8 @@ class DesignOptions:
     api_key: str = ""
     timeout: int = 60
     max_cases_per_fp: int = 3
+    # 降级链：模型不可用（如免费额度 AllocationQuota.FreeTierOnly.）时按顺序切换的备选模型。
+    model_chain: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -129,6 +131,7 @@ def _to_enrich_options(options: DesignOptions) -> semantic_enrich.EnrichOptions:
         model=options.model,
         api_key=options.api_key,
         timeout=options.timeout,
+        model_chain=options.model_chain,
     )
 
 

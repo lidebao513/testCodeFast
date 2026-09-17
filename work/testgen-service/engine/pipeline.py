@@ -577,6 +577,7 @@ def _design_options(settings: Any) -> llm_design.DesignOptions:
         model=settings.llm_model,
         api_key=settings.llm_api_key,
         timeout=settings.llm_timeout,
+        model_chain=settings.llm_model_chain,
     )
 
 
@@ -597,6 +598,7 @@ def _expert_options(settings: Any) -> PageExpertOptions:
         timeout=settings.expert_timeout,
         use_vision=settings.expert_vision,
         max_tps_per_page=settings.expert_max_tps_per_page,
+        model_chain=settings.expert_model_chain,
     )
 
 
@@ -1392,6 +1394,7 @@ def default_options(local_path: str = "", *, mode: str = "full") -> PipelineOpti
             model=s.llm_model,
             api_key=s.llm_api_key,
             timeout=s.llm_timeout,
+            model_chain=s.llm_model_chain,
         ),
     )
 

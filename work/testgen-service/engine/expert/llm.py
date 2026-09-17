@@ -15,10 +15,9 @@ from __future__ import annotations
 
 import base64
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
-from core.errors import LLMError
 from core.log import get_logger
 
 
@@ -50,6 +49,9 @@ class ExpertLLMOptions:
     use_vision: bool = True
     # 专用于读图的视觉模型名；为空则与 model 同值（由 is_vision_model 判定能否吃图）。
     vision_model: str = ""
+    # 降级链：模型不可用（如免费额度 AllocationQuota.FreeTierOnly.）时按顺序切换的备选模型。
+    # 委托 engine.llm_fallback.chat_with_fallback 统一处理，不在此处各自实现降级。
+    model_chain: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -63,7 +65,7 @@ class ExpertLLMClient:
             self.options.enabled
             and self.options.api_key
             and self.options.base_url
-            and self.options.model
+            and (self.options.model or self.options.model_chain)
         )
 
     def can_read_image(self) -> bool:
@@ -72,19 +74,6 @@ class ExpertLLMClient:
             return False
         model = self.options.vision_model or self.options.model
         return is_vision_model(model)
-
-    def _ensure(self) -> Any:
-        if not self.available():
-            raise LLMError("专家 LLM 未启用或未配置（需 enabled + api_key + base_url + model）")
-        try:
-            from openai import OpenAI
-        except ImportError as exc:  # pragma: no cover - 依赖缺失
-            raise LLMError("未安装 openai 依赖，无法启用专家 LLM") from exc
-        return OpenAI(
-            api_key=self.options.api_key,
-            base_url=self.options.base_url,
-            timeout=self.options.timeout,
-        )
 
     def complete_json(
         self,
@@ -97,19 +86,25 @@ class ExpertLLMClient:
 
         元数据含 `used_vision` / `vision_note`，调用方可据此在产物里诚实标注。
         图片仅在 `can_read_image()` 为真时带入；否则剥离并记入拒绝原因（不静默）。
+
+        实际调用统一委托 `engine.llm_fallback.chat_with_fallback`（含降级链），
+        本客户端不再各自实现降级逻辑。
         """
-        client = self._ensure()
+        from engine.llm_fallback import chat_with_fallback
+
         meta: dict[str, Any] = {"used_vision": False, "vision_note": ""}
         messages = self._build_messages(user_prompt, system_prompt, images, meta)
-        try:
-            resp = client.chat.completions.create(
-                model=self.options.model,
-                messages=messages,
-                temperature=0.2,
-            )
-            raw = resp.choices[0].message.content or "[]"
-        except Exception as exc:
-            raise LLMError(f"专家模型调用失败：{type(exc).__name__}") from exc
+        resp = chat_with_fallback(
+            channel="expert",
+            api_key=self.options.api_key,
+            base_url=self.options.base_url,
+            timeout=self.options.timeout,
+            model=self.options.model,
+            model_chain=self.options.model_chain,
+            messages=messages,
+            temperature=0.2,
+        )
+        raw = resp.choices[0].message.content or "[]"
         return _parse_json_array(raw), meta
 
     def _build_messages(

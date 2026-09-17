@@ -9,6 +9,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from engine import case_gen, pipeline, runtime_ui
 
 
@@ -140,6 +142,7 @@ def _url_only_options() -> pipeline.PipelineOptions:
     return opts
 
 
+@pytest.mark.live_llm
 def test_url_only_channel_produces_cases_end_to_end(fresh_db, monkeypatch):
     """**核心验收**：不带 --path、只给地址，也能产出非空用例且正文含真实路由。"""
     _patch_discover(monkeypatch, _fake_result())
@@ -182,6 +185,7 @@ def test_bad_local_path_still_fails_fast(fresh_db):
         raise AssertionError("给了不存在的目录必须报错")
 
 
+@pytest.mark.live_llm
 def test_runtime_failure_does_not_block_code_channel(fresh_db, sample_repo, monkeypatch):
     """运行时发现失败只记错误，不阻断代码通道（设计 §10）。"""
     from core.errors import EngineError
@@ -200,6 +204,7 @@ def test_runtime_failure_does_not_block_code_channel(fresh_db, sample_repo, monk
     assert result.counts["cases"] > 0, "代码通道必须照常产出用例"
 
 
+@pytest.mark.live_llm
 def test_code_plus_url_merges_runtime_functional_points(fresh_db, sample_repo, monkeypatch):
     """代码 + 地址并用：运行时功能点并入静态集合，同名（页面路径）由运行时覆盖。"""
     _patch_discover(monkeypatch, _fake_result())

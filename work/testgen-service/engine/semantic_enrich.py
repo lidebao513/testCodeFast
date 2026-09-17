@@ -68,6 +68,9 @@ class EnrichOptions:
     api_key: str = ""
     timeout: int = 60
     max_candidates: int = 50
+    # 降级链：模型不可用（如免费额度 AllocationQuota.FreeTierOnly.）时按顺序切换的备选模型。
+    # 委托 engine.llm_fallback.chat_with_fallback 统一处理，不在此处各自实现降级。
+    model_chain: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -224,44 +227,36 @@ def _to_test_point(cand: dict[str, Any], fps: list[FunctionalPoint]) -> TestPoin
 # LLM 通道（可选）
 # ============================================================================
 class LLMClient:
-    """OpenAI 兼容客户端（Qwen / DeepSeek 均可，仅换 base_url 与 model）。"""
+    """OpenAI 兼容客户端（Qwen / DeepSeek 均可，仅换 base_url 与 model）。
+
+    实际调用统一委托 `engine.llm_fallback.chat_with_fallback`（含降级链），
+    本客户端不再各自实现降级逻辑。
+    """
 
     def __init__(self, options: EnrichOptions) -> None:
         self.options = options
-        self._client: Any = None
 
     def available(self) -> bool:
         return bool(self.options.enabled and self.options.api_key and self.options.base_url)
 
-    def _ensure(self) -> Any:
-        if self._client is not None:
-            return self._client
-        try:
-            from openai import OpenAI
-        except ImportError as exc:  # pragma: no cover - 依赖缺失
-            raise LLMError("未安装 openai 依赖，无法启用 LLM 增强") from exc
-        self._client = OpenAI(
+    def complete_json(self, user_prompt: str) -> list[dict[str, Any]]:
+        """请求模型并解析 JSON 数组；解析失败抛 LLMError（降级由统一入口处理）。"""
+        from engine.llm_fallback import chat_with_fallback
+
+        resp = chat_with_fallback(
+            channel="llm",
             api_key=self.options.api_key,
             base_url=self.options.base_url,
             timeout=self.options.timeout,
+            model=self.options.model,
+            model_chain=self.options.model_chain,
+            messages=[
+                {"role": "system", "content": _SYSTEM_PROMPT},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=0.2,
         )
-        return self._client
-
-    def complete_json(self, user_prompt: str) -> list[dict[str, Any]]:
-        """请求模型并解析 JSON 数组；解析失败抛 LLMError。"""
-        client = self._ensure()
-        try:
-            resp = client.chat.completions.create(
-                model=self.options.model,
-                messages=[
-                    {"role": "system", "content": _SYSTEM_PROMPT},
-                    {"role": "user", "content": user_prompt},
-                ],
-                temperature=0.2,
-            )
-            raw = resp.choices[0].message.content or "[]"
-        except Exception as exc:
-            raise LLMError(f"模型调用失败：{type(exc).__name__}") from exc
+        raw = resp.choices[0].message.content or "[]"
         return _parse_json_array(raw)
 
 

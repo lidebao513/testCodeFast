@@ -75,6 +75,8 @@ def _pytest_cmd() -> list:
         py,
         "-m",
         "pytest",
+        "-m",
+        "not live_llm",
         "--cov=core",
         "--cov=engine",
         "--cov=service",

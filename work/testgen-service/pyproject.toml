@@ -65,6 +65,9 @@ lines-after-imports = 2
 # 本模块策略是「驱动级失败一律转 EngineError 或记入结果，绝不中断主链路」，
 # 故集中放行 BLE001；每个捕获点均已注明理由（见 engine/runtime_ui.py）。
 "engine/runtime_ui.py" = ["BLE001"]
+# 统一 LLM 降级链：需「捕获所有异常后区分额度不可用（→降级）与真实错误（→失败）」，
+# 故放行 BLE001；函数参数为语义明确的 keyword-only 入参（8 个），放行 PLR0913。
+"engine/llm_fallback.py" = ["BLE001", "PLR0913"]
 
 [tool.ruff.format]
 quote-style = "double"
@@ -115,3 +118,9 @@ pythonpath = ["."]
 # 每用例 120s 超时：防止浏览器/子进程偶发挂起冻结整套门禁（见 F13/执行器已知限制）。
 # 真实 UI 执行仅在 RUNTIME_UI_ENABLED=on 或指定 channel 时启，测试环境默认跳过。
 addopts = "-q --timeout=120"
+# live_llm：依赖真实外部服务（DashScope LLM / 运行时 UI 发现）的端到端用例。
+# 沙箱/CI 网络不稳定时这些用例会触发每用例 120s 超时，故默认门禁排除，
+# 仅在可达网络环境手动 `pytest -m live_llm` 运行。
+markers = [
+    "live_llm: 依赖真实外部服务（LLM / 运行时 UI）的端到端用例，门禁默认跳过",
+]

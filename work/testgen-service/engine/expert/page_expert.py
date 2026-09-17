@@ -90,6 +90,8 @@ class PageExpertOptions:
     timeout: int = 300
     use_vision: bool = True  # D1：多模态；模型非视觉时自动降级 DOM 并 notes
     vision_model: str = ""
+    # 降级链：模型不可用（如免费额度 AllocationQuota.FreeTierOnly.）时按顺序切换的备选模型。
+    model_chain: list[str] = field(default_factory=list)
     max_tps_per_page: int = DEFAULT_MAX_TPS_PER_PAGE
 
 
@@ -267,6 +269,7 @@ class PageExpert:
             timeout=o.timeout,
             use_vision=o.use_vision,
             vision_model=o.vision_model,
+            model_chain=o.model_chain,
         )
         return self._client_factory(llm_opts)
 
