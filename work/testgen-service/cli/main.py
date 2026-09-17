@@ -47,6 +47,7 @@ from core.errors import AppError
 from core.log import setup_logging
 from engine import diff_tag, pipeline, pull
 from engine import report as report_engine
+from engine.dialogue import DialogueAgent
 from engine.scan import Scanner
 from output.writer import OutputWriter
 
@@ -92,6 +93,18 @@ def _add_pipeline_partners(sub: Any) -> None:
     srv = sub.add_parser("serve", help="启动 HTTP 服务")
     srv.add_argument("--host", default=None)
     srv.add_argument("--port", type=int, default=None)
+
+
+def _add_chat_parser(sub: Any) -> None:
+    """`chat` 子命令（P1-2）：对话式生成——模板优先 + 自由文本兜底。"""
+    ch = sub.add_parser("chat", help="对话式生成：先给模板，填完即执行（或给自由文本）")
+    ch.add_argument("--show-template", action="store_true", help="打印可填写的模板文本后退出")
+    ch.add_argument("--template", default="", help="填写好的模板文件路径（key=value 格式）")
+    ch.add_argument("--text", default="", help="自由文本兜底（统一智能输入框式混排文本）")
+    ch.add_argument(
+        "--json", action="store_true", help="只输出解析后的计划（JSON，凭证掩码），不执行"
+    )
+    ch.add_argument("--no-output", action="store_true", help="不写出产物文件（只计算并输出摘要）")
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -174,6 +187,7 @@ def _build_parser() -> argparse.ArgumentParser:
     _add_execute_parser(sub)
     _add_tenant_retest_parser(sub)
     _add_compare_parser(sub)
+    _add_chat_parser(sub)
     return p
 
 
@@ -704,6 +718,102 @@ _COMMANDS: dict[str, Callable[[argparse.Namespace], int]] = {
     "tenant-retest": _cmd_tenant_retest,
     "compare": _cmd_compare,
 }
+
+
+def _build_opts_from_dialogue_params(params: dict[str, Any]) -> pipeline.PipelineOptions:
+    """把对话计划（PipelineRequest 形状 dict）转成运行选项（与 HTTP 层共用同一份契约）。
+
+    纯字典驱动，不依赖 service.app，保持 CLI 独立于 HTTP 层。
+    """
+    opts = pipeline.default_options(
+        params.get("local_path") or "", mode=params.get("mode") or MODE_FULL
+    )
+    if params.get("auto_input", "").strip():
+        pipeline.apply_auto_input(opts, parse_auto_input(params["auto_input"]))
+    # 显式字段覆盖（优先级高于 auto_input）
+    if params.get("repo_url"):
+        opts.repo_url = params["repo_url"]
+    if params.get("project_name"):
+        opts.project_name = params["project_name"]
+    if params.get("base"):
+        opts.base = params["base"]
+    if params.get("target"):
+        opts.target = params["target"]
+    if params.get("scopes"):
+        opts.scopes = set(params["scopes"])
+    req = opts.target_req
+    for attr, key in (
+        ("base_url", "test_url"),
+        ("login_url", "login_url"),
+        ("login_user", "login_user"),
+        ("login_password", "login_password"),
+        ("login_otp", "login_otp"),
+    ):
+        if params.get(key):
+            setattr(req, attr, params[key])
+    if params.get("test_url") or params.get("login_url"):
+        req.enabled = True
+    opts.include_business = bool(params.get("include_business", True))
+    opts.extract_pages = bool(params.get("extract_pages", True))
+    opts.persist = bool(params.get("persist", True))
+    opts.llm.enabled = bool(params.get("llm_enhance") and get_settings().llm_enhance)
+    return opts
+
+
+def _cmd_chat(args: argparse.Namespace) -> int:
+    """对话式生成（P1-2）：模板优先 + 自由文本兜底，填完即执行。"""
+    agent = DialogueAgent()
+
+    if args.show_template:
+        print(agent.start().render_template_text())
+        return 0
+
+    if args.text:
+        plan = agent.handle_text(args.text)
+    elif args.template:
+        raw = Path(args.template).expanduser().read_text(encoding="utf-8")
+        filled = agent.start().parse_filled_text(raw)
+        plan = agent.handle_template(filled)
+    else:
+        # 默认：打印模板并给出下一步提示（不直接跑，避免空参数误触）
+        print(agent.start().render_template_text())
+        print(
+            '\n# 填好后运行：testgen chat --template <文件>   或   testgen chat --text "..."',
+            file=sys.stderr,
+        )
+        return 0
+
+    if not plan.ok:
+        print("[error] 校验失败：", file=sys.stderr)
+        for e in plan.errors:
+            print(f"  - {e}", file=sys.stderr)
+        return 2
+
+    # 凭证脱敏后打印摘要（绝不回显明文）
+    print(
+        f"[chat] intent={plan.intent} 已采纳参数（凭证已掩码）：{json.dumps(plan.redacted, ensure_ascii=False)}",
+        file=sys.stderr,
+    )
+
+    if args.json:
+        print(json.dumps(plan.redacted, ensure_ascii=False, indent=2))
+        return 0
+
+    opts = _build_opts_from_dialogue_params(plan.params)
+    if opts.persist:
+        init_db()
+    result = pipeline.run_pipeline(opts)
+    payload: dict[str, Any] = {"result": result.to_dict()}
+    if result.project_id and not args.no_output:
+        payload["outputs"] = OutputWriter().write_all(
+            result.project_id, result.test_points, result.cases, result.to_dict()
+        )
+    print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
+    return 0
+
+
+# chat 命令在 _cmd_chat 定义后再登记，避免名字前向引用
+_COMMANDS["chat"] = _cmd_chat
 
 
 def main(argv: list[str] | None = None) -> int:

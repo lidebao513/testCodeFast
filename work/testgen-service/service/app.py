@@ -38,6 +38,7 @@ from engine.comparator import (
     compare_batch,
     compare_one,
 )
+from engine.dialogue import DialogueAgent, default_dialogue_template
 from output.report_writer import ReportExportError, export_report, render_html, render_markdown
 from output.writer import OutputWriter
 from service.tasks import BackgroundExecutor, GenerationTask, TaskState, TaskStore, stage_fraction
@@ -195,6 +196,18 @@ class CompareRequest(BaseModel):
         default_factory=list,
         description="批量模式：省略顶层 case/actual 时，按 [{case,actual,context}] 逐条比对",
     )
+
+
+class DialogueSubmitRequest(BaseModel):
+    """对话提交请求（P1-2）：模板填写值 或 自由文本 二选一。
+
+    - ``filled``：模板渲染后用户填写的字典（字段名见 GET /api/v1/dialogue/template）；
+    - ``text``：统一智能输入框式的混排自由文本（兜底）；
+    - 两者都给时 ``filled`` 优先，``text`` 作为安全网原文回灌。
+    """
+
+    filled: dict[str, Any] = Field(default_factory=dict, description="模板填写值")
+    text: str = Field("", description="自由文本兜底（与 filled 二选一）")
 
 
 class ExecuteRequest(BaseModel):
@@ -451,6 +464,11 @@ def submit_generate(req: PipelineRequest) -> JSONResponse:
     - 幂等：同一 `(路径/repo/模式/基线/目标/范围/变更集)` 的重复提交，若仍在 pending/running
       则返回既有 `task_id`，不会重复跑。
     """
+    return submit_generate_core(req)
+
+
+def submit_generate_core(req: PipelineRequest) -> JSONResponse:
+    """`/api/v1/generate` 与对话端点共用的异步提交核心（薄封装，无行为差异）。"""
     if req.execute or req.exec_url:
         raise ValidationError(
             "本服务当前仅提供「生成测试用例」能力，不执行用例（execute/exec_url 不被接受）"
@@ -464,6 +482,37 @@ def submit_generate(req: PipelineRequest) -> JSONResponse:
     task = task_store.create(kind="generate", idempotency_key=idem, request=_redacted_request(req))
     executor.submit(task.task_id, lambda: _run_generation_job(task.task_id, opts))
     return _task_accepted(task, status_code=202)
+
+
+# ============================================================================
+# P1-2 对话代理：模板优先 + 自由文本兜底（只生成用例，不执行）
+# ============================================================================
+@app.get("/api/v1/dialogue/template", dependencies=[Depends(require_auth)])
+def dialogue_template() -> dict[str, Any]:
+    """返回对话模板 schema（字段 / 选项 / 条件显隐规则 / 维度真值）。"""
+    return default_dialogue_template().render_template_json()
+
+
+@app.post("/api/v1/dialogue/submit", dependencies=[Depends(require_auth)])
+def dialogue_submit(body: DialogueSubmitRequest) -> JSONResponse:
+    """对话提交：模板填写值 或 自由文本 → 校验 → 复用异步生成提交。
+
+    与 `/api/v1/generate` 共用 `submit_generate_core`，因此同样满足
+    **生成-only 红线 + 幂等 + 可轮询**。凭证在 `redacted()` 视图中掩码，不回显。
+    """
+    agent = DialogueAgent()
+    if body.filled:
+        plan = agent.handle_template(body.filled)
+    elif body.text.strip():
+        plan = agent.handle_text(body.text)
+    else:
+        raise ValidationError("需提供 filled（模板填写值）或 text（自由文本）之一")
+
+    if not plan.ok:
+        raise ValidationError("；".join(plan.errors))
+
+    req = PipelineRequest(**plan.params)
+    return submit_generate_core(req)
 
 
 @app.post("/api/v1/execute", dependencies=[Depends(require_auth)])

@@ -8,7 +8,7 @@
 
 ## 分支策略（贯穿全程，先于任何代码改动）
 
-- [ ] **T0 · 切分支**：从稳定 `main`（当前 `85e20cf`）拉 `dev/modularization`；`main` 冻结为应急基线，任何人应急用 `main`，不受扰动。
+- [x] **T0 · 切分支**：从稳定 `main`（当前 `85e20cf`）拉 `dev/modularization`；`main` 冻结为应急基线，任何人应急用 `main`，不受扰动。
   - 验收：`git branch` 可见 `dev/modularization`，`main` 仍可独立 `cli.main pipeline --url …` 跑通。
   - 依赖：无（先行）。
 
@@ -16,7 +16,7 @@
 
 ## P0 · 能力层（八环全绿为门槛）
 
-- [ ] **P0-1 · 新建 `engine/comparator/` 模块**
+- [x] **P0-1 · 新建 `engine/comparator/` 模块**
   - 内容：`compare_one(case, actual, model_opts)` / `compare_batch(...)`，复用 `engine/expert/llm` 经统一 `chat_with_fallback`（降级链已就绪）。
   - 契约：`StageInput={case(预期), actual(执行结果), model_opts}` → `StageOutput={verdict, confidence, reason, diff[], rule_verdict}`。
   - 五维判定复用（NORMAL/ABNORMAL/AUTH/PRIV_ESC/BOUNDARY）；诚实降级 `verdict=inconclusive`/`skipped≠pass`，绝不假装通过。
@@ -24,14 +24,14 @@
   - 验收：八环全绿；单测 mock `chat_with_fallback` 覆盖「成功 / 超时 / 额度不可用降级 / 真实错误不降级」四分支。
   - 依赖：T0。
 
-- [ ] **P0-2 · comparator 对外端点 + CLI**
+- [x] **P0-2 · comparator 对外端点 + CLI**
   - 内容：`POST /api/v1/compare`（`service/app.py` 新增，与 `/generate` 生成-only 红线隔离）；CLI `testgen compare`（参数 `--project --case-id --actual --json-in`）。
   - 红线：凭证不落地、不入库、不入日志、不入产物；`/api/v1/generate` 守"生成-only"（带 execute→422 既有约束不变）。
   - 产出：端点 + CLI + 请求/响应契约。
   - 验收：八环全绿；端点单测（mock comparator）覆盖正常/超时降级。
   - 依赖：P0-1。
 
-- [ ] **P0-3 · 能力层 11 项补 `StageInput/StageOutput` 契约 + `StageRegistry`**
+- [x] **P0-3 · 能力层 11 项补 `StageInput/StageOutput` 契约 + `StageRegistry`**
   - 11 项：extract · tp_expand · case_gen · semantic_enrich · expert_review · llm_design · prd_ingest · comparator · runtime_ui · auth_scan · tag。
   - 内容：每项抽成「无副作用纯函数 + 契约」；新增 `engine/stage_registry.py` 注册 17 个 stage；`pipeline` 改为「按 registry 组链」（先注册能力层，适配层 P1 接）。
   - 当前 `pipeline.run_pipeline` 硬编码编排（1282–1372），本步只抽契约 + registry 占位，**不删硬编码**（避免大爆炸，迁移留 P1）。
@@ -43,7 +43,7 @@
 
 ## P1 · 适配层解耦 + 对话代理（八环全绿为门槛）
 
-- [ ] **P1-1 · 适配层 6 项经 registry 组链，`pipeline` 去硬编码**
+- [x] **P1-1 · 适配层 6 项经 registry 组链，`pipeline` 去硬编码**
   - 6 项：pull · resolve_sources · register · scan · partition_channels · persist。
   - 内容：`pipeline.run_pipeline` 改为读 `StageRegistry` 顺序组链，删除 1282–1372 硬编码；适配层封装 DB/项目状态/双通道拆分，逻辑下沉能力层。
   - 产出：解耦后的 `pipeline.py` + 适配层模块。
@@ -51,7 +51,7 @@
   - 依赖：P0-3。
   - 收尾：commit 267b039 一并修复 `service/app.py` 4 端点 webhook 幂等（dedupe 条件 `in (PENDING,RUNNING)` → `!= CANCELLED`），消除 `test_webhook_idempotent_for_same_event` 偶发「首任务完成到 SUCCESS 后重放又建新任务」的 flaky。
 
-- [ ] **P1-2 · 对话代理（Dialogue Agent）外壳**
+- [x] **P1-2 · 对话代理（Dialogue Agent）外壳**
   - 内容：适配层新增 NL 意图解析 → 阶段/端点映射（复用 `engine/expert/llm` 经 `chat_with_fallback`）。
   - 路由："测试这个URL"→`POST /api/v1/generate(+url)`；"用 X 重新生成"→注入 `EXPERT_MODEL` 后 generate；"执行并对比结果"→`/execute`→`POST /api/v1/compare`；"列出失败用例"→`GET /api/v1/tasks/{id}`。
   - 诚实降级：LLM 解析失败 → 回退关键字路由；比对失败 → 回退规则判定。
