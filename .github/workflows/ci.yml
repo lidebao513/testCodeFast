@@ -1,0 +1,61 @@
+# ============================================================================
+# testCodeFast 远程质量门禁（八环门禁）
+# ----------------------------------------------------------------------------
+# 触发：push 到 main / dev/modularization，以及向 main 提 PR 时。
+# 目的：在 GitHub runner 上强制跑两套本地门禁，弥补「仅靠本地 pre-commit」
+#       的治理缺口（无远程 CI 强制 / 无远程密钥扫描）。
+# 两个子项目各自独立 job，互不阻塞：
+#   - testgen-service：八环门禁（secret/lint/format/enum/structure/mypy/bandit/pytest）
+#   - test-accel：七环门禁（secret/ruff/mypy/bandit/枚举/架构/pytest）
+# 注：本机未安装 gh，分支保护需在 GitHub 网页设置（见仓库根 CONTRIBUTING.md）。
+# ============================================================================
+name: Quality Gate
+
+on:
+  push:
+    branches: [main, dev/modularization]
+  pull_request:
+    branches: [main]
+
+jobs:
+  testgen-service:
+    name: testgen-service 八环门禁
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: work/testgen-service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install deps + quality tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install fastapi uvicorn python-dotenv openai httpx requests PyYAML
+          pip install ruff mypy bandit pytest pytest-cov pytest-timeout
+      - name: Run eight-gate
+        # gate_all.py 自行解析 ruff/mypy/bandit（PATH 优先），pytest 用当前 python。
+        # 默认排除 live_llm 标记用例（依赖真实外部服务，CI 网络不稳时跳过）。
+        run: python scripts/gate_all.py
+
+  test-accel:
+    name: test-accel 质量门禁
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: work/test-accel
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install deps + quality tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install fastapi uvicorn python-dotenv openai httpx requests playwright
+          pip install ruff mypy bandit pytest pytest-cov
+      - name: Install Playwright browser
+        run: playwright install --with-deps chromium
+      - name: Run gate
+        run: python scripts/gate_all.py
