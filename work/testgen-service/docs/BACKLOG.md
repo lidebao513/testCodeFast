@@ -12,7 +12,7 @@
 - [x] **P0-2 test-accel 工程治理**：远程 CI（`.github/workflows/ci.yml`，分别跑 testgen-service 八环 + test-accel 七环，含 secret scan）+ PR 模板 + `CONTRIBUTING.md`（提交 `76bb1f7`，已推 origin）。
 - [x] **P0-1 仓库侧解耦**：`tokens.json` 取消跟踪 + `.gitignore` 屏蔽（提交 `14a81c6`）。源系统凭据轮换走**方案 A**（用户在 ft.cntaiping.com 后台作废重发），git 历史不重写。
 - [x] **P2-8 live_llm 测试隔离**：`tests/test_a2_runtime_cases.py` 3 个真实 LLM 用例已打 `@pytest.mark.live_llm`，门禁 `-m "not live_llm"` 默认跳过，不会拖垮门禁。
-- [x] **P2-14 文档归位**：两份中文文档移入 `docs/`。
+- [x] **P2-14 文档归位（修正）**：将根目录游离的 `全链路未完成任务审计.md` 移入 `docs/`（提交 `19a5fdf`）。注：原清单称「两份中文文档」，其中第二份 `需求拆解_辅助AI问答_全链路接入LLM能力.md` 经核实**并不存在于磁盘**（此前为 mojibake 误读为 `测试专家系统_两通道异构_全环节LLM方案.md`，该文件一直位于根目录）。其余根目录 `.md`（约 12 个设计/方案类文档）保留原位，是否整体归位见 P2-20。
 
 ---
 
@@ -37,6 +37,7 @@
 | P2-11 | 散脚本清理 / 迁移 | `diagnose_login.py`/`diagnose_menu.py`/`merge_scenarios.py`/`run_scenario.py`/`run_ui_only_execute.py` → 迁入 `scripts/` 或删除（你曾表示先不删，保留） | ⬜ |
 | P2-12 | 测试产物归档 / 清理 | `output/reports/8/8/*`、`output/screenshots/8/*`（含真实失败 `TP-6cd14168` 截图，可保留作缺陷证据）；保留待确认 | ⬜ |
 | P2-13 | 创建 `dev/modularization` 的 GitHub PR | 本机无 `gh`，需网页手动建或先装 `gh` | ⬜ |
+| P2-20 | 根目录 `.md` 整体归位 `docs/`：根目录散落约 12 个设计/方案类 `.md`（含 `测试专家系统_两通道异构_全环节LLM方案.md`），统一迁入 `docs/` 改善仓库结构（需你确认范围，非紧急） | ⬜ |
 
 ---
 
