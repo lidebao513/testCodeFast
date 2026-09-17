@@ -63,15 +63,15 @@
 
 ## P2 · 跨项目复用包（八环全绿为门槛）
 
-- [ ] **P2-1 · 能力层抽独立可 `pip install` 包**
+- [x] **P2-1 · 能力层抽独立可 `pip install` 包**
   - 内容：抽 `engine/comparator` + 能力层为轻量包，不依赖 testgen 存储（`projects/cases/runs` 表）；跨项目调用方自带存储后端（依赖注入）。
   - 红线：能力层不读 testgen 的 `projects/cases/runs` 表。
   - 产出：独立包骨架 + `pyproject` + 导入示例。
   - 验收：八环全绿（包内自测）；`git check-ignore` 验证密钥不入仓。
   - 依赖：P1-1。
 
-- [ ] **P2-2 · 跨项目调用示例（aiSitePilot）**
-  - 内容：aiSitePilot 经 `POST /api/v1/compare` + `/api/v1/extract` 调用 testgen 能力层；出一篇「跨项目调用 README」。
+- [x] **P2-2 · 跨项目调用示例（aiSitePilot）**
+  - 内容：aiSitePilot 经 `POST /api/v1/compare` + `/api/v1/analyze` 调用 testgen 能力层；出一篇「跨项目调用 README」。
   - 产出：示例脚本 + README。
   - 验收：示例跑通（隔离网络环境，mock 或本地 testgen 服务）；文档评审通过。
   - 依赖：P0-2、P2-1。
