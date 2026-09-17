@@ -18,6 +18,8 @@ __pycache__/
 *.env
 *.pem
 *.key
+# 业务 token 存储：原误入库，现解耦为仅留本机（含 ft.cntaiping.com 凭据）
+work/research-agent-test/full_run/tokens.json
 
 # ========== 运行时数据（数据库 / 日志 / 报告产物）==========
 *.db
