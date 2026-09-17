@@ -32,6 +32,12 @@ from core.errors import AppError, NotFoundError, UnauthorizedError, ValidationEr
 from core.log import get_logger, log_extra, set_request_id
 from engine import pipeline
 from engine import report as report_engine
+from engine.comparator import (
+    ComparatorOptions,
+    CompareInput,
+    compare_batch,
+    compare_one,
+)
 from output.report_writer import ReportExportError, export_report, render_html, render_markdown
 from output.writer import OutputWriter
 from service.tasks import BackgroundExecutor, GenerationTask, TaskState, TaskStore, stage_fraction
@@ -165,6 +171,30 @@ class ParseInputRequest(BaseModel):
     """统一智能输入框解析请求（只解析、不跑流水线）。"""
 
     text: str = Field("", description="混排文本：地址 / 账号 / 密码 / 动态口令 / 代码路径")
+
+
+class CompareRequest(BaseModel):
+    """语义比对请求（P0-2）：输入「预期(case) + 实际(actual)」输出比对结论。
+
+    不落库、不写文件、不触执行动作；复用 comparator 模块（规则为主·LLM 增强）。
+    本端点入参**不含任何凭证字段**——纯粹的预期/实际文本，安全红线天然满足。
+    """
+
+    case: dict = Field(
+        default_factory=dict,
+        description="预期侧：CaseSpec 子集（id/title/steps[].expect/dimension/severity）",
+    )
+    actual: dict = Field(
+        default_factory=dict,
+        description="实际侧：ExecutionResult.to_dict()（status/notes/error/step_results）",
+    )
+    context: dict = Field(
+        default_factory=dict, description="可选覆盖（model/language/project_id 等）"
+    )
+    items: list[dict] = Field(
+        default_factory=list,
+        description="批量模式：省略顶层 case/actual 时，按 [{case,actual,context}] 逐条比对",
+    )
 
 
 class ExecuteRequest(BaseModel):
@@ -599,6 +629,33 @@ def parse_input(req: ParseInputRequest) -> dict[str, Any]:
         "recognized": parsed.recognized_fields(),
         "parsed": parsed.redacted(),
     }
+
+
+@app.post("/api/v1/compare", dependencies=[Depends(require_auth)])
+def compare(req: CompareRequest) -> dict[str, Any]:
+    """语义比对（P0-2）：给定「预期 + 实际」输出 LLM 增强比对结论。
+
+    - 纯计算端点：不落库、不写文件、不触执行动作；与 `/api/v1/generate` 生成-only 红线隔离；
+    - 复用 comparator 模块（规则为主·LLM 增强）：未配置 LLM 时仅规则判定，
+      LLM 失败/超时/非 JSON → 诚实降级 `inconclusive`，**绝不假装通过**；
+    - 安全红线：入参不含任何凭证字段；comparator 已对 reason/diff 中敏感值掩码；
+      不回显、不落库、不入产物、不写日志明文。
+    """
+    opts = ComparatorOptions.from_settings()
+    if req.items:
+        inputs = [
+            CompareInput(
+                case=it.get("case") or {},
+                actual=it.get("actual") or {},
+                context=it.get("context") or {},
+            )
+            for it in req.items
+        ]
+        verdicts = compare_batch(inputs, opts)
+        return {"verdicts": [v.to_dict() for v in verdicts], "count": len(verdicts)}
+    inp = CompareInput(case=req.case, actual=req.actual, context=req.context)
+    verdict = compare_one(inp, opts)
+    return {"verdict": verdict.to_dict()}
 
 
 class AnalyzeRequest(BaseModel):

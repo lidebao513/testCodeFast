@@ -173,6 +173,7 @@ def _build_parser() -> argparse.ArgumentParser:
     _add_pipeline_partners(sub)
     _add_execute_parser(sub)
     _add_tenant_retest_parser(sub)
+    _add_compare_parser(sub)
     return p
 
 
@@ -226,6 +227,37 @@ def _add_tenant_retest_parser(sub: Any) -> None:
         "--out",
         default="",
         help="结论落盘目录（可选）；不填则只打印 JSON 到 stdout",
+    )
+
+
+def _add_compare_parser(sub: Any) -> None:
+    """`compare` 子命令（P0-2）：语义比对「预期(case) + 实际(actual)」→ 比对结论。"""
+    cp = sub.add_parser("compare", help="语义比对：预期 + 实际 → 比对结论（规则为主·LLM 增强）")
+    cp.add_argument(
+        "--project",
+        type=int,
+        default=0,
+        help="项目 ID（从库取 case；与 --json-in 二选一）",
+    )
+    cp.add_argument(
+        "--case-id",
+        default="",
+        help="用例 ID（从库取预期；--project 给定时必填）",
+    )
+    cp.add_argument(
+        "--actual",
+        default="",
+        help="实际执行结果 JSON（ExecutionResult.to_dict()）；@文件 从文件读",
+    )
+    cp.add_argument(
+        "--json-in",
+        default="",
+        help="直接读完整比对输入 JSON 文件：{case, actual, context}（绕过库查询）",
+    )
+    cp.add_argument(
+        "--no-llm",
+        action="store_true",
+        help="强制规则-only 判定，不触 LLM（无网络 / 无凭据场景）",
     )
 
 
@@ -615,6 +647,50 @@ def _cmd_tenant_retest(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_compare(args: argparse.Namespace) -> int:
+    """语义比对（P0-2）：从库取 case 或读 JSON 文件，比对实际执行结果。
+
+    红线：不落库、不写文件、不触执行动作；凭证脱敏由 comparator 保证。
+    """
+    from engine.comparator import ComparatorOptions, CompareInput, compare_one
+
+    context: dict[str, Any] = {}
+    if args.json_in:
+        data = json.loads(Path(args.json_in).expanduser().read_text(encoding="utf-8"))
+        case = data.get("case") or {}
+        actual = data.get("actual") or {}
+        context = data.get("context") or {}
+    else:
+        if not args.project or not args.case_id:
+            print(
+                "[error] 缺少参数：需 --json-in，或同时给 --project 与 --case-id",
+                file=sys.stderr,
+            )
+            return 2
+        if not args.actual:
+            print("[error] 缺少 --actual（实际执行结果 JSON）", file=sys.stderr)
+            return 2
+        init_db()
+        rows = store.list_cases(args.project)
+        matched = [r for r in rows if str(r.get("id")) == str(args.case_id)]
+        if not matched:
+            print(
+                f"[error] 项目 {args.project} 未找到用例 {args.case_id}",
+                file=sys.stderr,
+            )
+            return 2
+        case = matched[0]
+        actual = json.loads(_read_text(args.actual))
+
+    opts = ComparatorOptions.from_settings()
+    if args.no_llm:
+        opts = ComparatorOptions(enabled=False)
+    inp = CompareInput(case=case, actual=actual, context=context)
+    verdict = compare_one(inp, opts)
+    print(json.dumps({"verdict": verdict.to_dict()}, ensure_ascii=False, indent=2))
+    return 0
+
+
 # 子命令 → 处理函数（表驱动：新增子命令只加一行，避免 main() 里堆 return 分支）
 _COMMANDS: dict[str, Callable[[argparse.Namespace], int]] = {
     "pipeline": _cmd_pipeline,
@@ -626,6 +702,7 @@ _COMMANDS: dict[str, Callable[[argparse.Namespace], int]] = {
     "execute": _cmd_execute,
     "serve": _cmd_serve,
     "tenant-retest": _cmd_tenant_retest,
+    "compare": _cmd_compare,
 }
 
 

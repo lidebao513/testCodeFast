@@ -89,7 +89,7 @@ def chat_with_fallback(
     channel: str,
     api_key: str,
     base_url: str,
-    timeout: int,
+    timeout: float,
     model: str,
     model_chain: list[str] | None,
     messages: list[dict[str, Any]],
