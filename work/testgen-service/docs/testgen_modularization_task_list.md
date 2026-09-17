@@ -49,6 +49,7 @@
   - 产出：解耦后的 `pipeline.py` + 适配层模块。
   - 验收：八环全绿；双通道（code/url）端到端用例无回归；`channels_summary.json` 仍正确产出。
   - 依赖：P0-3。
+  - 收尾：commit 267b039 一并修复 `service/app.py` 4 端点 webhook 幂等（dedupe 条件 `in (PENDING,RUNNING)` → `!= CANCELLED`），消除 `test_webhook_idempotent_for_same_event` 偶发「首任务完成到 SUCCESS 后重放又建新任务」的 flaky。
 
 - [ ] **P1-2 · 对话代理（Dialogue Agent）外壳**
   - 内容：适配层新增 NL 意图解析 → 阶段/端点映射（复用 `engine/expert/llm` 经 `chat_with_fallback`）。
