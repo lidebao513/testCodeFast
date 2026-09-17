@@ -80,10 +80,15 @@
 
 ## 收尾 Checkpoint（合并前必做）
 
-- [ ] **C1 · `dev` 端到端验证**：在 `dev/modularization` 跑通「生成 → 执行 → comparator 比对 → 对话代理」全链路；八环全绿。
-- [ ] **C2 · `main` 不受影响验证**：`git checkout main` 仍可独立 `cli.main pipeline --url …` 跑通，核心 `engine/cli/service` 干净。
-- [ ] **C3 · 合并**：`dev` 验证通过后 `git checkout main && git merge dev/modularization`；散脚本（`diagnose_*.py`/`run_*.py`）按需迁入 `scripts/` 或清理。
-- [ ] **C4 · 密钥复核**：提交前 `git diff --cached --name-only | grep -iE "\.env$|venv/|\.db$"` 复核无敏感残留。
+- [x] **C1 · `dev` 端到端验证**：在 `dev/modularization` 跑通「生成 → 执行 → comparator 比对 → 对话代理」全链路；八环全绿。
+  - 验收：`scripts/gate_all.py` 八环全绿（secret/lint/format/enum/structure/mypy/bandit/pytest，cov=83.88%）；`cli.main chat --show-template` 与 `cli.main --help` 冒烟通过，对话代理/comparator/生成链路接通。
+- [x] **C2 · `main` 不受影响验证**：`git checkout main` 仍可独立 `cli.main pipeline --url …` 跑通，核心 `engine/cli/service` 干净。
+  - 验收：用独立 worktree 检出 `main`（85e20cf），`import service.app/cli.main/engine.pipeline/core.contracts` 全绿、`cli.main --help` 正常、pytest collect-only 全绿；`main..dev` 为空（模块化改动零反向泄漏）。
+- [x] **C3 · 合并**：`dev` 验证通过后 `git checkout main && git merge dev/modularization`；散脚本（`diagnose_*.py`/`run_*.py`）按需迁入 `scripts/` 或清理。
+  - 验收：`git merge --ff-only dev/modularization` → main 推进至 `8d58c4d`（fast-forward，无冲突）。散脚本为 dev 工作树未跟踪调试脚本（runtime_ui 联调遗留），未纳入本次合并，留待单独清理/迁移。
+- [x] **C4 · 密钥复核**：提交前 `git diff --cached --name-only | grep -iE "\.env$|venv/|\.db$"` 复核无敏感残留。
+  - 验收：`git diff --name-only main dev` 全量文件列表无 `.env`/`venv`/`.db`/密钥类文件；`scripts/check_secrets.py` 全仓扫描「未发现问题凭据 ✅」。
+  - ⚠️ 遗留提示（非本次引入）：`work/research-agent-test/full_run/tokens.json` 为**已跟踪**文件且本地有修改，含 ft.cntaiping.com 业务 token，未被本次合并纳入（不在 diff 内）；建议后续 `git rm --cached` + 加入 `.gitignore` + 轮换凭据，与本模块化任务解耦处理。
 
 ---
 
