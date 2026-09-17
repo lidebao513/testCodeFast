@@ -459,7 +459,7 @@ def submit_generate(req: PipelineRequest) -> JSONResponse:
     opts.target_req.execute = False  # 双保险：强制生成-only，绝不落入 stage_execute
     idem = _idem_key_for_generate(req)
     existing = task_store.find_by_idempotency(idem)
-    if existing and existing.state in (TaskState.PENDING.value, TaskState.RUNNING.value):
+    if existing and existing.state != TaskState.CANCELLED.value:
         return _task_accepted(existing, status_code=202)
     task = task_store.create(kind="generate", idempotency_key=idem, request=_redacted_request(req))
     executor.submit(task.task_id, lambda: _run_generation_job(task.task_id, opts))
@@ -481,7 +481,7 @@ def submit_execute(req: ExecuteRequest) -> JSONResponse:
         opts = _build_exec_opts_from_request(req)
         idem = "exec:" + str(req.project_id)
         existing = task_store.find_by_idempotency(idem)
-        if existing and existing.state in (TaskState.PENDING.value, TaskState.RUNNING.value):
+        if existing and existing.state != TaskState.CANCELLED.value:
             return _task_accepted(existing, status_code=202)
         task = task_store.create(
             kind="execute",
@@ -511,7 +511,7 @@ def submit_execute(req: ExecuteRequest) -> JSONResponse:
         ]
     )
     existing = task_store.find_by_idempotency(idem)
-    if existing and existing.state in (TaskState.PENDING.value, TaskState.RUNNING.value):
+    if existing and existing.state != TaskState.CANCELLED.value:
         return _task_accepted(existing, status_code=202)
     task = task_store.create(kind="execute", idempotency_key=idem, request=_redacted_request(pr))
     executor.submit(
@@ -578,7 +578,7 @@ def verify_webhook(req: WebhookRequest) -> JSONResponse:
         ]
     )
     existing = task_store.find_by_idempotency(idem)
-    if existing and existing.state in (TaskState.PENDING.value, TaskState.RUNNING.value):
+    if existing and existing.state != TaskState.CANCELLED.value:
         return _task_accepted(existing, status_code=202)
     opts = pipeline.default_options(req.local_path or "", mode=req.mode or MODE_FULL)
     if req.repo_url:

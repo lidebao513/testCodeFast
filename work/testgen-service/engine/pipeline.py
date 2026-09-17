@@ -62,7 +62,7 @@ from engine.expert.page_expert import (
     PageExpertOptions,
     expert_to_test_point,
 )
-from engine.scan import SourceFile
+from engine.stage_registry import REGISTRY, Stage, StageKind  # P1-1：registry 组链驱动
 from output import channel_writer  # 需求1：把「代码通道 / 地址通道」各自产出的用例分别落盘独立记录
 
 
@@ -176,6 +176,13 @@ class PipelineResult:
     )  # {"code": {...}, "url": {...}, "source_kind": ...}
     # 测试专家系统：本次运行专家(URL/PageExpert)贡献摘要（供报告/CLI 输出，#274）
     expert_summary: dict[str, Any] = field(default_factory=dict)
+    # P1-1：共享编排上下文（中间产物），供各 stage 经统一签名 (opts, result, progress) 读写
+    files: Any = None  # 扫描结果 dict[str, SourceFile]（仅代码通道）
+    auth_profile: Any = None  # F8 鉴权接线画像
+    tag_by_fp: dict[str, str] = field(default_factory=dict)  # 差异打标结果
+    runtime_options: Any = None  # 运行时 UI 选项
+    has_code: bool = False  # 是否有代码目录入口
+    runtime_enabled: bool = False  # 是否启用运行时 UI 发现
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -298,7 +305,9 @@ def _default_project_name(opts: PipelineOptions) -> str:
     return host or "url-target"
 
 
-def stage_register(opts: PipelineOptions, result: PipelineResult) -> None:
+def stage_register(
+    opts: PipelineOptions, result: PipelineResult, progress: ProgressFn | None = None
+) -> None:
     if opts.persist:
         init_db()
         name = opts.project_name or _default_project_name(opts)
@@ -311,14 +320,15 @@ def stage_register(opts: PipelineOptions, result: PipelineResult) -> None:
 # ============================================================================
 # 阶段 1：扫描
 # ============================================================================
-def stage_scan(
-    opts: PipelineOptions, result: PipelineResult, progress: ProgressFn | None
-) -> dict[str, SourceFile]:
+def stage_scan(opts: PipelineOptions, result: PipelineResult, progress: ProgressFn | None) -> None:
+    if not result.has_code:
+        result.counts["files"] = 0
+        return
     _emit(progress, "scan", path=opts.local_path)
     files = scan.Scanner(opts.local_path).index()
+    result.files = files
     result.counts["files"] = len(files)
     log.info("扫描完成", extra=log_extra(files=len(files)))
-    return files
 
 
 # ============================================================================
@@ -327,9 +337,13 @@ def stage_scan(
 def stage_extract(
     opts: PipelineOptions,
     result: PipelineResult,
-    files: dict[str, SourceFile],
     progress: ProgressFn | None,
-) -> list[FunctionalPoint]:
+) -> None:
+    if not result.has_code:
+        result.counts["functional_points"] = len(result.functional_points)
+        result.notes.append("未提供被测代码目录：本次只走「测试地址 + 账号密码」通道")
+        return
+    files = result.files or {}
     _emit(progress, "fp_extract", files=len(files))
     cfg = get_settings()
     extracted = fp_extract.extract_functional_points(
@@ -360,7 +374,7 @@ def stage_extract(
         )
     result.counts["functional_points"] = len(fps)
     result.errors.extend(extracted.errors[:20])
-    return fps
+    result.functional_points = fps
 
 
 # ============================================================================
@@ -421,9 +435,8 @@ def _build_diff_context(opts: PipelineOptions) -> tuple[diff_tag.DiffContext, li
 def stage_tag(
     opts: PipelineOptions,
     result: PipelineResult,
-    fps: list[FunctionalPoint],
     progress: ProgressFn | None,
-) -> tuple[diff_tag.DiffContext, dict[str, str]]:
+) -> None:
     """差异打标：静态来源走 `git diff` 命中判定，运行时来源（F4）走显式分支。
 
     F4：`runtime:<url>` 功能点不对应任何 commit，**必须另路处理**。
@@ -431,6 +444,7 @@ def stage_tag(
     永远 miss → 静默全标「全量」。结果虽与应然一致，但使用者无法从产物看出
     「这些功能点为什么没被增量打标」。现在改为显式计数 + 备注。
     """
+    fps = result.functional_points
     _emit(progress, "diff_tag", mode=opts.mode)
     ctx, notes = _build_diff_context(opts)
     result.notes.extend(notes)
@@ -449,7 +463,7 @@ def stage_tag(
             f"运行时（地址通道）功能点 {url_sourced} 条：无版本概念，"
             "增量通道对它们不做 diff，一律标『全量』（如需增量请以代码通道为准）"
         )
-    return ctx, tag_by_fp
+    result.tag_by_fp = tag_by_fp
 
 
 # ============================================================================
@@ -458,9 +472,8 @@ def stage_tag(
 def stage_auth_scan(
     opts: PipelineOptions,
     result: PipelineResult,
-    files: dict[str, SourceFile],
     progress: ProgressFn | None,
-) -> auth_scan.AuthProfile | None:
+) -> None:
     """F8：扫源码得到鉴权接线画像，供测试点展开与用例生成共用。
 
     **没有代码时返回 `None`**（而不是一个「什么都没扫到」的空画像）：
@@ -468,20 +481,21 @@ def stage_auth_scan(
     「代码里没有鉴权接线」，进而把所有安全用例判成「公开接口可访问」——
     那是比不判定更危险的假结论。返回 `None` 时下游退回 v1.0 的保守口径（按需鉴权）。
     """
+    files = result.files or {}
     _emit(progress, "auth_scan", files=len(files))
     if not files:
         result.notes.append(
             "未提供被测代码：跳过鉴权接线扫描（F8），安全用例退回保守口径（按需鉴权）"
         )
-        return None
+        return
     profile = auth_scan.scan_auth(files)
+    result.auth_profile = profile
     result.auth_scan = profile.to_dict()
     result.counts["auth_wired_files"] = len(profile.files_with_auth)
     result.notes.append(profile.summary_line())
     if profile.evidence:
         # 证据只留前若干条（`AuthProfile.evidence` 已按类限量），供人工复核
         result.notes.append("鉴权接证据（示例）：" + "；".join(profile.evidence[:3]))
-    return profile
 
 
 def build_expand_context(
@@ -501,18 +515,19 @@ def build_expand_context(
 
 
 def stage_test_points(
+    opts: PipelineOptions,
     result: PipelineResult,
-    ctx: tp_expand.ExpandContext,
-    fps: list[FunctionalPoint],
-    tag_by_fp: dict[str, str],
     progress: ProgressFn | None,
-) -> list[TestPoint]:
+) -> None:
+    ctx = build_expand_context(opts, result.auth_profile)
+    fps = result.functional_points
+    tag_by_fp = result.tag_by_fp or {}
     _emit(progress, "tp_expand", fp=len(fps))
     tps = tp_expand.expand_all(fps, ctx, tag_by_fp=tag_by_fp)
+    result.test_points = tps
     result.counts["test_points"] = len(tps)
     result.scope_summary = tp_expand.scope_summary(tps)
     result.tag_summary = _count_by(tps, lambda t: t.tag)
-    return tps
 
 
 # ============================================================================
@@ -521,18 +536,18 @@ def stage_test_points(
 def stage_enrich(
     opts: PipelineOptions,
     result: PipelineResult,
-    tps: list[TestPoint],
-    fps: list[FunctionalPoint],
     progress: ProgressFn | None,
-) -> list[TestPoint]:
+) -> None:
+    tps = result.test_points
+    fps = result.functional_points
     _emit(progress, "semantic_enrich", enabled=opts.llm.enabled)
     enriched = semantic_enrich.enrich(tps, fps, opts.llm)
+    result.test_points = enriched.test_points
     result.counts["test_points"] = len(enriched.test_points)
     result.counts["llm_added"] = len(enriched.added)
     result.counts["llm_rejected"] = len(enriched.rejected)
     result.notes.extend(enriched.notes)
     result.scope_summary = tp_expand.scope_summary(enriched.test_points)
-    return enriched.test_points
 
 
 # ============================================================================
@@ -542,23 +557,20 @@ def stage_prd_ingest(
     opts: PipelineOptions,
     result: PipelineResult,
     progress: ProgressFn | None,
-) -> Any | None:
-    """P2：解析 PRD / OpenAPI 为结构化需求（真实实现），返回 PrdDoc。"""
+) -> None:
+    """P2：解析 PRD / OpenAPI 为结构化需求（真实实现）并并入主链路测试点。
+
+    仅在 `prd_enabled` 且给定 `prd_source` 时生效；未对齐到功能点的需求**不臆造**
+    测试点，只把提示记入 result.notes（见 prd_ingest）。
+    """
+    s = get_settings()
+    if not (s.prd_enabled and opts.prd_source):
+        return
     _emit(progress, "prd_ingest", source=opts.prd_source)
-    if not opts.prd_source:
-        return None
     doc = prd_ingest.ingest_prd(opts.prd_source)
     log.info("PRD 解析完成", extra=log_extra(fmt=doc.fmt, requirements=len(doc.requirements)))
-    return doc
-
-
-def _merge_prd_test_points(result: PipelineResult) -> None:
-    """把 PRD 需求派生的测试点并入主链路（仅在 PRD 通道启用时调用）。
-
-    未对齐到功能点的需求**不臆造**测试点，只把提示记入 result.notes（见 prd_ingest）。
-    """
-    if result.prd_doc is None:
-        return
+    result.prd_doc = doc
+    # 并入主链路
     prd_tps = prd_ingest.requirements_to_test_points(result.prd_doc, result.functional_points)
     result.notes.extend(result.prd_doc.notes)
     if not prd_tps:
@@ -759,7 +771,7 @@ def stage_llm_design(
     opts: PipelineOptions,
     result: PipelineResult,
     progress: ProgressFn | None,
-) -> list[CaseSpec]:
+) -> None:
     """P2 接入点：基于功能点 + 测试点 + PRD 上下文设计补充用例（F10b 已实现）。
 
     护栏 B（不静默）：开关已开但未产出任何新增用例（候选全被护栏拒绝 / LLM 返回空 /
@@ -767,6 +779,8 @@ def stage_llm_design(
     杜绝 F10a 发现的「配了以为生效」静默陷阱。LLM 不可用或开关关闭时由 design_cases
     内部降级为规则产物，并在 notes 记录原因，不中断主链路。
     """
+    if not get_settings().llm_design_enabled:
+        return
     _emit(progress, "llm_design", enabled=True)
     design_opts = _design_options(get_settings())
     designed = llm_design.design_cases(
@@ -777,14 +791,14 @@ def stage_llm_design(
     if designed.rejected:
         result.notes.append(f"LLM 设计拒绝 {len(designed.rejected)} 条臆造/无效候选")
     if designed.added:
-        return [*result.cases, *designed.added]
+        result.cases = [*result.cases, *designed.added]
+        return
     # 护栏 B：开关已开但未新增任何用例 → 如实上报，绝不静默
     if design_opts.enabled:
         result.errors.append(
             "LLM 用例设计已开启但未新增任何 LLM 用例（候选全被护栏拒绝或 LLM 返回空）；"
             f"用例集仍为规则模板产物（{len(result.cases)} 条）"
         )
-    return result.cases
 
 
 # ============================================================================
@@ -826,32 +840,54 @@ def stage_runtime_ui(
     opts: PipelineOptions,
     result: PipelineResult,
     progress: ProgressFn | None,
-    runtime_options: runtime_ui.RuntimeUiOptions,
-) -> Any | None:
-    """P3：运行时浏览器 UI 发现（真实实现，里程碑 M3.1–M3.3）。
+) -> None:
+    """P3：运行时浏览器 UI 发现（真实实现，里程碑 M3.1–M3.4）。
 
     用 Playwright 打开被测环境、以账号密码（+ 动态口令）登录、遍历路由抓取真实可交互元素，
-    结果挂到 `result.runtime_ui` 并计入 counts。
-
-    **本阶段只负责「发现」**：把发现的 UI 功能点并入功能点集合并参与测试点展开属 M3.4，
-    用例正文富化属 A2，requests 降级属 M3.5。
+    结果挂到 `result.runtime_ui` 并计入 counts；并把发现的 UI 功能点**并入功能点集合**
+    （M3.4 + F5，运行时优先），必须在 stage_tag 之前完成，否则运行时补入的页面不参与
+    测试点展开与用例生成。失败只记错误、不阻断主链路（设计 §10）。
     凭证经「请求级参数 / .env」注入，不落库、不入产物。
     """
+    if not result.runtime_enabled:
+        return
+    runtime_options = result.runtime_options
     _emit(progress, "runtime_ui", base_url=runtime_options.base_url)
     # 测试专家系统 · S0 治本：把专家反推的菜单文字并入遍历（治本 routes=0）。
     expert_opts = _expert_options(get_settings())
-    found = runtime_ui.discover_ui(
-        runtime_options,
-        static_paths=_static_page_paths(result.functional_points),
-        expert_options=expert_opts,
-    )
+    try:
+        found = runtime_ui.discover_ui(
+            runtime_options,
+            static_paths=_static_page_paths(result.functional_points),
+            expert_options=expert_opts,
+        )
+    except EngineError as exc:
+        result.errors.append(f"运行时 UI 发现失败：{exc.message}")
+        return
     result.runtime_ui = found
     result.notes.extend(f"运行时 UI：{n}" for n in found.notes)
     result.counts["runtime_ui_pages"] = len(found.pages)
     result.counts["runtime_ui_reachable"] = sum(1 for p in found.pages if p.reachable)
     result.counts["runtime_ui_elements"] = len(found.elements)
     result.counts["runtime_ui_routes"] = len(found.discovered_routes)
-    return found
+    # M3.4：发现成功后把 UI 功能点**并入静态功能点集合**——必须在 stage_tag 之前，
+    # 否则运行时补入的页面不参与测试点展开与用例生成。
+    merged, stats = _merge_runtime_fps(
+        result.functional_points, runtime_ui.to_functional_points(found)
+    )
+    result.functional_points = merged
+    result.counts["functional_points"] = len(merged)
+    result.counts["runtime_ui_fp_added"] = int(stats["added"])
+    result.counts["runtime_ui_fp_replaced"] = int(stats["replaced"])
+    result.counts["runtime_ui_fp_deduped"] = int(stats["deduped"])
+    result.notes.append(
+        f"运行时补入 {stats['added']} 条 UI 功能点"
+        f"（覆盖静态同名 {stats['replaced']} 条，语义收敛重复 {stats['deduped']} 条）"
+    )
+    examples = list(stats.get("examples") or [])
+    if examples:
+        result.notes.append("语义合并明细（示例）：" + "；".join(examples))
+    result.merge_conflicts = list(stats.get("conflicts", []) or [])
 
 
 def _merge_runtime_fps(
@@ -875,7 +911,9 @@ def _merge_runtime_fps(
 _RUNTIME_PREFIX = "runtime:"
 
 
-def _partition_channels(result: PipelineResult) -> None:
+def stage_partition_channels(
+    opts: PipelineOptions, result: PipelineResult, progress: ProgressFn | None = None
+) -> None:
     """按来源把合并后的产物拆回「代码通道 / 地址通道」两组（需求1：分别保存记录）。
 
     拆分依据（单一真值源）：功能点的 `file_path`——地址通道发现的项以 `runtime:` 前缀开头，
@@ -932,8 +970,7 @@ def stage_execute(
     opts: PipelineOptions,
     result: PipelineResult,
     progress: ProgressFn | None,
-    runtime_options: runtime_ui.RuntimeUiOptions,
-) -> dict[str, Any]:
+) -> None:
     """P3：执行已生成的用例（A3 接口层 + F13 UI 层均**真实执行**）。
 
     地址与凭证取「请求级 > 环境变量」同一套优先级：接口层执行用的是**被测服务地址**
@@ -948,6 +985,10 @@ def stage_execute(
     真正落库在 `stage_persist`——必须等用例对账完成、`cases` 行就位后才能回填 `last_result`，
     否则首次运行「无处可写」。执行基础设施失败（如未装 requests）也会留下 `failed` 批次，**不静默**。
     """
+    s = get_settings()
+    if not (s.executor_enabled or opts.target_req.execute):
+        return
+    runtime_options = result.runtime_options
     _emit(progress, "execute", cases=len(result.cases))
     result.run_batch_id = _new_batch_id()
     started = _now_iso()
@@ -960,9 +1001,9 @@ def stage_execute(
             result.run_batch_id, len(result.cases), started, exc.message
         )
         result.notes.append(f"执行批次 {result.run_batch_id} 标记为 failed：{exc.message}")
-        raise
+        result.errors.append(f"用例执行失败：{exc.message}")
+        return
     _finalize_execution(result, summary, started)
-    return summary
 
 
 def _build_exec_options(
@@ -1151,11 +1192,12 @@ def run_execution(
 # 阶段 6：用例生成
 # ============================================================================
 def stage_cases(
+    opts: PipelineOptions,
     result: PipelineResult,
-    tps: list[TestPoint],
     progress: ProgressFn | None,
-    auth_profile: auth_scan.AuthProfile | None = None,
-) -> list[CaseSpec]:
+) -> None:
+    tps = result.test_points
+    auth_profile = result.auth_profile
     _emit(progress, "case_gen", tp=len(tps))
     s = get_settings()
     # 已有 UI 覆盖的模块集合：用于判定接口层用例是否仅为「补充」
@@ -1186,11 +1228,11 @@ def stage_cases(
             c.tc_no,
         )
     )
+    result.cases = cases
     result.counts["cases"] = len(cases)
     bad = [c.tc_no for c in cases if c.missing_elements()]
     if bad:
         result.errors.append(f"{len(bad)} 条用例八要素不全（示例 {bad[:3]}）")
-    return cases
 
 
 # ============================================================================
@@ -1262,116 +1304,113 @@ def stage_persist(
 # ============================================================================
 # 主入口
 # ============================================================================
-def _resolve_sources(opts: PipelineOptions, settings: Any) -> tuple[bool, Any, bool]:
-    """判定本次运行用到哪条入口，返回 (是否有代码目录, 运行时选项, 是否启用运行时发现)。
+def stage_resolve_sources(
+    opts: PipelineOptions, result: PipelineResult, progress: ProgressFn | None = None
+) -> None:
+    """判定本次运行用到哪条入口，把结果写回 `result`（has_code / runtime_options / runtime_enabled / source_kind）。
 
     校验规则（宁快速失败，不空跑）：
     - 给了 `local_path` 但它不是目录 → 报错（不静默当作「没有代码」）；
     - 两条入口都没有 → 报错，并给出两个可执行的修法。
     """
+    s = get_settings()
     has_code = bool(opts.local_path) and Path(opts.local_path).is_dir()
     if opts.local_path and not has_code:
         raise EngineError(f"被测目录不存在：{Path(opts.local_path)}")
-    runtime_options, runtime_enabled = _runtime_target(opts, settings)
+    runtime_options, runtime_enabled = _runtime_target(opts, s)
     if not has_code and not runtime_enabled:
         raise EngineError(
             "缺少被测来源：请提供被测代码目录（--path / local_path），"
             "或提供被测地址并启用运行时 UI 发现（--url + --runtime-ui / RUNTIME_UI_ENABLED=on）"
         )
-    return has_code, runtime_options, runtime_enabled
+    result.has_code = has_code
+    result.runtime_options = runtime_options
+    result.runtime_enabled = runtime_enabled
+    result.source_kind = "+".join(
+        [k for k, on in (("code", has_code), ("url", runtime_enabled)) if on]
+    )
 
 
-def run_pipeline(  # noqa: PLR0915, C901 - 编排函数，阶段多为合理；通道拆分仅其中一步
+# ============================================================================
+# P1-1：registry 组链驱动（去硬编码）
+# ============================================================================
+# 所有 stage_* 编排包装函数统一为 (opts, result, progress) 签名，并在模块加载时回注
+# REGISTRY：适配层 6 项由 planned 占位填充为真实实现；能力层 11 项 fn 由「原始纯函数」
+# 覆盖为「编排包装」。run_pipeline 因此退化为单一事实源驱动的纯顺序链。
+_P1_STAGE_WIRING: tuple[tuple[str, StageKind, Callable[..., Any]], ...] = (
+    ("pull", StageKind.ADAPTATION, stage_pull),
+    ("resolve_sources", StageKind.ADAPTATION, stage_resolve_sources),
+    ("register", StageKind.ADAPTATION, stage_register),
+    ("scan", StageKind.ADAPTATION, stage_scan),
+    ("auth_scan", StageKind.CAPABILITY, stage_auth_scan),
+    ("extract", StageKind.CAPABILITY, stage_extract),
+    ("runtime_ui", StageKind.CAPABILITY, stage_runtime_ui),
+    ("tag", StageKind.CAPABILITY, stage_tag),
+    ("tp_expand", StageKind.CAPABILITY, stage_test_points),
+    ("semantic_enrich", StageKind.CAPABILITY, stage_enrich),
+    ("expert_review", StageKind.CAPABILITY, stage_expert_review),
+    ("prd_ingest", StageKind.CAPABILITY, stage_prd_ingest),
+    ("case_gen", StageKind.CAPABILITY, stage_cases),
+    ("llm_design", StageKind.CAPABILITY, stage_llm_design),
+    ("execute", StageKind.ADAPTATION, stage_execute),
+    ("partition_channels", StageKind.ADAPTATION, stage_partition_channels),
+    ("persist", StageKind.ADAPTATION, stage_persist),
+)
+
+
+def _wire_stages_to_registry() -> None:
+    """把本模块 stage_* 编排包装回注 REGISTRY（P1-1 去硬编码的前置条件）。"""
+    for _name, _kind, _fn in _P1_STAGE_WIRING:
+        if REGISTRY.contains(_name):
+            _st = REGISTRY.get(_name)
+            _st.fn = _fn
+            _st.kind = _kind
+            _st.planned = False
+        else:
+            REGISTRY.register(Stage(name=_name, kind=_kind, fn=_fn, planned=False))
+
+
+_wire_stages_to_registry()
+
+# 流水线顺序（保持原编排语义）：
+# resolve_sources 在 pull 后；runtime_ui 在 extract 后、tag 前（M3.4 并入须在打标前）；
+# execute 在 cases 后、persist 前；partition_channels 在 persist 前。
+PIPELINE_STAGE_ORDER: tuple[str, ...] = (
+    "pull",
+    "resolve_sources",
+    "register",
+    "scan",
+    "auth_scan",
+    "extract",
+    "runtime_ui",
+    "tag",
+    "tp_expand",
+    "semantic_enrich",
+    "expert_review",
+    "prd_ingest",
+    "case_gen",
+    "llm_design",
+    "execute",
+    "partition_channels",
+    "persist",
+)
+
+
+def run_pipeline(
     opts: PipelineOptions,
     *,
     progress: ProgressFn | None = None,
 ) -> PipelineResult:
     """执行完整流水线（代码通道 / 地址通道 / 两者并用）。
 
-    阶段顺序（F1 起头）：
+    阶段顺序（经 REGISTRY 组链驱动，P1-1 去硬编码）：
       取码 → 来源解析 → 项目注册 → 扫描 → 鉴权扫描 → 功能点提取 → （运行时 UI 发现）
-      → 差异打标 → 测试点展开 → 语义增强 → （PRD）→ 用例生成 → （LLM 设计）
-      → （用例执行）→ 落库
+      → 差异打标 → 测试点展开 → 语义增强 → （专家审查）→ （PRD）→ 用例生成
+      → （LLM 设计）→ （用例执行）→ 通道拆分 → 落库
     """
-    s = get_settings()
     result = PipelineResult(mode=opts.mode)
-    # F1：取码（仅在给了 --repo-url 时执行）。必须在来源解析之前——取码成功会回填
-    # `opts.local_path`，否则「只给仓库地址」的用法会在 `_resolve_sources` 处报「缺少被测来源」。
-    stage_pull(opts, result, progress)
-    has_code, runtime_options, runtime_enabled = _resolve_sources(opts, s)
-
-    result.source_kind = "+".join(
-        [k for k, on in (("code", has_code), ("url", runtime_enabled)) if on]
-    )
-    stage_register(opts, result)
-    files: dict[str, SourceFile] = {}
-    auth_profile: auth_scan.AuthProfile | None = None
-    if has_code:
-        files = stage_scan(opts, result, progress)
-        # F8：鉴权接线扫描（供测试点期望与用例/执行判定共用同一份事实）
-        auth_profile = stage_auth_scan(opts, result, files, progress)
-        result.functional_points = stage_extract(opts, result, files, progress)
-    else:
-        result.counts["files"] = 0
-        result.counts["functional_points"] = 0
-        result.notes.append("未提供被测代码目录：本次只走「测试地址 + 账号密码」通道")
-    # P3：运行时 UI 发现（默认关闭）。失败只记错误、不阻断主链路（设计 §10）。
-    # M3.4：发现成功后把 UI 功能点**并入静态功能点集合**——必须在 stage_tag 之前，
-    # 否则运行时补入的页面不参与测试点展开与用例生成。
-    if runtime_enabled:
-        try:
-            found = stage_runtime_ui(opts, result, progress, runtime_options)
-        except EngineError as exc:
-            found = None
-            result.errors.append(f"运行时 UI 发现失败：{exc.message}")
-        if found is not None:
-            merged, stats = _merge_runtime_fps(
-                result.functional_points, runtime_ui.to_functional_points(found)
-            )
-            result.functional_points = merged
-            result.counts["functional_points"] = len(merged)
-            result.counts["runtime_ui_fp_added"] = int(stats["added"])
-            result.counts["runtime_ui_fp_replaced"] = int(stats["replaced"])
-            result.counts["runtime_ui_fp_deduped"] = int(stats["deduped"])
-            result.notes.append(
-                f"运行时补入 {stats['added']} 条 UI 功能点"
-                f"（覆盖静态同名 {stats['replaced']} 条，语义收敛重复 {stats['deduped']} 条）"
-            )
-            examples = list(stats.get("examples") or [])
-            if examples:
-                result.notes.append("语义合并明细（示例）：" + "；".join(examples))
-            result.merge_conflicts = list(stats.get("conflicts", []) or [])
-    _, tag_by_fp = stage_tag(opts, result, result.functional_points, progress)
-    tps = stage_test_points(
-        result,
-        build_expand_context(opts, auth_profile),
-        result.functional_points,
-        tag_by_fp,
-        progress,
-    )
-    result.test_points = stage_enrich(opts, result, tps, result.functional_points, progress)
-    # 测试专家系统 · URL 通道（PageExpert，S1–S6 提质）：在功能点 + 测试点就绪后、用例生成前，
-    # 让专家审视运行时渲染增补测试点（每条经护栏命中真实锚点后才保留，绝不孤儿）。
-    stage_expert_review(opts, result, progress)
-    # P2：PRD 通道（默认关闭）——先解析需求并派生「业务规则」测试点，须在用例生成之前并入。
-    if s.prd_enabled and opts.prd_source:
-        result.prd_doc = stage_prd_ingest(opts, result, progress)
-        _merge_prd_test_points(result)
-    result.cases = stage_cases(result, result.test_points, progress, auth_profile)
-    if s.llm_design_enabled:
-        result.cases = stage_llm_design(opts, result, progress)
-    # A3 + F13：用例执行（默认关闭）。接口层真发请求，UI 层真开浏览器；
-    # 会话不可用时如实标记 skipped，绝不伪装通过。
-    # F12：即便执行基础设施失败（stage_execute 抛 EngineError），`result.execution` 已记下
-    # 一个 failed 批次 → 仍会被 stage_persist 落库，保证「跑过/没跑起来」都留痕。
-    if s.executor_enabled or opts.target_req.execute:
-        try:
-            stage_execute(opts, result, progress, runtime_options)
-        except EngineError as exc:
-            result.errors.append(f"用例执行失败：{exc.message}")
-    # 需求1：落库前先把合并产物按来源拆成「代码通道 / 地址通道」两组
-    _partition_channels(result)
-    stage_persist(opts, result, progress)
+    for _name in PIPELINE_STAGE_ORDER:
+        REGISTRY.get_fn(_name)(opts, result, progress)
     # 需求1：把各通道独立记录落盘（仅非空通道写文件）；e2e 等场景可置 False 后用自定义 base 重写出
     if opts.write_channel_records and result.project_id:
         channel_writer.write_channel_records(result.project_id, result, get_settings().output_dir)

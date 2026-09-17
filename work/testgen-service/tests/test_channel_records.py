@@ -1,7 +1,7 @@
 """通道独立记录（需求1）的单测：拆分正确性 + 凭证不泄露 + 空通道不写文件。
 
 覆盖：
-- `_partition_channels`：FP 按 `file_path` 前缀 `runtime:` 拆分为 code/url 两组；
+- `stage_partition_channels`：FP 按 `file_path` 前缀 `runtime:` 拆分为 code/url 两组；
   TP / Case 按 `fp_contract_id` 指回的存活 FP 归属通道；
 - `write_channel_records`：仅非空通道写 `code_channel.*` / `url_channel.*`；`channels_summary.json` 总写；
 - 凭证红线：地址通道来源已是脱敏 `runtime:<url>`，产物中**不含**账号 / 密码 / 动态口令。
@@ -12,7 +12,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from core.contracts import CaseSpec, FunctionalPoint, TestPoint
-from engine.pipeline import PipelineResult, _partition_channels
+from engine.pipeline import PipelineResult, stage_partition_channels
 from output.channel_writer import write_channel_records
 
 
@@ -92,7 +92,7 @@ def _both_channels_result() -> PipelineResult:
 
 def test_partition_splits_code_and_url() -> None:
     r = _both_channels_result()
-    _partition_channels(r)
+    stage_partition_channels(None, r, None)
     assert [fp.fp_id for fp in r.code_fps] == ["FP-code1"]
     assert [fp.fp_id for fp in r.url_fps] == ["FP-url1"]
     assert [tp.tp_id for tp in r.code_tps] == ["TP-code1"]
@@ -109,7 +109,7 @@ def test_partition_pure_code_leaves_url_empty() -> None:
     r.functional_points = [_CODE_FP]
     r.test_points = [_CODE_TP]
     r.cases = [_CODE_CASE]
-    _partition_channels(r)
+    stage_partition_channels(None, r, None)
     assert len(r.code_fps) == 1 and len(r.url_fps) == 0
     assert len(r.code_cases) == 1 and len(r.url_cases) == 0
 
@@ -121,7 +121,7 @@ def test_write_channel_records_only_non_empty(tmp_path: Path) -> None:
     r.functional_points = [_CODE_FP]
     r.test_points = [_CODE_TP]
     r.cases = [_CODE_CASE]
-    _partition_channels(r)
+    stage_partition_channels(None, r, None)
     paths = write_channel_records(r.project_id, r, base=tmp_path)
     assert (tmp_path / "999" / "code_channel.json").exists()
     assert (tmp_path / "999" / "code_channel.md").exists()
@@ -133,7 +133,7 @@ def test_write_channel_records_only_non_empty(tmp_path: Path) -> None:
 def test_write_channel_records_both_when_present(tmp_path: Path) -> None:
     r = _both_channels_result()
     r.project_id = 998
-    _partition_channels(r)
+    stage_partition_channels(None, r, None)
     write_channel_records(r.project_id, r, base=tmp_path)
     assert (tmp_path / "998" / "code_channel.json").exists()
     assert (tmp_path / "998" / "url_channel.json").exists()
@@ -191,7 +191,7 @@ def test_channel_records_contain_no_credentials(tmp_path: Path) -> None:
             fp_contract_id="FP-url1",
         )
     ]
-    _partition_channels(r)
+    stage_partition_channels(None, r, None)
     paths = write_channel_records(r.project_id, r, base=tmp_path)
     blob = "\n".join(Path(p).read_text(encoding="utf-8") for p in paths.values())
     assert _LEAK not in blob

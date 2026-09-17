@@ -1,7 +1,12 @@
-"""stage_registry 单元测试（P0-3）。
+"""stage_registry 单元测试（P0-3 基线 + P1-1 适配层落地）。
 
 仅断言注册元数据与契约 dataclass 可实例化，**不触发**真实 LLM / playwright /
 git 仓库等重依赖（wired 阶段的 fn 只取引用，不执行）。
+
+P1-1 演进：适配层 6 项由 planned 占位填充为真实 stage_* 实现（planned=False）；
+新增 `execute` 适配阶段（用例执行）。能力层 11 项名称不变，其 fn 在
+`engine.pipeline._wire_stages_to_registry()` 中由「原始纯函数」覆盖为「编排包装」，
+使 run_pipeline 经 REGISTRY 组链驱动。故总阶段数 11 + 7 = 18。
 """
 
 from engine.stage_registry import (
@@ -39,6 +44,7 @@ ADAPTATION = [
     "scan",
     "partition_channels",
     "persist",
+    "execute",
 ]
 
 
@@ -46,12 +52,12 @@ def test_registry_has_11_capability_stages():
     assert sorted(capability_stage_names()) == sorted(CAPABILITY)
 
 
-def test_registry_has_6_adaptation_planned_stages():
+def test_registry_has_7_adaptation_stages():
     assert sorted(adaptation_stage_names()) == sorted(ADAPTATION)
 
 
-def test_registry_total_17():
-    assert len(REGISTRY.list_stages()) == 17
+def test_registry_total_18():
+    assert len(REGISTRY.list_stages()) == 18
 
 
 def test_capability_stages_are_wired():
@@ -64,12 +70,12 @@ def test_capability_stages_are_wired():
         assert stage.planned is False
 
 
-def test_adaptation_stages_are_planned():
+def test_adaptation_stages_are_wired():
     for name in ADAPTATION:
         stage = get_stage(name)
         assert stage.kind == StageKind.ADAPTATION
-        assert stage.planned is True
-        assert stage.fn is None
+        assert stage.planned is False
+        assert stage.fn is not None
 
 
 def test_get_stage_unknown_raises_keyerror():
@@ -86,23 +92,16 @@ def test_get_fn_returns_callable_for_wired():
     assert callable(fn)
 
 
-def test_get_fn_raises_for_planned():
-    try:
-        REGISTRY.get_fn("pull")
-    except NotImplementedError:
-        pass
-    else:
-        raise AssertionError("expected NotImplementedError for planned stage get_fn")
+def test_get_fn_works_for_wired_adaptation_stage():
+    # P1-1：适配层已全部实现，get_fn 对适配阶段返回可调用对象
+    fn = REGISTRY.get_fn("pull")
+    assert callable(fn)
+    assert not any(s.planned for s in list_stages())
 
 
-def test_stage_run_raises_for_planned():
-    stage = get_stage("pull")
-    try:
-        stage.run()
-    except NotImplementedError:
-        pass
-    else:
-        raise AssertionError("expected NotImplementedError when running planned stage")
+def test_no_planned_stages_remain():
+    # P1-1：所有阶段均已实现，不存在 planned 占位阶段
+    assert [s.name for s in list_stages() if s.planned] == []
 
 
 def test_comparator_contract_aliases():
