@@ -1,6 +1,6 @@
 # testCodeFast 未完成任务清单（BACKLOG）
 
-> 生成日期：2026-09-17 ｜ 最后更新：2026-09-17 ｜ 基准：`main` / `dev/modularization` 均 = `d81287b`（已推 origin）
+> 生成日期：2026-09-17 ｜ 最后更新：2026-09-17 ｜ 基准：`main` / `dev/modularization` 均 = `bbb6281`（已推 origin）
 > 范围：仅本仓库（test-accel 旧线 + testgen-service 新线）。aiSitePilot / 督办系统 / 无纸化办公 / 邮件监听 属独立工作区，不在此列。
 > 执行节奏：选定任务 → 八环门禁 → 提交（必要时 push）→ 重钉 `packed-refs`。
 
