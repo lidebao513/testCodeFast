@@ -549,8 +549,9 @@ def test_http_report_endpoints(fresh_db):
     assert "text/html" in html.headers["content-type"]
     assert html.text.startswith("<!doctype html>")
 
-    # 非法格式 → 422（入参校验失败）
-    bad = client.get(f"/api/v1/projects/{pid}/report?format=pdf")
+    # 恒非法格式 → 422（入参校验失败）。注：pdf 现已随 reportlab 安装成为合法格式，
+    # 故此处用明确非法的 xyzzy 验证「未知格式拒绝」，避免与环境（CI 未装可选依赖）耦合。
+    bad = client.get(f"/api/v1/projects/{pid}/report?format=xyzzy")
     assert bad.status_code == 422
     assert bad.json()["code"] == "validation_error"
 

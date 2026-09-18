@@ -178,7 +178,10 @@ def source_rank(file_path: str, ftype: str = "") -> tuple[int, int]:
 # 合并
 # ============================================================================
 def merge_functional_points(
-    base: list[FunctionalPoint], incoming: list[FunctionalPoint]
+    base: list[FunctionalPoint],
+    incoming: list[FunctionalPoint],
+    *,
+    element_count: int | None = None,
 ) -> tuple[list[FunctionalPoint], dict[str, Any]]:
     """把 `incoming` 并入 `base`，按语义键收敛重复项。
 
@@ -189,6 +192,9 @@ def merge_functional_points(
       - `examples`：被收敛项的示例（最多 `_MAX_EXAMPLES` 条），用于「不静默」上报。
 
     顺序稳定性：`base` 原有顺序不变；`incoming` 仅追加。同优先级时保留**先出现**者。
+
+    `element_count`（可选，G-13）：传入运行时元素数后，合并结束前调用量级守护
+    `magnitude_guard`。异常时**只 warning、不阻断**合并结果（对照 F10a 静默陷阱）。
     """
     stats: dict[str, Any] = {
         "added": 0,
@@ -202,7 +208,19 @@ def merge_functional_points(
     for group, is_incoming in ((base, False), (incoming, True)):
         for fp in group:
             _place(merged, index, fp, stats, is_incoming=is_incoming)
+    if element_count is not None:
+        _check_magnitude(merged, element_count, stats)
     return merged, stats
+
+
+def _check_magnitude(
+    merged: list[FunctionalPoint], element_count: int, stats: dict[str, Any]
+) -> None:
+    """G-13 接线：校验量级并在异常时告警（不阻断）。结论回写 stats 供报告呈现。"""
+    from engine.magnitude_guard import warn_if_anomalous
+
+    verdict = warn_if_anomalous(len(merged), element_count)
+    stats["magnitude"] = verdict.to_dict()
 
 
 def _source_of(file_path: str) -> str:

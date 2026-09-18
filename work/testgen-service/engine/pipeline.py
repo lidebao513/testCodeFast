@@ -873,7 +873,9 @@ def stage_runtime_ui(
     # M3.4：发现成功后把 UI 功能点**并入静态功能点集合**——必须在 stage_tag 之前，
     # 否则运行时补入的页面不参与测试点展开与用例生成。
     merged, stats = _merge_runtime_fps(
-        result.functional_points, runtime_ui.to_functional_points(found)
+        result.functional_points,
+        runtime_ui.to_functional_points(found),
+        element_count=len(found.elements),
     )
     result.functional_points = merged
     result.counts["functional_points"] = len(merged)
@@ -891,7 +893,9 @@ def stage_runtime_ui(
 
 
 def _merge_runtime_fps(
-    static_fps: list[FunctionalPoint], runtime_fps: list[FunctionalPoint]
+    static_fps: list[FunctionalPoint],
+    runtime_fps: list[FunctionalPoint],
+    element_count: int | None = None,
 ) -> tuple[list[FunctionalPoint], dict[str, Any]]:
     """把运行时发现的 UI 功能点并入静态功能点集合（M3.4 + F5）。
 
@@ -902,8 +906,10 @@ def _merge_runtime_fps(
     判定与保留规则见 `engine/fp_merge.py`（口径 v1.0）：同族内按归一化名称判等价，
     冲突时**运行时优先**（线上真实可达面 > 静态源码，静态可能过时）；
     解析不出语义键的项（component / business）原样保留，绝不误并。
+
+    `element_count`：传入运行时元素数触发 G-13 量级守护（见 `merge_functional_points`）。
     """
-    return fp_merge.merge_functional_points(static_fps, runtime_fps)
+    return fp_merge.merge_functional_points(static_fps, runtime_fps, element_count=element_count)
 
 
 # 地址通道功能点的 file_path 已脱敏为 `runtime:<url>`（绝不泄露账号密码），
