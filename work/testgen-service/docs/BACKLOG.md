@@ -41,7 +41,7 @@
 | P2-9 | 报告导出依赖预装 / 文档化 | venv 已装 `reportlab`/`python-docx`/`openpyxl`；新增 `requirements-opt.txt` + `tests/test_report_export_opt.py`（`importorskip` 保护） | ✅ |
 | P2-10 | G-13 量级稳定性回归守护 | 新增 `engine/magnitude_guard.py`，`merge_functional_points` 加可选 `element_count` 并接线 | ✅ |
 | P2-11 | 散脚本清理 / 迁移 | `diagnose_login.py`/`diagnose_menu.py`/`merge_scenarios.py`/`run_scenario.py`/`run_ui_only_execute.py` → 迁入 `scripts/` 或删除（你曾表示先不删，保留） | ⬜ |
-| P2-12 | 测试产物归档 / 清理 | `output/reports/8/8/*`、`output/screenshots/8/*`（含真实失败 `TP-6cd14168` 截图，可保留作缺陷证据）；保留待确认 | ⬜ |
+| P2-12 | 测试产物归档 / 清理 | 已物理删除 `output/reports/8/8/*` 与 `output/screenshots/8/*`（提交 `94426bc`） | ✅ |
 | P2-13 | 创建 `dev/modularization` 的 GitHub PR | 本机无 `gh`，需网页手动建或先装 `gh` | ⬜ |
 | P2-20 | 根目录 `.md` 整体归位 `docs/`：根目录散落约 12 个设计/方案类 `.md`（含 `测试专家系统_两通道异构_全环节LLM方案.md`），统一迁入 `docs/` 改善仓库结构（需你确认范围，非紧急） | ⬜ |
 
@@ -63,7 +63,7 @@
 
 - [ ] **P0-1 收尾**：登 ft.cntaiping.com 后台作废并重新签发 `tokens.json` 对应凭据；更新本地磁盘副本（该文件已 gitignore，仅本地存）。
 - [ ] **main 分支保护**：GitHub 网页开启（步骤见 `CONTRIBUTING.md` 第 6 节）；建议 CI 在 GitHub 跑稳前先不勾 *Require status checks*。
-- [ ] **保留项处置**：决定是否清理 P2-11（调试脚本）/ P2-12（测试产物）。
+- [x] **保留项处置**：已决定「全部清理删除」——5 个调试脚本 + 测试产物（提交 `94426bc`）+ 遗留 `_proc_scan.py/.txt` 均物理删除。
 
 ---
 
