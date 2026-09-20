@@ -1,0 +1,8 @@
+selected: TC-001 TC-330 TC-399
+login ok: True url: http://47.97.154.50:8090/chat
+tokens: bmp access
+API TC-001 -> inconclusive 端点可达,校验生效(422),合法2xx需合法请求体 | http://47.97.154.50:8090/api/v1
+SEC TC-002 -> inconclusive status=422 | http://47.97.154.50:8090/api/v1/auth/login
+CHAT TC-330 -> pass 回复到达(增量=65)
+UI TC-399 -> pass 页面可达,内容长度=9628
+SMALLTEST DONE

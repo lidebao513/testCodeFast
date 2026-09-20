@@ -1,0 +1,91 @@
+{
+  "project": "selftest_b5_3_reconcile",
+  "summary": {
+    "count": 2,
+    "by_type": {
+      "正常": 2
+    },
+    "by_priority": {
+      "P2": 2
+    },
+    "by_module": {
+      "MA": 1,
+      "MC": 1
+    },
+    "by_test_type": {
+      "全量": 2
+    }
+  },
+  "cases": [
+    {
+      "tc_no": "TP-A",
+      "title": "[正常] 用例A",
+      "module": "MA",
+      "case_type": "正常",
+      "priority": "P2",
+      "precondition": "被测服务已启动，base_url 可达；涉及鉴权接口需持有有效 token（或测试账号可匿名访问）",
+      "fp_id": null,
+      "tp_id": "TP-A",
+      "ctype": "api",
+      "doc_steps": [
+        {
+          "seq": 1,
+          "type": "前置",
+          "desc": "被测服务已启动，base_url 可达；涉及鉴权接口需持有有效 token（或测试账号可匿名访问）"
+        },
+        {
+          "seq": 2,
+          "type": "准备",
+          "desc": "构造请求：GET /x，来源文件 a.py"
+        },
+        {
+          "seq": 3,
+          "type": "执行",
+          "desc": "发送 GET /x 请求并捕获响应"
+        },
+        {
+          "seq": 4,
+          "type": "断言",
+          "desc": "校验：响应状态码符合预期，关键业务字段完整",
+          "expect": "route_defined"
+        }
+      ],
+      "test_type": "全量"
+    },
+    {
+      "tc_no": "TP-C",
+      "title": "[正常] 用例C",
+      "module": "MC",
+      "case_type": "正常",
+      "priority": "P2",
+      "precondition": "被测服务已启动，base_url 可达；涉及鉴权接口需持有有效 token（或测试账号可匿名访问）",
+      "fp_id": null,
+      "tp_id": "TP-C",
+      "ctype": "api",
+      "doc_steps": [
+        {
+          "seq": 1,
+          "type": "前置",
+          "desc": "被测服务已启动，base_url 可达；涉及鉴权接口需持有有效 token（或测试账号可匿名访问）"
+        },
+        {
+          "seq": 2,
+          "type": "准备",
+          "desc": "构造请求：GET /x，来源文件 a.py"
+        },
+        {
+          "seq": 3,
+          "type": "执行",
+          "desc": "发送 GET /x 请求并捕获响应"
+        },
+        {
+          "seq": 4,
+          "type": "断言",
+          "desc": "校验：响应状态码符合预期，关键业务字段完整",
+          "expect": "→ 404"
+        }
+      ],
+      "test_type": "全量"
+    }
+  ]
+}

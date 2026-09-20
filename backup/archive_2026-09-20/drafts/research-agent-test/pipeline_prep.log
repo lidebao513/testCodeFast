@@ -1,0 +1,19 @@
+[16:17:58] 开始流水线准备
+[16:17:58] 备份 _fx_test harness ...
+  harness 已备份到 _fx_test_bak/_fx_test
+[16:18:03] 清理现有 research-agent ...
+  已清理
+[16:19:48] 克隆 test-20260907 ...
+fatal: destination path 'C:/Users/EDY/WorkBuddy/testCodeFast/work/targets/research-agent' already exists and is not an empty directory.
+  HEAD=34f105b00a4fa4a933d077e34e3fa32037c0450f
+[16:19:49] fetch test-20260906 ...
+fatal: 'origin' does not appear to be a git repository
+fatal: Could not read from remote repository.
+
+Please make sure you have the correct access rights
+and the repository exists.
+[16:19:50] 生成变更摘要 ...
+  变更摘要已写入 change_summary.txt
+[16:19:51] 生成全量测试点 ...
+  测试点生成完成，日志见 gen_test_points.log
+[16:19:55] PIPELINE_PREP_DONE
