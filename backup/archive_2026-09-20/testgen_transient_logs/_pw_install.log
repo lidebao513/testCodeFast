@@ -1,0 +1,7 @@
+Looking in indexes: https://mirrors.aliyun.com/pypi/simple/
+Requirement already satisfied: playwright in .\venv\Lib\site-packages (1.62.0)
+Requirement already satisfied: pyee<14,>=13 in .\venv\Lib\site-packages (from playwright) (13.0.1)
+Requirement already satisfied: greenlet<4.0.0,>=3.1.1 in .\venv\Lib\site-packages (from playwright) (3.5.5)
+Requirement already satisfied: typing-extensions in .\venv\Lib\site-packages (from pyee<14,>=13->playwright) (4.16.0)
+PIP_EXIT=0
+PW_EXIT=0

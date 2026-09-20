@@ -1,0 +1,347 @@
+[quality-gate] 检测到 work/testgen-service 有改动，执行其质量门禁…（C:/Users/EDY/WorkBuddy/testCodeFast/work/testgen-service/venv/Scripts/python.exe）
+[check_secrets] 未发现问题凭据 ✅
+All checks passed!
+91 files already formatted
+[check_enums] 零硬性违规 ✅（扫描基线 C:\Users\EDY\WorkBuddy\testCodeFast\work\testgen-service，已排除脚手架/文档/SQL/f-string）
+[check_enums] 反向校验：1 个枚举成员未被 backend 引用（预留/历史，不计入失败）：
+  ~ RunBatchState.INTERRUPTED = 'interrupted'
+=== 架构结构门禁 check_structure ===
+
+⚠️  6 条提示（不阻断）：
+  - [数据契约] 未找到 test_points*.json，跳过校验（首次生成后自动生效）
+  - [历史债务] 根目录散落脚本 diagnose_login.py 应迁入 cli/ 或 scripts/ 或 tests/（见 ARCHITECTURE.md §2）
+  - [历史债务] 根目录散落脚本 diagnose_menu.py 应迁入 cli/ 或 scripts/ 或 tests/（见 ARCHITECTURE.md §2）
+  - [历史债务] 根目录散落脚本 merge_scenarios.py 应迁入 cli/ 或 scripts/ 或 tests/（见 ARCHITECTURE.md §2）
+  - [历史债务] 根目录散落脚本 run_scenario.py 应迁入 cli/ 或 scripts/ 或 tests/（见 ARCHITECTURE.md §2）
+  - [历史债务] 根目录散落脚本 run_ui_only_execute.py 应迁入 cli/ 或 scripts/ 或 tests/（见 ARCHITECTURE.md §2）
+
+结果：error=0 warning=6
+Success: no issues found in 52 source files
+[main]	INFO	profile include tests: None
+[main]	INFO	profile exclude tests: B607,B603,B608,B101,B311,B105
+[main]	INFO	cli include tests: None
+[main]	INFO	cli exclude tests: None
+[main]	INFO	using config: pyproject.toml
+[main]	INFO	running on Python 3.13.14
+[tester]	WARNING	nosec encountered (B324), but no failed test on file core\contracts.py:86
+[tester]	WARNING	nosec encountered (B324), but no failed test on file core\contracts.py:86
+[tester]	WARNING	nosec encountered (B324), but no failed test on file core\contracts.py:105
+[tester]	WARNING	nosec encountered (B324), but no failed test on file core\contracts.py:105
+[tester]	WARNING	nosec encountered (B324), but no failed test on file core\contracts.py:124
+[tester]	WARNING	nosec encountered (B324), but no failed test on file core\contracts.py:124
+[tester]	WARNING	nosec encountered (B324), but no failed test on file engine\llm_design.py:81
+[tester]	WARNING	nosec encountered (B324), but no failed test on file engine\llm_design.py:81
+[tester]	WARNING	nosec encountered (B324), but no failed test on file engine\prd_ingest.py:115
+[tester]	WARNING	nosec encountered (B324), but no failed test on file engine\prd_ingest.py:115
+[manager]	WARNING	Test in comment: RUNTIME_LOGIN_OTP_REFRESH_CMD is not a test name or id, ignoring
+Working... ---------------------------------------- 100% 0:00:00
+Run started:2026-09-16 09:59:34.162916+00:00
+
+Test results:
+	No issues identified.
+
+Code scanned:
+	Total lines of code: 14426
+	Total lines skipped (#nosec): 0
+	Total potential issues skipped due to specifically being disabled (e.g., #nosec BXXX): 6
+
+Run metrics:
+	Total issues (by severity):
+		Undefined: 0
+		Low: 29
+		Medium: 0
+		High: 0
+	Total issues (by confidence):
+		Undefined: 0
+		Low: 0
+		Medium: 0
+		High: 29
+Files skipped (0):
+........................................................................ [ 15%]
+........................................................................ [ 31%]
+........................................................................ [ 47%]
+........................................................................ [ 63%]
+........................................................................ [ 79%]
+........................................................................ [ 95%]
+......................C:\Users\EDY\.workbuddy\binaries\python\versions\3.13.12\Lib\collections\__init__.py:450: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x00000142A8FA2A70>
+  @classmethod
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+                                                   [100%]
+============================== warnings summary ===============================
+venv\Lib\site-packages\starlette\testclient.py:53
+  C:\Users\EDY\WorkBuddy\testCodeFast\work\testgen-service\venv\Lib\site-packages\starlette\testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+tests/test_api.py::test_health
+  C:\Users\EDY\WorkBuddy\testCodeFast\work\testgen-service\venv\Lib\site-packages\starlette\requests.py:86: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x00000142A8596E30>
+    def __init__(self, scope: Scope, receive: Receive | None = None) -> None:
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_api.py::test_projects_and_traceability_endpoints
+  C:\Users\EDY\.workbuddy\binaries\python\versions\3.13.12\Lib\dataclasses.py:1410: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x00000142A812C310>
+    def _asdict_inner(obj, dict_factory):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_api.py::test_projects_and_traceability_endpoints
+  C:\Users\EDY\.workbuddy\binaries\python\versions\3.13.12\Lib\dataclasses.py:1410: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x00000142A8508C70>
+    def _asdict_inner(obj, dict_factory):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_engine.py::test_extract_pages_from_frontend
+  C:\Users\EDY\.workbuddy\binaries\python\versions\3.13.12\Lib\pathlib\_local.py:183: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x00000142A812FE20>
+    self._str_normcase_cached = str(self).lower()
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_f12_runs.py::test_http_runs_endpoints
+  C:\Users\EDY\WorkBuddy\testCodeFast\work\testgen-service\engine\case_gen.py:49: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x00000142A8960A90>
+    def _get(tp: Any, key: str, default: Any = "") -> Any:
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_f12_runs.py::test_http_runs_endpoints
+  C:\Users\EDY\WorkBuddy\testCodeFast\work\testgen-service\engine\case_gen.py:49: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x00000142A8961990>
+    def _get(tp: Any, key: str, default: Any = "") -> Any:
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_f12_runs.py::test_pipeline_result_serializes_run_batch_id
+  C:\Users\EDY\WorkBuddy\testCodeFast\work\testgen-service\core\store.py:679: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x00000142A89631F0>
+    tp_rows = list(
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_f12_runs.py::test_pipeline_result_serializes_run_batch_id
+  C:\Users\EDY\WorkBuddy\testCodeFast\work\testgen-service\core\store.py:679: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x00000142A8961E40>
+    tp_rows = list(
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_f5_semantic_merge.py::test_pipeline_semantic_merge_can_be_disabled_for_comparison
+  C:\Users\EDY\.workbuddy\binaries\python\versions\3.13.12\Lib\dataclasses.py:1414: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x00000142A8A28130>
+    elif hasattr(obj_type, _FIELDS):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_f5_semantic_merge.py::test_pipeline_semantic_merge_can_be_disabled_for_comparison
+  C:\Users\EDY\.workbuddy\binaries\python\versions\3.13.12\Lib\dataclasses.py:1414: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x00000142A8A28220>
+    elif hasattr(obj_type, _FIELDS):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_p3_runtime_ui.py::testhas_playwright_returns_bool
+  <frozen importlib._bootstrap_external>:781: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x00000142A8961A80>
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_p3_runtime_ui.py::testhas_playwright_returns_bool
+  <frozen importlib._bootstrap_external>:781: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x00000142A8962890>
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_p5_service.py::test_generate_idempotent_returns_existing_task
+  C:\Users\EDY\.workbuddy\binaries\python\versions\3.13.12\Lib\asyncio\locks.py:168: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x00000142A8A809A0>
+    self._waiters = collections.deque()
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_p5_service.py::test_webhook_triggers_generation
+  C:\Users\EDY\.workbuddy\binaries\python\versions\3.13.12\Lib\dataclasses.py:1410: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x00000142A8FA2D40>
+    def _asdict_inner(obj, dict_factory):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_p5_service.py::test_webhook_triggers_generation
+  C:\Users\EDY\.workbuddy\binaries\python\versions\3.13.12\Lib\dataclasses.py:1410: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x00000142A8FA3F10>
+    def _asdict_inner(obj, dict_factory):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_p5_service.py::test_metrics_reflects_task_states
+  C:\Users\EDY\.workbuddy\binaries\python\versions\3.13.12\Lib\dataclasses.py:1410: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x00000142A8FA2E30>
+    def _asdict_inner(obj, dict_factory):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_pipeline.py::test_pipeline_is_idempotent
+  C:\Users\EDY\.workbuddy\binaries\python\versions\3.13.12\Lib\dataclasses.py:1410: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x00000142A8D45030>
+    def _asdict_inner(obj, dict_factory):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_pipeline.py::test_pipeline_is_idempotent
+  C:\Users\EDY\.workbuddy\binaries\python\versions\3.13.12\Lib\dataclasses.py:1410: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x00000142A8D45A80>
+    def _asdict_inner(obj, dict_factory):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_pipeline.py::test_pipeline_is_idempotent
+  C:\Users\EDY\.workbuddy\binaries\python\versions\3.13.12\Lib\dataclasses.py:1410: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x00000142A8D46E30>
+    def _asdict_inner(obj, dict_factory):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_pipeline.py::test_llm_design_enabled_reports_no_effect
+  C:\Users\EDY\.workbuddy\binaries\python\versions\3.13.12\Lib\dataclasses.py:1410: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x00000142A8D464D0>
+    def _asdict_inner(obj, dict_factory):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_pipeline.py::test_llm_design_enabled_reports_no_effect
+  C:\Users\EDY\.workbuddy\binaries\python\versions\3.13.12\Lib\dataclasses.py:1410: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x00000142A8D453F0>
+    def _asdict_inner(obj, dict_factory):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_pipeline.py::test_llm_design_enabled_reports_no_effect
+  C:\Users\EDY\.workbuddy\binaries\python\versions\3.13.12\Lib\dataclasses.py:1410: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x00000142A8D44130>
+    def _asdict_inner(obj, dict_factory):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_pipeline.py::test_llm_design_enabled_reports_no_effect
+  C:\Users\EDY\.workbuddy\binaries\python\versions\3.13.12\Lib\dataclasses.py:1410: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x00000142A8D474C0>
+    def _asdict_inner(obj, dict_factory):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_pipeline.py::test_llm_design_enabled_reports_no_effect
+  C:\Users\EDY\.workbuddy\binaries\python\versions\3.13.12\Lib\dataclasses.py:1410: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x00000142A8D47100>
+    def _asdict_inner(obj, dict_factory):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_pipeline.py::test_llm_design_enabled_reports_no_effect
+  C:\Users\EDY\.workbuddy\binaries\python\versions\3.13.12\Lib\dataclasses.py:1410: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x00000142A8D46F20>
+    def _asdict_inner(obj, dict_factory):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_ui_first_strategy.py::test_interface_case_primary_under_all_strategy
+  C:\Users\EDY\WorkBuddy\testCodeFast\work\testgen-service\venv\Lib\site-packages\_pytest\logging.py:349: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x00000142A8D471F0>
+    def __enter__(self) -> _HandlerType:
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_ui_first_strategy.py::test_interface_case_primary_under_all_strategy
+  C:\Users\EDY\WorkBuddy\testCodeFast\work\testgen-service\venv\Lib\site-packages\_pytest\logging.py:349: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x00000142A8D44F40>
+    def __enter__(self) -> _HandlerType:
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_ui_first_strategy.py::test_interface_case_primary_under_all_strategy
+  C:\Users\EDY\WorkBuddy\testCodeFast\work\testgen-service\venv\Lib\site-packages\_pytest\logging.py:349: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x00000142A8D456C0>
+    def __enter__(self) -> _HandlerType:
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_ui_first_strategy.py::test_interface_case_primary_under_all_strategy
+  C:\Users\EDY\WorkBuddy\testCodeFast\work\testgen-service\venv\Lib\site-packages\_pytest\logging.py:349: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x00000142A8D467A0>
+    def __enter__(self) -> _HandlerType:
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_ui_first_strategy.py::test_interface_case_primary_under_all_strategy
+  C:\Users\EDY\WorkBuddy\testCodeFast\work\testgen-service\venv\Lib\site-packages\_pytest\logging.py:349: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x00000142A8D47E20>
+    def __enter__(self) -> _HandlerType:
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_ui_first_strategy.py::test_interface_case_primary_under_all_strategy
+  C:\Users\EDY\WorkBuddy\testCodeFast\work\testgen-service\venv\Lib\site-packages\_pytest\logging.py:349: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x00000142A8D46D40>
+    def __enter__(self) -> _HandlerType:
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=============================== tests coverage ================================
+______________ coverage: platform win32, python 3.13.14-final-0 _______________
+
+Name                           Stmts   Miss  Cover   Missing
+------------------------------------------------------------
+core\__init__.py                   0      0   100%
+core\auto_input.py               192     18    91%   191-194, 212-213, 272, 279, 285, 292, 297, 302-303, 363, 377, 440, 445-446
+core\config.py                   133     12    91%   37-38, 51-54, 60, 68, 243, 245, 250, 252
+core\contracts.py                124      0   100%
+core\db.py                        41      0   100%
+core\enums.py                    171     22    87%   348-350, 363-367, 372-387
+core\errors.py                    63      1    98%   29
+core\log.py                       50      3    94%   78, 97, 110
+core\store.py                    299     21    93%   33, 36-37, 78-85, 153, 399-420, 434, 717
+engine\__init__.py                 2      0   100%
+engine\auth_scan.py               87      2    98%   158, 175
+engine\case_gen.py               149      3    98%   95, 197, 222
+engine\diff_tag.py               145     27    81%   84-85, 103-104, 116, 120-121, 136-137, 139, 149-150, 152, 230, 234, 251, 253, 273-277, 282-285, 289
+engine\executor.py               286     20    93%   241-242, 304, 322, 372, 487, 521-523, 526, 555, 573-574, 582, 586, 676-679, 686
+engine\expert\__init__.py          4      0   100%
+engine\expert\base.py             37      3    92%   58-59, 66
+engine\expert\llm.py              88     56    36%   35-36, 62, 71-74, 77-83, 101-113, 122-150, 162-177, 181-183, 188-191
+engine\expert\page_expert.py     191     31    84%   136-138, 148-156, 158, 202-204, 214, 218, 221, 224, 227, 283, 293-294, 310-313, 331-335, 346
+engine\fp_extract.py             304     28    91%   110-113, 121, 181, 185, 206, 209, 216-220, 235, 240-241, 375, 379, 512, 527, 533, 558, 598-599, 604, 616-617
+engine\fp_merge.py               148      9    94%   98, 112, 115, 140, 148, 221, 226, 258, 327
+engine\llm_design.py             121     19    84%   89-95, 105-112, 115, 189, 239-240
+engine\pipeline.py               595    129    78%   237-239, 244-246, 264-284, 297-298, 308, 355-358, 387-392, 403, 411-412, 417, 473-476, 483, 547-552, 560-568, 605-606, 626-641, 655-670, 686-692, 716-751, 776, 778, 816, 819, 925, 1009, 1081, 1116-1122, 1190, 1220, 1356-1357, 1412, 1443-1444
+engine\prd_ingest.py             193     14    93%   83, 126-129, 205-206, 208, 212, 217, 261, 274, 282, 287
+engine\pull.py                   165     72    56%   119-125, 144, 146, 153-154, 204, 225-230, 241-258, 262, 267-290, 294, 310-331, 336-340, 351-360, 365
+engine\report.py                 183      6    97%   118, 267, 281, 293, 295, 297
+engine\runtime_ui.py            1073    275    74%   368-369, 426, 489-490, 504-508, 511-513, 525-526, 566, 570-574, 583-584, 597, 604-605, 658-659, 686-688, 727-728, 737-739, 757-762, 772-773, 805-806, 813-814, 823-824, 840, 847-848, 850, 859, 861-862, 869-870, 877-885, 902-904, 923-924, 926, 930-943, 959, 963-964, 974, 983-984, 1009-1013, 1115-1116, 1136-1137, 1148-1149, 1156-1157, 1198-1219, 1257-1259, 1264-1272, 1280-1287, 1319-1338, 1343, 1364-1377, 1385, 1392-1393, 1440-1443, 1450-1451, 1453, 1471-1472, 1493, 1496, 1510-1511, 1515, 1518, 1523-1524, 1535-1536, 1544, 1565, 1568-1569, 1572, 1575, 1581-1586, 1594-1595, 1599-1600, 1612-1613, 1617-1618, 1630-1631, 1634, 1645-1650, 1675, 1739-1740, 1764-1765, 1778-1796, 1824-1825, 1957, 1960, 1965-1974, 1995, 2054-2055, 2087, 2090, 2094, 2123-2127, 2194-2197, 2214, 2217, 2233, 2278, 2288-2290, 2294-2310, 2313-2314
+engine\scan.py                    85     14    84%   112, 116-117, 146, 157-159, 165-166, 173-174, 180-181, 190
+engine\semantic_enrich.py        161     65    60%   94, 118, 169-170, 183-184, 186, 190, 237-248, 252-265, 269-284, 288-298, 307-332, 345
+engine\tenant_retest.py           79     13    84%   71, 87, 95-102, 109, 132, 151
+engine\tp_expand.py              156      4    97%   208, 278, 480, 558
+engine\ui_executor.py            236     49    79%   186-187, 195, 202-204, 219, 298-330, 339-349, 358-359, 362, 367-368
+output\__init__.py                 0      0   100%
+output\channel_writer.py          52      0   100%
+output\report_writer.py          246     70    72%   102-103, 276, 332, 368, 458-463, 497-502, 529, 621-628, 636, 644, 649-660, 664-671, 677-685, 689-690, 694-696, 701-721
+output\writer.py                  64      0   100%
+service\__init__.py                0      0   100%
+service\app.py                   405     54    87%   52-54, 91-92, 115-119, 210-212, 225-226, 228, 230, 232, 234, 236, 261-262, 276, 280, 282, 300, 302, 304, 319, 345, 367, 455, 469-471, 485, 496-497, 540, 555, 557, 561, 597-598, 633-640, 689, 735, 751, 774
+service\tasks.py                 126     13    90%   207, 220-230, 310-316, 326, 333
+workspace\__init__.py              0      0   100%
+workspace\manager.py              78      2    97%   93, 142
+workspace\readonly.py             86     14    84%   49, 58-59, 67, 76-77, 81-82, 90, 99, 103-104, 107-108
+------------------------------------------------------------
+TOTAL                           6618   1069    84%
+Required test coverage of 60.0% reached. Total coverage: 83.85%
+
+=== secret scan ===
+  $ C:\Users\EDY\WorkBuddy\testCodeFast\work\testgen-service\venv\Scripts\python.exe scripts/check_secrets.py
+--- secret scan: OK (rc=0) ---
+
+=== ruff lint ===
+  $ C:\Users\EDY\.workbuddy\binaries\python\envs\default\Scripts\ruff.EXE check core engine service cli workspace output scripts tools tests
+--- ruff lint: OK (rc=0) ---
+
+=== ruff format --check ===
+  $ C:\Users\EDY\.workbuddy\binaries\python\envs\default\Scripts\ruff.EXE format core engine service cli workspace output scripts tools tests --check
+--- ruff format --check: OK (rc=0) ---
+
+=== check_enums ===
+  $ C:\Users\EDY\WorkBuddy\testCodeFast\work\testgen-service\venv\Scripts\python.exe scripts/check_enums.py
+--- check_enums: OK (rc=0) ---
+
+=== check_structure ===
+  $ C:\Users\EDY\WorkBuddy\testCodeFast\work\testgen-service\venv\Scripts\python.exe scripts/check_structure.py
+--- check_structure: OK (rc=0) ---
+
+=== mypy src dirs ===
+  $ C:\Users\EDY\.workbuddy\binaries\python\envs\default\Scripts\mypy.EXE core engine service cli workspace output scripts tools
+--- mypy src dirs: OK (rc=0) ---
+
+=== bandit src dirs ===
+  $ C:\Users\EDY\.workbuddy\binaries\python\envs\default\Scripts\bandit.EXE -r core engine service cli workspace output scripts tools -x tests -c pyproject.toml --severity-level medium
+--- bandit src dirs: OK (rc=0) ---
+
+=== pytest ===
+  $ C:\Users\EDY\WorkBuddy\testCodeFast\work\testgen-service\venv\Scripts\python.exe -m pytest --cov=core --cov=engine --cov=service --cov=workspace --cov=output --cov-report=term-missing -q
+--- pytest: OK (rc=0) ---
+
+============================================================
+✅ 全部质量门禁通过（secret/lint/format/enum/structure/type/security/test）
+[quality-gate] 全部门禁通过
+[check_commit_msg] 提交信息格式合规 ✅
+[main 7e6cbee] feat(testgen): 运行时UI状态驱动面板发现增强
+ 1 file changed, 315 insertions(+), 12 deletions(-)

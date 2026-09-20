@@ -1,0 +1,165 @@
+[pipeline] scan {'path': 'C:/Users/EDY/WorkBuddy/testCodeFast/work/targets/research-agent'}
+{"ts": "2026-09-18T17:11:58.083", "level": "INFO", "logger": "engine.pipeline", "request_id": "-", "message": "扫描完成", "extra": {"files": 366}}
+[pipeline] auth_scan {'files': 366}
+[pipeline] fp_extract {'files': 366}
+[pipeline] diff_tag {'mode': 'full'}
+[pipeline] tp_expand {'fp': 756}
+[pipeline] semantic_enrich {'enabled': False}
+[pipeline] case_gen {'tp': 2571}
+[pipeline] persist {'project_id': 14}
+[pipeline] done {'files': 366, 'auth_wired_files': 32, 'fp_merged': 19, 'business_absorbed': 22, 'functional_points': 756, 'test_points': 2571, 'llm_added': 0, 'llm_rejected': 0, 'cases_with_runtime_detail': 0, 'cases': 2571}
+{
+  "result": {
+    "project_id": 14,
+    "mode": "full",
+    "source_kind": "code",
+    "run_batch_id": "",
+    "counts": {
+      "files": 366,
+      "auth_wired_files": 32,
+      "fp_merged": 19,
+      "business_absorbed": 22,
+      "functional_points": 756,
+      "test_points": 2571,
+      "llm_added": 0,
+      "llm_rejected": 0,
+      "cases_with_runtime_detail": 0,
+      "cases": 2571
+    },
+    "scope_summary": {
+      "正常": 756,
+      "安全": 501,
+      "边界": 315,
+      "异常": 999
+    },
+    "tag_summary": {
+      "全量": 2510
+    },
+    "case_stats": {
+      "created": 0,
+      "updated": 0,
+      "reused": 2571,
+      "obsolete": 0
+    },
+    "traceability": {
+      "fp_count": 756,
+      "tp_count": 2571,
+      "case_count": 2571,
+      "orphan_tp": [],
+      "orphan_case": [],
+      "orphan_tp_count": 0,
+      "orphan_case_count": 0
+    },
+    "execution": {},
+    "pull": {},
+    "auth_scan": {
+      "mode": "optional",
+      "global_auth": true,
+      "passthrough": true,
+      "files_with_auth": [
+        "backend/research-agent-source/_fx_test/api_validate.py",
+        "backend/research-agent-source/_fx_test/build_report.py",
+        "backend/research-agent-source/_fx_test/func_test_suite.py",
+        "backend/research-agent-source/_fx_test/grab_token.py",
+        "backend/research-agent-source/email_live.py",
+        "backend/research-agent-source/main.py",
+        "backend/research-agent-source/pipeline_api.py",
+        "backend/research-agent-source/scripts/t1_resume.py",
+        "backend/research-agent-source/scripts/t1_verify.py",
+        "backend/research-agent-source/server.py",
+        "backend/research-agent-source/summarizer.py",
+        "backend/research-agent-source/tools/audit_kb/embedder.py",
+        "backend/research-agent-source/tools/auth/deps.py",
+        "backend/research-agent-source/tools/auth/rbac.py",
+        "backend/research-agent-source/tools/auth/routes.py",
+        "backend/research-agent-source/tools/auth/security.py",
+        "backend/research-agent-source/tools/email_auth/routes.py",
+        "backend/research-agent-source/tools/email_list/routes.py",
+        "backend/research-agent-source/tools/internet_search/toolkit.py",
+        "backend/research-agent-source/tools/m3_probe.py",
+        "backend/research-agent-source/tools/onlyoffice_bridge/routes.py",
+        "backend/research-agent-source/tools/scheduler/api.py",
+        "backend/research-agent-source/tools/wechat_channel/api.py",
+        "backend/research-agent-source/unified_auth.py",
+        "backend/research-agent-source/wps_office_api.py",
+        "desktop/floating-ball/main.js",
+        "frontend/app/src/api/backend.ts",
+        "frontend/app/src/api/client.ts",
+        "frontend/mock-server/continue_brief.py",
+        "frontend/mock-server/record.py",
+        "frontend/mock-server/server.py",
+        "frontend/regression/run.py"
+      ],
+      "signals": {
+        "令牌校验": 140,
+        "路由依赖/装饰器": 86,
+        "全局接线": 2,
+        "未配置即放行": 2
+      },
+      "evidence": [
+        "backend/research-agent-source/pipeline_api.py:171 [路由接线] def list_items(current: User = Depends(get_current_user)) -> dict[str, Any]:",
+        "backend/research-agent-source/pipeline_api.py:186 [路由接线] def get_item(item_id: int, current: User = Depends(get_current_user)) -> dict[st",
+        "backend/research-agent-source/pipeline_api.py:205 [路由接线] def create_item(body: ItemIn, current: User = Depends(get_current_user)) -> dict",
+        "backend/research-agent-source/server.py:455 [全局接线] app.add_middleware(",
+        "backend/research-agent-source/server.py:75 [路由接线] 走标准 Depends(get_current_user) 强制 JWT,不暴露 DS 路径。",
+        "backend/research-agent-source/server.py:1437 [路由接线] async def issue_raw_ticket(current: User = Depends(get_current_user)):",
+        "backend/research-agent-source/server.py:3442 [路由接线] current: User = Depends(get_current_user),",
+        "backend/research-agent-source/tools/auth/deps.py:111 [路由接线] def require_admin(current: User = Depends(get_current_user)) -> User:",
+        "backend/research-agent-source/tools/auth/rbac.py:132 [路由接线] def require_rbac_admin(current: User = Depends(get_current_user)) -> User:",
+        "backend/research-agent-source/tools/auth/rbac.py:193 [路由接线] def my_permissions(request: Request, current: User = Depends(get_current_user)):",
+        "backend/research-agent-source/tools/auth/routes.py:213 [路由接线] current: User = Depends(get_current_user),",
+        "backend/research-agent-source/tools/auth/routes.py:247 [路由接线] def me(current: User = Depends(get_current_user)):",
+        "backend/research-agent-source/tools/auth/routes.py:263 [路由接线] current: User = Depends(get_current_user),",
+        "backend/research-agent-source/tools/email_auth/routes.py:87 [路由接线] async def auth_status(body: StatusIn, request: Request, current: User = Depends(",
+        "backend/research-agent-source/tools/email_auth/routes.py:93 [路由接线] async def authorize(body: AuthorizeIn, request: Request, current: User = Depends",
+        "backend/research-agent-source/tools/email_auth/routes.py:113 [路由接线] async def cancel(body: CancelIn, request: Request, current: User = Depends(get_c",
+        "backend/research-agent-source/tools/email_list/routes.py:173 [路由接线] def list_today(request: Request, current: User = Depends(get_current_user)):",
+        "backend/research-agent-source/tools/email_list/routes.py:247 [路由接线] def summarize(body: SummarizeIn, request: Request, current: User = Depends(get_c",
+        "backend/research-agent-source/tools/email_list/routes.py:314 [路由接线] def ask_quota(request: Request, current: User = Depends(get_current_user)):",
+        "backend/research-agent-source/tools/scheduler/api.py:3 [路由接线] P1 改造:所有端点 Depends(get_current_user);CRUD 透传 current.id 给 store。",
+        "backend/research-agent-source/tools/scheduler/api.py:59 [路由接线] current: User = Depends(get_current_user),",
+        "backend/research-agent-source/tools/scheduler/api.py:70 [路由接线] current: User = Depends(get_current_user),",
+        "backend/research-agent-source/wps_office_api.py:200 [路由接线] async def wps_config(current=Depends(get_current_user)):",
+        "backend/research-agent-source/wps_office_api.py:205 [路由接线] async def wps_register(request: Request, current=Depends(get_current_user)):",
+        "frontend/mock-server/server.py:44 [全局接线] app.add_middleware("
+      ]
+    },
+    "notes": [
+      "鉴权接线扫描（F8）：模式=optional，全局接线=是，占位实现=是，含接线文件 32 个（信号：令牌校验 140、全局接线 2、未配置即放行 2、路由依赖/装饰器 86）",
+      "鉴权接证据（示例）：backend/research-agent-source/pipeline_api.py:171 [路由接线] def list_items(current: User = Depends(get_current_user)) -> dict[str, Any]:；backend/research-agent-source/pipeline_api.py:186 [路由接线] def get_item(item_id: int, current: User = Depends(get_current_user)) -> dict[st；backend/research-agent-source/pipeline_api.py:205 [路由接线] def create_item(body: ItemIn, current: User = Depends(get_current_user)) -> dict",
+      "同源功能点语义去重（口径 v1.1）：覆盖同名 6 条，收敛重复 19 条；示例：page『/m/schedule』(code) 覆盖 page『/m/schedule』(code)：同源同名保留首次出现(平级)；page『/m/memory』(code) 覆盖 page『/m/memory』(code)：同源同名保留首次出现(平级)；page『/m/email』(code) 覆盖 page『/m/email』(code)：同源同名保留首次出现(平级)；page『/m/schedule』(code) 覆盖 page『/m/schedule』(code)：同源同名保留首次出现(平级)；page『/m/chat』(code) 覆盖 page『/m/chat』(code)：同源同名保留首次出现(平级)",
+      "业务调用图吞并（F6）：22 个辅助函数融入其调用方，未单独产出功能点（示例：_ChatRunner.subscribe @ backend/research-agent-source/server.py、_ChatRunner.unsubscribe @ backend/research-agent-source/server.py、_ChatRunner.mark_done @ backend/research-agent-source/server.py）",
+      "全量通道：不做 diff，全部标为『全量』",
+      "仅规则引擎（LLM_ENHANCE=off）",
+      "专家审阅跳过：未启用运行时 UI 通道（Phase 1 仅 URL 通道专家）"
+    ],
+    "merge_conflicts": [],
+    "channel_summary": {
+      "code": {
+        "fp": 756,
+        "tp": 2571,
+        "case": 2571
+      },
+      "url": {
+        "fp": 0,
+        "tp": 0,
+        "case": 0
+      },
+      "source_kind": "code"
+    },
+    "expert": {
+      "enabled": false,
+      "channel": "url",
+      "expert": "PageExpert",
+      "reason": "未启用运行时 UI 通道（Phase 1 仅 URL 通道专家）"
+    },
+    "errors": []
+  },
+  "outputs": {
+    "test_points": "C:\\Users\\EDY\\WorkBuddy\\testCodeFast\\work\\testgen-service\\outputs\\14\\test_points.json",
+    "test_cases": "C:\\Users\\EDY\\WorkBuddy\\testCodeFast\\work\\testgen-service\\outputs\\14\\test_cases.json",
+    "markdown": "C:\\Users\\EDY\\WorkBuddy\\testCodeFast\\work\\testgen-service\\outputs\\14\\TEST_CASES.md",
+    "summary": "C:\\Users\\EDY\\WorkBuddy\\testCodeFast\\work\\testgen-service\\outputs\\14\\summary.json"
+  }
+}
+EXIT=0

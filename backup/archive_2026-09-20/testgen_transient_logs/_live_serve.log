@@ -1,0 +1,20 @@
+INFO:     Started server process [17480]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8088 (Press CTRL+C to quit)
+INFO:     127.0.0.1:64033 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53253 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53254 - "POST /api/v1/generate HTTP/1.1" 202 Accepted
+{"ts": "2026-09-19T13:34:12.975", "level": "INFO", "logger": "engine.pipeline", "request_id": "-", "message": "扫描完成", "extra": {"files": 366}}
+INFO:     127.0.0.1:53260 - "GET /api/v1/tasks/gen-be2a0ba29c11 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59032 - "GET /api/v1/tasks/gen-be2a0ba29c11 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60964 - "GET /api/v1/projects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58285 - "GET /api/v1/projects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63710 - "GET /api/v1/projects/18/cases HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63711 - "GET /api/v1/projects/15/cases HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50228 - "GET /api/v1/projects/18/cases HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50229 - "GET /api/v1/projects/15/cases HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56718 - "GET /api/v1/projects/18/cases HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56719 - "GET /api/v1/projects/15/cases HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51839 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51839 - "GET /api/v1/projects HTTP/1.1" 200 OK

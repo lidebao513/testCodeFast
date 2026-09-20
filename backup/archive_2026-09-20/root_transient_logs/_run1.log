@@ -1,0 +1,69 @@
+﻿
+START=2026-09-18 16:07:18
+python.exe : [pipeline] scan {'path': 'C:/Users/EDY/WorkBuddy/testCodeFast/work/targets/research-agent'}
+所在位置 行:445 字符: 434
++ ... tion $Root; & ".\venv\Scripts\python.exe" -m cli.main pipeline --path ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ([pipeline] scan...esearch-agent'}:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+{"ts": "2026-09-18T16:07:20.582", "level": "INFO", "logger": "engine.pipeline", "request_id": "-", "message": "鎵弿瀹屾垚",
+ "extra": {"files": 366}}
+[pipeline] auth_scan {'files': 366}
+[pipeline] fp_extract {'files': 366}
+[pipeline] diff_tag {'mode': 'full'}
+[pipeline] tp_expand {'fp': 756}
+[pipeline] semantic_enrich {'enabled': True}
+{"ts": "2026-09-18T16:08:23.260", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retr
+ying request in 0.495502 seconds"}
+{"ts": "2026-09-18T16:09:23.866", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retr
+ying request in 0.776183 seconds"}
+{"ts": "2026-09-18T16:10:24.710", "level": "WARNING", "logger": "engine.llm_fallback", "request_id": "-", "message": "妯
+″瀷 qwen3.7-flash 鐬椂閿欒锛堣秴鏃?缃戠粶锛夛紝閲嶈瘯 1/2锛?s锛夛細Request timed out."}
+{"ts": "2026-09-18T16:11:25.790", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retr
+ying request in 0.384110 seconds"}
+{"ts": "2026-09-18T16:12:26.252", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retr
+ying request in 0.759311 seconds"}
+{"ts": "2026-09-18T16:13:27.097", "level": "WARNING", "logger": "engine.llm_fallback", "request_id": "-", "message": "妯
+″瀷 qwen3.7-flash 鐬椂閿欒锛堣秴鏃?缃戠粶锛夛紝閲嶈瘯 2/2锛?s锛夛細Request timed out."}
+{"ts": "2026-09-18T16:14:29.182", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retr
+ying request in 0.445700 seconds"}
+{"ts": "2026-09-18T16:15:29.765", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retr
+ying request in 0.864786 seconds"}
+{"ts": "2026-09-18T16:16:30.714", "level": "WARNING", "logger": "engine.llm_fallback", "request_id": "-", "message": "妯
+″瀷 qwen3.7-flash 鐬椂閿欒閲嶈瘯鑰楀敖锛岄檷绾у埌涓嬩竴涓?}
+{"ts": "2026-09-18T16:16:30.892", "level": "INFO", "logger": "httpx2", "request_id": "-", "message": "HTTP Request: POS
+T https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions \"HTTP/1.1 403 Forbidden\""}
+{"ts": "2026-09-18T16:16:30.900", "level": "WARNING", "logger": "engine.llm_fallback", "request_id": "-", "message": "妯
+″瀷 qwen3.7-flash-2026-07-15 棰濆害/闄愭祦涓嶅彲鐢紝闄嶇骇鍒颁笅涓€涓細Error code: 403 - {'error': {'message': 'Free quota exhausted. To c
+ontinue accessing the model on a paid basis, please add funds or disable the \"use free tier o"}
+{"ts": "2026-09-18T16:17:30.914", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retr
+ying request in 0.410594 seconds"}
+{"ts": "2026-09-18T16:18:31.481", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retr
+ying request in 0.888947 seconds"}
+{"ts": "2026-09-18T16:19:32.468", "level": "WARNING", "logger": "engine.llm_fallback", "request_id": "-", "message": "妯
+″瀷 deepseek-v4-flash-0731 鐬椂閿欒锛堣秴鏃?缃戠粶锛夛紝閲嶈瘯 1/2锛?s锛夛細Request timed out."}
+{"ts": "2026-09-18T16:20:33.569", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retr
+ying request in 0.472931 seconds"}
+{"ts": "2026-09-18T16:21:34.287", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retr
+ying request in 0.796490 seconds"}
+{"ts": "2026-09-18T16:22:35.192", "level": "WARNING", "logger": "engine.llm_fallback", "request_id": "-", "message": "妯
+″瀷 deepseek-v4-flash-0731 鐬椂閿欒锛堣秴鏃?缃戠粶锛夛紝閲嶈瘯 2/2锛?s锛夛細Request timed out."}
+{"ts": "2026-09-18T16:23:37.405", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retr
+ying request in 0.413342 seconds"}
+{"ts": "2026-09-18T16:24:38.004", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retr
+ying request in 0.774581 seconds"}
+{"ts": "2026-09-18T16:25:38.892", "level": "WARNING", "logger": "engine.llm_fallback", "request_id": "-", "message": "妯
+″瀷 deepseek-v4-flash-0731 鐬椂閿欒閲嶈瘯鑰楀敖锛岄檷绾у埌涓嬩竴涓?}
+{"ts": "2026-09-18T16:26:39.022", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retr
+ying request in 0.472090 seconds"}
+{"ts": "2026-09-18T16:27:39.604", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retr
+ying request in 0.953581 seconds"}
+{"ts": "2026-09-18T16:28:40.860", "level": "WARNING", "logger": "engine.llm_fallback", "request_id": "-", "message": "妯
+″瀷 qwen3.8-2.4t-a95b 鐬椂閿欒锛堣秴鏃?缃戠粶锛夛紝閲嶈瘯 1/2锛?s锛夛細Request timed out."}
+{"ts": "2026-09-18T16:29:41.986", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retr
+ying request in 0.376372 seconds"}
+{"ts": "2026-09-18T16:30:42.477", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retr
+ying request in 0.947111 seconds"}
+{"ts": "2026-09-18T16:31:43.645", "level": "WARNING", "logger": "engine.llm_fallback", "request_id": "-", "message": "妯
+″瀷 qwen3.8-2.4t-a95b 鐬椂閿欒锛堣秴鏃?缃戠粶锛夛紝閲嶈瘯 2/2锛?s锛夛細Request timed out."}

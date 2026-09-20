@@ -1,0 +1,103 @@
+[pipeline] runtime_ui {'base_url': 'http://101.43.2.52:9001/login'}
+{"ts": "2026-09-16T17:39:57.263", "level": "INFO", "logger": "engine.runtime_ui", "request_id": "-", "message": "运行时 UI 发现完成", "extra": {"pages": 3, "reachable": 3, "elements": 63, "routes": 0, "console_errors": 0, "logged_in": true}}
+[pipeline] diff_tag {'mode': 'full'}
+[pipeline] tp_expand {'fp': 81}
+[pipeline] semantic_enrich {'enabled': False}
+[pipeline] case_gen {'tp': 219}
+[pipeline] persist {'project_id': 9}
+[pipeline] done {'files': 0, 'functional_points': 81, 'runtime_ui_pages': 3, 'runtime_ui_reachable': 3, 'runtime_ui_elements': 63, 'runtime_ui_routes': 0, 'runtime_ui_fp_added': 30, 'runtime_ui_fp_replaced': 0, 'runtime_ui_fp_deduped': 0, 'fp_url_sourced': 81, 'test_points': 219, 'llm_added': 0, 'llm_rejected': 0, 'cases_with_runtime_detail': 21, 'cases': 219}
+{
+  "result": {
+    "project_id": 9,
+    "mode": "full",
+    "source_kind": "url",
+    "run_batch_id": "",
+    "counts": {
+      "files": 0,
+      "functional_points": 81,
+      "runtime_ui_pages": 3,
+      "runtime_ui_reachable": 3,
+      "runtime_ui_elements": 63,
+      "runtime_ui_routes": 0,
+      "runtime_ui_fp_added": 30,
+      "runtime_ui_fp_replaced": 0,
+      "runtime_ui_fp_deduped": 0,
+      "fp_url_sourced": 81,
+      "test_points": 219,
+      "llm_added": 0,
+      "llm_rejected": 0,
+      "cases_with_runtime_detail": 21,
+      "cases": 219
+    },
+    "scope_summary": {
+      "正常": 81,
+      "安全": 21,
+      "边界": 81,
+      "异常": 36
+    },
+    "tag_summary": {
+      "全量": 219
+    },
+    "case_stats": {
+      "created": 113,
+      "updated": 0,
+      "reused": 106,
+      "obsolete": 0
+    },
+    "traceability": {
+      "fp_count": 81,
+      "tp_count": 219,
+      "case_count": 219,
+      "orphan_tp": [],
+      "orphan_case": [],
+      "orphan_tp_count": 0,
+      "orphan_case_count": 0
+    },
+    "execution": {},
+    "pull": {},
+    "auth_scan": {},
+    "notes": [
+      "未提供被测代码目录：本次只走「测试地址 + 账号密码」通道",
+      "运行时 UI：表单登录成功（账号 liuwei，密码与动态口令均不记录）；跳转 http://101.43.2.52:9001/login → http://101.43.2.52:9001/",
+      "运行时 UI：面板区域发现：福享Work AI工作台 → 复星医药-600196 08-12 15:06（就地采集 17 元素）",
+      "运行时 UI：面板区域发现：消息中心 群推送 → 名称 类型 webhook 启用 操作 投研飞书测试群 飞书（就地采集 29 元素）",
+      "运行时 UI：状态驱动面板区域发现 2 个（菜单点击未改 URL，按内容签名区分）",
+      "运行时 UI：click-through 在 / 发现 17 个深层元素",
+      "运行时 UI：click-through 在 area::复星医药-600196 08-12 15:06 发现 17 个深层元素",
+      "运行时 UI：click-through 深度发现完成：共 2 次交互（Tab/弹窗-抽屉触发/分页翻页/搜索筛选表单提交）",
+      "运行时 UI：运行时发现完成：登录=是，可达页面 3/3，元素 63 个，菜单发现路由 0 条，控制台错误 0 条",
+      "运行时补入 30 条 UI 功能点（覆盖静态同名 0 条，语义收敛重复 0 条）",
+      "全量通道：不做 diff，全部标为『全量』",
+      "运行时（地址通道）功能点 81 条：无版本概念，增量通道对它们不做 diff，一律标『全量』（如需增量请以代码通道为准）",
+      "仅规则引擎（LLM_ENHANCE=off）",
+      "专家(URL)未启用：未配置 LLM（EXPERT_API_KEY/BASE_URL/MODEL 或缺省 LLM_*），已降级为纯规则用例"
+    ],
+    "merge_conflicts": [],
+    "channel_summary": {
+      "code": {
+        "fp": 0,
+        "tp": 0,
+        "case": 0
+      },
+      "url": {
+        "fp": 81,
+        "tp": 219,
+        "case": 219
+      },
+      "source_kind": "url"
+    },
+    "expert": {
+      "enabled": false,
+      "channel": "url",
+      "expert": "PageExpert",
+      "reason": "未配置 LLM（EXPERT_API_KEY/BASE_URL/MODEL 或缺省 LLM_*），已降级纯规则"
+    },
+    "errors": []
+  },
+  "outputs": {
+    "test_points": "C:\\Users\\EDY\\WorkBuddy\\testCodeFast\\work\\testgen-service\\outputs\\9\\test_points.json",
+    "test_cases": "C:\\Users\\EDY\\WorkBuddy\\testCodeFast\\work\\testgen-service\\outputs\\9\\test_cases.json",
+    "markdown": "C:\\Users\\EDY\\WorkBuddy\\testCodeFast\\work\\testgen-service\\outputs\\9\\TEST_CASES.md",
+    "summary": "C:\\Users\\EDY\\WorkBuddy\\testCodeFast\\work\\testgen-service\\outputs\\9\\summary.json"
+  }
+}

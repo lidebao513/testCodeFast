@@ -1,0 +1,3 @@
+{"ts": "2026-09-18T16:58:53.549", "level": "WARNING", "logger": "engine.llm_fallback", "request_id": "-", "message": "模型 qwen3.7-flash 超时（网络），重试 1/2：Request timed out"}
+{"ts": "2026-09-18T16:58:53.549", "level": "INFO", "logger": "engine.pipeline", "request_id": "-", "message": "扫描完成，文件数 366"}
+LOG_OK

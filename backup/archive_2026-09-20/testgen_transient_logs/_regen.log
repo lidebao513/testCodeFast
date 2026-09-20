@@ -1,0 +1,220 @@
+[pipeline] runtime_ui {'base_url': 'http://47.97.154.50:8090/chat'}
+{"ts": "2026-09-17T09:27:27.701", "level": "INFO", "logger": "httpx2", "request_id": "-", "message": "HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions \"HTTP/1.1 200 OK\""}
+{"ts": "2026-09-17T09:31:05.000", "level": "INFO", "logger": "engine.runtime_ui", "request_id": "-", "message": "运行时 UI 发现完成", "extra": {"pages": 32, "reachable": 32, "elements": 2778, "routes": 15, "console_errors": 0, "logged_in": true}}
+[pipeline] diff_tag {'mode': 'full'}
+[pipeline] tp_expand {'fp': 800}
+[pipeline] semantic_enrich {'enabled': False}
+{"ts": "2026-09-17T09:32:06.860", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retrying request in 0.453769 seconds"}
+{"ts": "2026-09-17T09:33:07.432", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retrying request in 0.955748 seconds"}
+{"ts": "2026-09-17T09:35:08.589", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retrying request in 0.498014 seconds"}
+{"ts": "2026-09-17T09:36:09.183", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retrying request in 0.808780 seconds"}
+{"ts": "2026-09-17T09:38:10.204", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retrying request in 0.411732 seconds"}
+{"ts": "2026-09-17T09:39:10.734", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retrying request in 0.879579 seconds"}
+{"ts": "2026-09-17T09:41:11.885", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retrying request in 0.400510 seconds"}
+{"ts": "2026-09-17T09:42:12.384", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retrying request in 0.951679 seconds"}
+{"ts": "2026-09-17T09:44:13.532", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retrying request in 0.494207 seconds"}
+{"ts": "2026-09-17T09:45:14.116", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retrying request in 0.896887 seconds"}
+{"ts": "2026-09-17T09:46:12.417", "level": "INFO", "logger": "httpx2", "request_id": "-", "message": "HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions \"HTTP/1.1 200 OK\""}
+{"ts": "2026-09-17T09:47:12.511", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retrying request in 0.412239 seconds"}
+{"ts": "2026-09-17T09:48:13.030", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retrying request in 0.781931 seconds"}
+{"ts": "2026-09-17T09:50:14.055", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retrying request in 0.388160 seconds"}
+{"ts": "2026-09-17T09:51:14.542", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retrying request in 0.902703 seconds"}
+{"ts": "2026-09-17T09:53:15.693", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retrying request in 0.421924 seconds"}
+{"ts": "2026-09-17T09:54:16.414", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retrying request in 0.776155 seconds"}
+{"ts": "2026-09-17T09:56:17.455", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retrying request in 0.404437 seconds"}
+{"ts": "2026-09-17T09:57:17.970", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retrying request in 0.790563 seconds"}
+{"ts": "2026-09-17T09:59:19.065", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retrying request in 0.410135 seconds"}
+{"ts": "2026-09-17T10:00:19.599", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retrying request in 0.791272 seconds"}
+{"ts": "2026-09-17T10:02:20.628", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retrying request in 0.482552 seconds"}
+{"ts": "2026-09-17T10:03:21.199", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retrying request in 0.903497 seconds"}
+{"ts": "2026-09-17T10:05:22.503", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retrying request in 0.403531 seconds"}
+{"ts": "2026-09-17T10:06:23.198", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retrying request in 0.851562 seconds"}
+{"ts": "2026-09-17T10:08:24.375", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retrying request in 0.390064 seconds"}
+{"ts": "2026-09-17T10:09:24.855", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retrying request in 0.891834 seconds"}
+{"ts": "2026-09-17T10:11:26.011", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retrying request in 0.466957 seconds"}
+{"ts": "2026-09-17T10:12:26.619", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retrying request in 0.917670 seconds"}
+{"ts": "2026-09-17T10:14:27.704", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retrying request in 0.439887 seconds"}
+{"ts": "2026-09-17T10:15:28.237", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retrying request in 0.939953 seconds"}
+{"ts": "2026-09-17T10:17:29.436", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retrying request in 0.388447 seconds"}
+{"ts": "2026-09-17T10:18:29.947", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retrying request in 0.914287 seconds"}
+{"ts": "2026-09-17T10:20:31.063", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retrying request in 0.472085 seconds"}
+{"ts": "2026-09-17T10:21:31.664", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retrying request in 0.940115 seconds"}
+{"ts": "2026-09-17T10:23:32.875", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retrying request in 0.490626 seconds"}
+{"ts": "2026-09-17T10:24:33.488", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retrying request in 0.839229 seconds"}
+{"ts": "2026-09-17T10:26:34.540", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retrying request in 0.442859 seconds"}
+{"ts": "2026-09-17T10:27:35.168", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retrying request in 0.760155 seconds"}
+{"ts": "2026-09-17T10:29:36.165", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retrying request in 0.436777 seconds"}
+{"ts": "2026-09-17T10:30:36.791", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retrying request in 0.841451 seconds"}
+{"ts": "2026-09-17T10:32:37.912", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retrying request in 0.453248 seconds"}
+{"ts": "2026-09-17T10:33:38.455", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retrying request in 0.948893 seconds"}
+{"ts": "2026-09-17T10:35:39.643", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retrying request in 0.378419 seconds"}
+{"ts": "2026-09-17T10:36:40.116", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retrying request in 0.802040 seconds"}
+{"ts": "2026-09-17T10:38:41.089", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retrying request in 0.383188 seconds"}
+{"ts": "2026-09-17T10:39:41.550", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retrying request in 0.943705 seconds"}
+{"ts": "2026-09-17T10:41:42.915", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retrying request in 0.429772 seconds"}
+{"ts": "2026-09-17T10:42:43.444", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retrying request in 0.765995 seconds"}
+{"ts": "2026-09-17T10:44:44.400", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retrying request in 0.446621 seconds"}
+{"ts": "2026-09-17T10:45:44.938", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retrying request in 0.768090 seconds"}
+{"ts": "2026-09-17T10:47:45.910", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retrying request in 0.405580 seconds"}
+{"ts": "2026-09-17T10:48:46.416", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retrying request in 0.877847 seconds"}
+{"ts": "2026-09-17T10:50:47.595", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retrying request in 0.415681 seconds"}
+{"ts": "2026-09-17T10:51:48.098", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retrying request in 0.977208 seconds"}
+{"ts": "2026-09-17T10:53:49.268", "level": "INFO", "logger": "openai._base_client", "request_id": "-", "message": "Retrying request in 0.485949 seconds"}
+{"ts": "2026-09-17T10:53:49.993", "level": "INFO", "logger": "httpx2", "request_id": "-", "message": "HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions \"HTTP/1.1 403 Forbidden\""}
+{"ts": "2026-09-17T10:53:50.196", "level": "INFO", "logger": "httpx2", "request_id": "-", "message": "HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions \"HTTP/1.1 403 Forbidden\""}
+{"ts": "2026-09-17T10:53:50.385", "level": "INFO", "logger": "httpx2", "request_id": "-", "message": "HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions \"HTTP/1.1 403 Forbidden\""}
+{"ts": "2026-09-17T10:53:50.583", "level": "INFO", "logger": "httpx2", "request_id": "-", "message": "HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions \"HTTP/1.1 403 Forbidden\""}
+{"ts": "2026-09-17T10:53:50.770", "level": "INFO", "logger": "httpx2", "request_id": "-", "message": "HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions \"HTTP/1.1 403 Forbidden\""}
+[pipeline] case_gen {'tp': 1853}
+[pipeline] persist {'project_id': 10}
+[pipeline] done {'files': 0, 'functional_points': 800, 'runtime_ui_pages': 32, 'runtime_ui_reachable': 32, 'runtime_ui_elements': 2778, 'runtime_ui_routes': 15, 'runtime_ui_fp_added': 34, 'runtime_ui_fp_replaced': 0, 'runtime_ui_fp_deduped': 0, 'fp_url_sourced': 800, 'test_points': 1850, 'llm_added': 0, 'llm_rejected': 0, 'expert_page_tps': 3, 'expert_page_rejected': 5, 'cases_with_runtime_detail': 226, 'cases': 1853}
+{
+  "result": {
+    "project_id": 10,
+    "mode": "full",
+    "source_kind": "url",
+    "run_batch_id": "",
+    "counts": {
+      "files": 0,
+      "functional_points": 800,
+      "runtime_ui_pages": 32,
+      "runtime_ui_reachable": 32,
+      "runtime_ui_elements": 2778,
+      "runtime_ui_routes": 15,
+      "runtime_ui_fp_added": 34,
+      "runtime_ui_fp_replaced": 0,
+      "runtime_ui_fp_deduped": 0,
+      "fp_url_sourced": 800,
+      "test_points": 1850,
+      "llm_added": 0,
+      "llm_rejected": 0,
+      "expert_page_tps": 3,
+      "expert_page_rejected": 5,
+      "cases_with_runtime_detail": 226,
+      "cases": 1853
+    },
+    "scope_summary": {
+      "正常": 800,
+      "安全": 68,
+      "边界": 800,
+      "异常": 182
+    },
+    "tag_summary": {
+      "全量": 1850
+    },
+    "case_stats": {
+      "created": 1207,
+      "updated": 126,
+      "reused": 520,
+      "obsolete": 1210
+    },
+    "traceability": {
+      "fp_count": 800,
+      "tp_count": 1853,
+      "case_count": 1333,
+      "orphan_tp": [],
+      "orphan_case": [],
+      "orphan_tp_count": 0,
+      "orphan_case_count": 0
+    },
+    "execution": {},
+    "pull": {},
+    "auth_scan": {},
+    "notes": [
+      "未提供被测代码目录：本次只走「测试地址 + 账号密码」通道",
+      "运行时 UI：表单登录成功（账号 test_ft001@ft.cntaiping.com，密码与动态口令均不记录）；跳转 http://47.97.154.50:8090/login → http://47.97.154.50:8090/chat",
+      "运行时 UI：菜单点击发现路由 15 条：/pc/qixinji, /pc/discover, /pc/exec-hall, /pc/email, /pc/schedule, /pc/knowledge, /pc/memory, /pc/experts, /pc/tasks, /pc/artifacts",
+      "运行时 UI：面板区域发现：启新记 → 启新记（就地采集 150 元素）",
+      "运行时 UI：面板区域发现：发现 → 欢迎大家使用福享 ai 👋（就地采集 150 元素）",
+      "运行时 UI：面板区域发现：高管报告厅 Hot! → 返回 高管家书 总览 test01视角 数据截至 2026-（就地采集 150 元素）",
+      "运行时 UI：面板区域发现：邮件 → 返回 邮件（就地采集 150 元素）",
+      "运行时 UI：面板区域发现：日程 → 返回 我的日程 加载中…（就地采集 150 元素）",
+      "运行时 UI：面板区域发现：记忆管理 → 返回 记忆管理 记忆仅你本人可见，用于让福享记住你的偏好与口（就地采集 150 元素）",
+      "运行时 UI：面板区域发现：专家天团 → 专家（就地采集 150 元素）",
+      "运行时 UI：面板区域发现：定时任务 → 任务（就地采集 150 元素）",
+      "运行时 UI：面板区域发现：产物 → 产物（就地采集 150 元素）",
+      "运行时 UI：面板区域发现：每日业绩 → 你希望从哪张快讯表， 开始今天的业绩问数？（就地采集 150 元素）",
+      "运行时 UI：面板区域发现：审计 → 审计（就地采集 150 元素）",
+      "运行时 UI：面板区域发现：技能 → 技能（就地采集 150 元素）",
+      "运行时 UI：面板区域发现：连接器 → 工具（就地采集 150 元素）",
+      "运行时 UI：面板区域发现：桌面悬浮球 → 福享 agent（就地采集 29 元素）",
+      "运行时 UI：面板区域发现：日程 → 9月20日 周日（就地采集 150 元素）",
+      "运行时 UI：面板区域发现：test01 → test_ft001@ft.cntaiping.com 普通（就地采集 150 元素）",
+      "运行时 UI：状态驱动面板区域发现 16 个（菜单点击未改 URL，按内容签名区分）",
+      "运行时 UI：click-through 深度发现完成：共 26 次交互（Tab/弹窗-抽屉触发/分页翻页/搜索筛选表单提交）",
+      "运行时 UI：运行时发现完成：登录=是，可达页面 32/32，元素 2778 个，菜单发现路由 15 条，控制台错误 0 条",
+      "运行时补入 34 条 UI 功能点（覆盖静态同名 0 条，语义收敛重复 0 条）",
+      "全量通道：不做 diff，全部标为『全量』",
+      "运行时（地址通道）功能点 800 条：无版本概念，增量通道对它们不做 diff，一律标『全量』（如需增量请以代码通道为准）",
+      "仅规则引擎（LLM_ENHANCE=off）",
+      "专家模型调用失败，已降级为规则用例：专家模型调用失败：APITimeoutError",
+      "专家模型调用失败，已降级为规则用例：专家模型调用失败：APITimeoutError",
+      "专家模型调用失败，已降级为规则用例：专家模型调用失败：APITimeoutError",
+      "专家模型调用失败，已降级为规则用例：专家模型调用失败：APITimeoutError",
+      "专家候选 20 条 → 通过 8 条、拒绝 0 条",
+      "专家模型调用失败，已降级为规则用例：专家模型调用失败：APITimeoutError",
+      "专家模型调用失败，已降级为规则用例：专家模型调用失败：APITimeoutError",
+      "专家模型调用失败，已降级为规则用例：专家模型调用失败：APITimeoutError",
+      "专家模型调用失败，已降级为规则用例：专家模型调用失败：APITimeoutError",
+      "专家模型调用失败，已降级为规则用例：专家模型调用失败：APITimeoutError",
+      "专家模型调用失败，已降级为规则用例：专家模型调用失败：APITimeoutError",
+      "专家模型调用失败，已降级为规则用例：专家模型调用失败：APITimeoutError",
+      "专家模型调用失败，已降级为规则用例：专家模型调用失败：APITimeoutError",
+      "专家模型调用失败，已降级为规则用例：专家模型调用失败：APITimeoutError",
+      "专家模型调用失败，已降级为规则用例：专家模型调用失败：APITimeoutError",
+      "专家模型调用失败，已降级为规则用例：专家模型调用失败：APITimeoutError",
+      "专家模型调用失败，已降级为规则用例：专家模型调用失败：APITimeoutError",
+      "专家模型调用失败，已降级为规则用例：专家模型调用失败：APITimeoutError",
+      "专家模型调用失败，已降级为规则用例：专家模型调用失败：APITimeoutError",
+      "专家模型调用失败，已降级为规则用例：专家模型调用失败：APITimeoutError",
+      "专家模型调用失败，已降级为规则用例：专家模型调用失败：APITimeoutError",
+      "专家模型调用失败，已降级为规则用例：专家模型调用失败：APITimeoutError",
+      "专家模型调用失败，已降级为规则用例：专家模型调用失败：APITimeoutError",
+      "专家模型调用失败，已降级为规则用例：专家模型调用失败：APITimeoutError",
+      "专家模型调用失败，已降级为规则用例：专家模型调用失败：APITimeoutError",
+      "专家模型调用失败，已降级为规则用例：专家模型调用失败：APITimeoutError",
+      "专家模型调用失败，已降级为规则用例：专家模型调用失败：APITimeoutError",
+      "专家模型调用失败，已降级为规则用例：专家模型调用失败：PermissionDeniedError",
+      "专家模型调用失败，已降级为规则用例：专家模型调用失败：PermissionDeniedError",
+      "专家模型调用失败，已降级为规则用例：专家模型调用失败：PermissionDeniedError",
+      "专家模型调用失败，已降级为规则用例：专家模型调用失败：PermissionDeniedError",
+      "专家模型调用失败，已降级为规则用例：专家模型调用失败：PermissionDeniedError",
+      "专家(URL)增补测试点 3 条（拒绝 5 条未命中真实锚点/未解析到功能点）"
+    ],
+    "merge_conflicts": [],
+    "channel_summary": {
+      "code": {
+        "fp": 0,
+        "tp": 0,
+        "case": 0
+      },
+      "url": {
+        "fp": 800,
+        "tp": 1853,
+        "case": 1853
+      },
+      "source_kind": "url"
+    },
+    "expert": {
+      "enabled": true,
+      "channel": "url",
+      "expert": "PageExpert",
+      "pages_reviewed": 32,
+      "tps_added": 3,
+      "rejected": 5,
+      "vision_used": false,
+      "vision_note": "",
+      "coverage_gaps": [
+        "本页专家未覆盖维度：异常、性能"
+      ]
+    },
+    "errors": []
+  },
+  "outputs": {
+    "test_points": "C:\\Users\\EDY\\WorkBuddy\\testCodeFast\\work\\testgen-service\\outputs\\10\\test_points.json",
+    "test_cases": "C:\\Users\\EDY\\WorkBuddy\\testCodeFast\\work\\testgen-service\\outputs\\10\\test_cases.json",
+    "markdown": "C:\\Users\\EDY\\WorkBuddy\\testCodeFast\\work\\testgen-service\\outputs\\10\\TEST_CASES.md",
+    "summary": "C:\\Users\\EDY\\WorkBuddy\\testCodeFast\\work\\testgen-service\\outputs\\10\\summary.json"
+  }
+}
+REGEN_EXIT=0

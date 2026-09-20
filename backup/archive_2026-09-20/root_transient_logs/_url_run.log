@@ -1,0 +1,120 @@
+[pipeline] auth_scan {'files': 0}
+[pipeline] runtime_ui {'base_url': 'http://47.97.154.50:8090/chat'}
+{"ts": "2026-09-18T17:32:09.975", "level": "INFO", "logger": "httpx2", "request_id": "-", "message": "HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions \"HTTP/1.1 200 OK\""}
+{"ts": "2026-09-18T17:32:09.990", "level": "INFO", "logger": "engine.llm_fallback", "request_id": "-", "message": "模型 qwen3.7-flash 调用成功（channel=expert）"}
+{"ts": "2026-09-18T17:35:55.080", "level": "INFO", "logger": "engine.runtime_ui", "request_id": "-", "message": "运行时 UI 发现完成", "extra": {"pages": 32, "reachable": 32, "elements": 2767, "routes": 15, "console_errors": 0, "logged_in": true}}
+[pipeline] diff_tag {'mode': 'full'}
+[pipeline] tp_expand {'fp': 800}
+[pipeline] semantic_enrich {'enabled': False}
+[pipeline] case_gen {'tp': 1850}
+[pipeline] persist {'project_id': 15}
+[pipeline] done {'files': 0, 'functional_points': 800, 'runtime_ui_pages': 32, 'runtime_ui_reachable': 32, 'runtime_ui_elements': 2767, 'runtime_ui_routes': 15, 'runtime_ui_fp_added': 34, 'runtime_ui_fp_replaced': 0, 'runtime_ui_fp_deduped': 0, 'fp_url_sourced': 800, 'test_points': 1850, 'llm_added': 0, 'llm_rejected': 0, 'cases_with_runtime_detail': 224, 'cases': 1850}
+{
+  "result": {
+    "project_id": 15,
+    "mode": "full",
+    "source_kind": "url",
+    "run_batch_id": "",
+    "counts": {
+      "files": 0,
+      "functional_points": 800,
+      "runtime_ui_pages": 32,
+      "runtime_ui_reachable": 32,
+      "runtime_ui_elements": 2767,
+      "runtime_ui_routes": 15,
+      "runtime_ui_fp_added": 34,
+      "runtime_ui_fp_replaced": 0,
+      "runtime_ui_fp_deduped": 0,
+      "fp_url_sourced": 800,
+      "test_points": 1850,
+      "llm_added": 0,
+      "llm_rejected": 0,
+      "cases_with_runtime_detail": 224,
+      "cases": 1850
+    },
+    "scope_summary": {
+      "正常": 800,
+      "安全": 68,
+      "边界": 800,
+      "异常": 182
+    },
+    "tag_summary": {
+      "全量": 1850
+    },
+    "case_stats": {
+      "created": 1850,
+      "updated": 0,
+      "reused": 0,
+      "obsolete": 0
+    },
+    "traceability": {
+      "fp_count": 800,
+      "tp_count": 1850,
+      "case_count": 1850,
+      "orphan_tp": [],
+      "orphan_case": [],
+      "orphan_tp_count": 0,
+      "orphan_case_count": 0
+    },
+    "execution": {},
+    "pull": {},
+    "auth_scan": {},
+    "notes": [
+      "未提供被测代码：跳过鉴权接线扫描（F8），安全用例退回保守口径（按需鉴权）",
+      "未提供被测代码目录：本次只走「测试地址 + 账号密码」通道",
+      "运行时 UI：表单登录成功（账号 test_ft001@ft.cntaiping.com，密码与动态口令均不记录）；跳转 http://47.97.154.50:8090/login → http://47.97.154.50:8090/chat",
+      "运行时 UI：菜单点击发现路由 15 条：/pc/qixinji, /pc/discover, /pc/exec-hall, /pc/email, /pc/schedule, /pc/knowledge, /pc/memory, /pc/experts, /pc/tasks, /pc/artifacts",
+      "运行时 UI：面板区域发现：启新记 → 启新记（就地采集 150 元素）",
+      "运行时 UI：面板区域发现：发现 → 欢迎大家使用福享 ai 👋（就地采集 150 元素）",
+      "运行时 UI：面板区域发现：高管报告厅 Hot! → 返回 高管家书 总览 test01视角 数据截至 2026-（就地采集 150 元素）",
+      "运行时 UI：面板区域发现：邮件 → 返回 邮件（就地采集 150 元素）",
+      "运行时 UI：面板区域发现：日程 → 返回 我的日程 加载中…（就地采集 150 元素）",
+      "运行时 UI：面板区域发现：记忆管理 → 返回 记忆管理 记忆仅你本人可见，用于让福享记住你的偏好与口（就地采集 150 元素）",
+      "运行时 UI：面板区域发现：专家天团 → 专家（就地采集 150 元素）",
+      "运行时 UI：面板区域发现：定时任务 → 任务（就地采集 150 元素）",
+      "运行时 UI：面板区域发现：产物 → 产物（就地采集 150 元素）",
+      "运行时 UI：面板区域发现：每日业绩 → 你希望从哪张快讯表， 开始今天的业绩问数？（就地采集 150 元素）",
+      "运行时 UI：面板区域发现：审计 → 审计（就地采集 150 元素）",
+      "运行时 UI：面板区域发现：技能 → 技能（就地采集 150 元素）",
+      "运行时 UI：面板区域发现：连接器 → 工具（就地采集 150 元素）",
+      "运行时 UI：面板区域发现：桌面悬浮球 → 福享 agent（就地采集 30 元素）",
+      "运行时 UI：面板区域发现：日程 → 9月20日 周日（就地采集 150 元素）",
+      "运行时 UI：面板区域发现：test01 → test_ft001@ft.cntaiping.com 普通（就地采集 150 元素）",
+      "运行时 UI：状态驱动面板区域发现 16 个（菜单点击未改 URL，按内容签名区分）",
+      "运行时 UI：click-through 深度发现完成：共 26 次交互（Tab/弹窗-抽屉触发/分页翻页/搜索筛选表单提交）",
+      "运行时 UI：运行时发现完成：登录=是，可达页面 32/32，元素 2767 个，菜单发现路由 15 条，控制台错误 0 条",
+      "运行时补入 34 条 UI 功能点（覆盖静态同名 0 条，语义收敛重复 0 条）",
+      "全量通道：不做 diff，全部标为『全量』",
+      "运行时（地址通道）功能点 800 条：无版本概念，增量通道对它们不做 diff，一律标『全量』（如需增量请以代码通道为准）",
+      "仅规则引擎（LLM_ENHANCE=off）"
+    ],
+    "merge_conflicts": [],
+    "channel_summary": {
+      "code": {
+        "fp": 0,
+        "tp": 0,
+        "case": 0
+      },
+      "url": {
+        "fp": 800,
+        "tp": 1850,
+        "case": 1850
+      },
+      "source_kind": "url"
+    },
+    "expert": {
+      "enabled": false,
+      "channel": "url",
+      "expert": "PageExpert",
+      "reason": "expert_mode 关闭（--expert-off 或配置关闭）"
+    },
+    "errors": []
+  },
+  "outputs": {
+    "test_points": "C:\\Users\\EDY\\WorkBuddy\\testCodeFast\\work\\testgen-service\\outputs\\15\\test_points.json",
+    "test_cases": "C:\\Users\\EDY\\WorkBuddy\\testCodeFast\\work\\testgen-service\\outputs\\15\\test_cases.json",
+    "markdown": "C:\\Users\\EDY\\WorkBuddy\\testCodeFast\\work\\testgen-service\\outputs\\15\\TEST_CASES.md",
+    "summary": "C:\\Users\\EDY\\WorkBuddy\\testCodeFast\\work\\testgen-service\\outputs\\15\\summary.json"
+  }
+}
+EXIT=0
