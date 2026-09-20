@@ -40,12 +40,35 @@ def _resolve(name: str) -> list:
     return [sys.executable, "-m", name]
 
 
-def _step(label: str, cmd: list, env: dict | None = None) -> int:
+def _step(label: str, cmd: list, env: dict | None = None, logfile: str | None = None) -> int:
     print(f"\n=== {label} ===")
     print("  $ " + " ".join(cmd))
-    rc = subprocess.run(cmd, cwd=ROOT, env=env).returncode
+    # logfile：把子进程 stdout/stderr 重定向到文件。用途有二：
+    #   1) 隔离「门禁宿主」的 stderr —— 在部分沙箱里宿主 stderr 会被回收（closed
+    #      file），若直接继承给 pytest，pytest 全程/总结阶段写出即抛
+    #      `ValueError('I/O operation on closed file.')` 而假性失败；重定向到文件后
+    #      子进程拿到的是活的文件 fd，不受宿主 stderr 生命周期影响。
+    #   2) 长输出（尤其 pytest 详细用例）不刷屏；失败时再 tail 关键行。
+    if logfile is not None:
+        with open(logfile, "w", encoding="utf-8") as out:
+            rc = subprocess.run(cmd, cwd=ROOT, env=env, stdout=out, stderr=out).returncode
+        if rc != 0:
+            print(f"  (详见 {logfile}，末尾如下)")
+            _tail(logfile, 40)
+    else:
+        rc = subprocess.run(cmd, cwd=ROOT, env=env).returncode
     print(f"--- {label}: {'OK' if rc == 0 else 'FAIL'} (rc={rc}) ---")
     return rc
+
+
+def _tail(path: str, n: int = 40) -> None:
+    try:
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            lines = fh.read().splitlines()
+        for ln in lines[-n:]:
+            print("    " + ln)
+    except Exception:  # 读日志失败不应反噬门禁
+        pass
 
 
 def _pytest_env() -> dict:
@@ -138,8 +161,19 @@ def main() -> int:
         )
     )
     # 7) pytest + 覆盖率（fail_under 见 pyproject [tool.coverage.report]）
-    #    pytest 子进程清空批量删除护栏变量，避免清理系统临时目录触发 SystemExit（见 _pytest_env）
-    failures.append(("pytest", _step("pytest", _pytest_cmd(), env=_pytest_env())))
+    #    pytest 子进程清空批量删除护栏变量，避免清理系统临时目录触发 SystemExit（见 _pytest_env）；
+    #    输出重定向到 pytest_gate.log（见 _step），隔离宿主 stderr 被沙箱回收导致的假性失败。
+    failures.append(
+        (
+            "pytest",
+            _step(
+                "pytest",
+                _pytest_cmd(),
+                env=_pytest_env(),
+                logfile=os.path.join(ROOT, "pytest_gate.log"),
+            ),
+        )
+    )
 
     failed = [(name, rc) for name, rc in failures if rc != 0]
     print("\n" + "=" * 60)

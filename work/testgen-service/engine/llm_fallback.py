@@ -8,12 +8,20 @@ LLM 用例设计 DesignOptions 复用的 LLMClient）统一委托 `chat_with_fal
 `AllocationQuota.FreeTierOnly.`）——视作该免费模型暂不可用，按 `model_chain`
 顺序切到下一个模型。
 
+瞬时网络错误（超时 / 连接中断，如 `APITimeoutError`、`APIConnectionError`）同样触发
+降级（先按指数退避重试同一模型，耗尽后再切下一模型）——避免「某个模型端点偶发超时」
+导致整条链路硬失败（这是初版只认 403/404/429 时未覆盖的缺口）。
+
+**401 鉴权失败 / 400 参数错误不触发降级**：同一 key 对所有模型都失败，切换无意义，
+直接判死。
+
 快速切换：进程内缓存「已验证可用的最优模型下标」，按 (base_url, channel) 维度
 隔离；二次调用直接命中已验证模型，避免每次都从链头重测坏模型（大模型停止后快速恢复）。
 """
 
 from __future__ import annotations
 
+import time
 from typing import Any
 
 from core.errors import LLMError
@@ -36,6 +44,23 @@ _QUOTA_HINTS = (
 # 视觉模型关键字（与 engine/expert/llm.is_vision_model 同源口径，本地自包含避免循环依赖）
 _VISION_HINTS = ("vision", "vl", "qwen-vl", "gpt-4o", "gpt-4-turbo", "claude", "gemini")
 
+# 瞬时网络错误关键字：作为「降级 + 重试」信号（区别于「真实错误」直接判死）。
+# 命中条件见 _is_transient_error：异常类名（APITimeoutError / APIConnectionError 等）
+# 或错误文本含下列关键字。
+_TRANSIENT_HINTS = (
+    "timeout",
+    "timed out",
+    "connection",
+    "reset by peer",
+    "econnreset",
+    "temporary failure",
+    "broken pipe",
+)
+
+# 同一模型遇瞬时错误时最多重试次数（指数退避，封顶见下方 min(2**attempt, 8) 秒）；
+# 重试耗尽仍失败则降级到下一模型。
+_MAX_TRANSIENT_RETRY = 2
+
 
 def _is_quota_unavailable(exc: Exception) -> bool:
     """判断异常是否为「该模型暂不可用（免费额度耗尽 / 限流 / 模型下架）」——应降级到下一个模型。
@@ -48,6 +73,27 @@ def _is_quota_unavailable(exc: Exception) -> bool:
         return True
     msg = (str(getattr(exc, "message", "")) + " " + str(exc)).lower()
     return any(h.lower() in msg for h in _QUOTA_HINTS)
+
+
+def _is_transient_error(exc: Exception) -> bool:
+    """判断异常是否为「瞬时网络错误（超时 / 连接中断）」——应降级到下一模型（或先重试）。
+
+    命中条件：异常类名含 APITimeoutError / APIConnectionError / Timeout / ConnectionError /
+    RemoteProtocolError，或错误文本含瞬时关键字。
+    注意：**401 鉴权失败 / 400 参数错误不命中**——同一 key 对所有模型都失败，重试/降级无意义，
+    应快速失败（见 chat_with_fallback 的 else 分支）。
+    """
+    name = type(exc).__name__
+    if name in (
+        "APITimeoutError",
+        "APIConnectionError",
+        "Timeout",
+        "ConnectionError",
+        "RemoteProtocolError",
+    ):
+        return True
+    msg = (str(getattr(exc, "message", "")) + " " + str(exc)).lower()
+    return any(h in msg for h in _TRANSIENT_HINTS)
 
 
 def _model_is_vision(model: str) -> bool:
@@ -129,27 +175,48 @@ def chat_with_fallback(
     last_err: Exception | None = None
     for idx in order:
         m = chain[idx]
-        try:
-            resp = client.chat.completions.create(
-                model=m,
-                messages=_strip_images(messages, m),
-                temperature=temperature,
-            )
-        except Exception as exc:  # 需区分「额度不可用→降级」与「真实错误→失败」
-            if _is_quota_unavailable(exc):
-                last_err = exc
-                log.warning(
-                    "模型 %s 暂不可用（免费额度/限流/下架），降级到下一个：%s",
-                    m,
-                    str(exc)[:160],
+        # 同一模型最多尝试 (1 + _MAX_TRANSIENT_RETRY) 次：
+        # - 额度/限流不可用（403/404/429 + 关键字）→ 直接跳下一模型（不重试，换模型才有效）；
+        # - 瞬时网络错误（超时/连接中断）→ 先退避重试，耗尽再跳下一模型；
+        # - 真实错误（鉴权失败 / 参数错误）→ 不降级，直接判死。
+        for attempt in range(1 + _MAX_TRANSIENT_RETRY):
+            try:
+                resp = client.chat.completions.create(
+                    model=m,
+                    messages=_strip_images(messages, m),
+                    temperature=temperature,
                 )
-                continue
-            # 真实错误（鉴权失败 / 网络 / 参数）：不降级，直接失败
-            raise LLMError(f"模型 {m} 调用失败：{type(exc).__name__}") from exc
-        # 成功：更新最优模型缓存并返回
-        _best_index[cache_key] = idx
-        log.info("模型 %s 调用成功（channel=%s）", m, channel)
-        return resp
+            except Exception as exc:  # 区分「可降级/可重试」与「真实错误」
+                if _is_quota_unavailable(exc):
+                    last_err = exc
+                    log.warning(
+                        "模型 %s 额度/限流不可用，降级到下一个：%s",
+                        m,
+                        str(exc)[:160],
+                    )
+                    break  # 换模型才有效，不重试
+                if _is_transient_error(exc):
+                    last_err = exc
+                    if attempt < _MAX_TRANSIENT_RETRY:
+                        wait = min(2**attempt, 8)
+                        log.warning(
+                            "模型 %s 瞬时错误（超时/网络），重试 %d/%d（%.0fs）：%s",
+                            m,
+                            attempt + 1,
+                            _MAX_TRANSIENT_RETRY,
+                            wait,
+                            str(exc)[:120],
+                        )
+                        time.sleep(wait)
+                        continue
+                    log.warning("模型 %s 瞬时错误重试耗尽，降级到下一个", m)
+                    break  # 重试耗尽，跳下一模型
+                # 真实错误（鉴权失败 / 参数错误）：不降级，直接失败
+                raise LLMError(f"模型 {m} 调用失败：{type(exc).__name__}") from exc
+            # 成功：更新最优模型缓存并返回
+            _best_index[cache_key] = idx
+            log.info("模型 %s 调用成功（channel=%s）", m, channel)
+            return resp
 
     raise LLMError(
         f"all models in chain failed（共 {len(chain)} 个）："

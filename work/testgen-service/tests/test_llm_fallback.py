@@ -197,6 +197,69 @@ def test_vision_strip_on_non_vision_model():
     assert user_msg[1]["content"] == "hi"  # image_url 已被剥离
 
 
+def test_transient_timeout_falls_back_to_next():
+    """瞬时网络超时（APITimeoutError）应重试后降级到下一模型，而非直接判死。
+
+    复现初版缺口：dashscope 端点偶发超时曾导致整条链路挂死（仅认 403/404/429）。
+    修复后：同一模型超时先退避重试，耗尽后跳下一模型直至成功。
+    """
+    llm_fallback.reset_fallback_cache()
+    seen: list[str] = []
+
+    class _TimeoutErr(Exception):
+        pass
+
+    def handler(model, messages, temperature):
+        seen.append(model)
+        if model == "m0":
+            # 首次超时，重试一次后再超时；之后切 m1 成功
+            raise _TimeoutErr("Request timed out")
+        return _resp("[]")
+
+    with patch("openai.OpenAI", return_value=_client(handler)):
+        resp = llm_fallback.chat_with_fallback(
+            channel="llm",
+            api_key="k",
+            base_url="https://x",
+            timeout=10,
+            model="m0",
+            model_chain=["m0", "m1"],
+            messages=[{"role": "user", "content": "hi"}],
+        )
+    assert resp.choices[0].message.content == "[]"
+    # m0 首试 1 次 + 重试 _MAX_TRANSIENT_RETRY 次均超时 → 跳 m1 成功
+    assert seen.count("m0") == 1 + llm_fallback._MAX_TRANSIENT_RETRY
+    assert seen[-1] == "m1"
+
+
+def test_auth_error_still_hard_fails():
+    """401 鉴权失败仍须直接判死（不降级、不重试），与超时降级区分开。"""
+    llm_fallback.reset_fallback_cache()
+
+    def handler(model, messages, temperature):
+        class _Err(Exception):
+            status_code = 401
+            message = "Invalid API key"
+
+        raise _Err("auth")
+
+    with patch("openai.OpenAI", return_value=_client(handler)):
+        try:
+            llm_fallback.chat_with_fallback(
+                channel="llm",
+                api_key="k",
+                base_url="https://x",
+                timeout=10,
+                model="m0",
+                model_chain=["m0", "m1"],
+                messages=[{"role": "user", "content": "hi"}],
+            )
+            pytest.fail("应抛出 LLMError")
+        except LLMError as e:
+            assert "all models in chain failed" not in str(e)
+            assert "m0 调用失败" in str(e)
+
+
 def test_vision_model_keeps_images():
     """视觉模型（qwen-vl）保留 image_url。"""
     llm_fallback.reset_fallback_cache()

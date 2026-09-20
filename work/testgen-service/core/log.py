@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import io
 import json
 import logging
 import os
@@ -111,16 +112,58 @@ class TextFormatter(logging.Formatter):
         return base
 
 
+class _SafeStreamHandler(logging.StreamHandler):
+    """吞掉底层写出异常（stderr 被沙箱/管道关闭、BrokenPipe 等）。
+
+    默认 StreamHandler 在流已关闭时 `emit` 会抛 `ValueError('I/O operation on
+    closed file.')`，若发生在请求/子命令主路径上会直接拖垮整个进程。这里把
+    emit 包成「失败即静默丢弃」，保证日志永远不能成为业务失败的原因。
+    """
+
+    def emit(self, record: logging.LogRecord) -> None:  # type: ignore[override]
+        try:
+            super().emit(record)
+        except Exception:  # noqa: BLE001 -- 写出失败时绝不抛，仅丢弃该条日志
+            pass
+
+
+def _resolve_stderr() -> Any:
+    """返回可用的 stderr 流。
+
+    若 `sys.stderr` 本身或其底层 buffer 已关闭（沙箱回收、管道断开等），退回
+    `os.devnull`，避免后续任何日志/print 写出触发 `ValueError('I/O operation on
+    closed file.')`。正常环境下返回原始 stderr 的 UTF-8 包装流，行为不变。
+
+    返回类型标注为 `Any`：不同 typeshed 版本对 `sys.stderr` 的推断为
+    `TextIO | Any`，与 `io.TextIOBase` 严格互推不稳定；此处仅为日志写出兜底，
+    调用点 `StreamHandler` 接受任意 IO 对象，无需更精确注解。
+    """
+    stream = sys.stderr
+    if getattr(stream, "closed", False):
+        return open(os.devnull, "w", encoding="utf-8")
+    raw = getattr(stream, "buffer", None)
+    if raw is not None and getattr(raw, "closed", False):
+        return open(os.devnull, "w", encoding="utf-8")
+    if raw is not None:
+        try:
+            return io.TextIOWrapper(raw, encoding="utf-8", errors="replace", write_through=True)
+        except Exception:  # noqa: BLE001 -- TextIOWrapper 包装失败时退回原始 stderr
+            pass
+    return stream
+
+
 def setup_logging(level: str | None = None) -> None:
     """初始化根 logger（幂等）。`LOG_FORMAT=json|text` 控制格式。
 
     **日志一律写 stderr**：stdout 专供结构化结果（CLI 的 JSON / 服务无输出），
-    避免日志行污染下游按行解析 stdout 的消费方。
+    避免日志行污染下游按行解析 stdout 的消费方。stderr 不可用时（见
+    `_resolve_stderr`）自动降级到 devnull，绝不因日志写入失败而中断业务。
     """
     lvl = (level or os.environ.get("LOG_LEVEL") or "INFO").upper()
     fmt = (os.environ.get("LOG_FORMAT") or "json").lower()
 
-    handler = logging.StreamHandler(sys.stderr)
+    stream = _resolve_stderr()
+    handler = _SafeStreamHandler(stream)
     handler.setFormatter(TextFormatter() if fmt == "text" else JsonFormatter())
 
     root = logging.getLogger()

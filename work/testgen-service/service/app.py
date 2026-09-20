@@ -19,7 +19,8 @@ from pathlib import Path
 from typing import Annotated, Any
 
 from fastapi import Depends, FastAPI, Header, Request
-from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from pydantic import BaseModel, Field
 
 from core import store
@@ -71,6 +72,15 @@ app = FastAPI(
         "发布流水线经 POST /api/v1/verify/webhook 触发（可带 execute=true 一并验证）。"
     ),
     lifespan=lifespan,
+)
+
+# 本地控制台同源便利：允许跨域（仅本机/局域网演示用，生产应收窄来源）。
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
@@ -878,3 +888,15 @@ def get_coverage(pid: int) -> dict[str, Any]:
 @app.get("/api/v1/workspaces", dependencies=[Depends(require_auth)])
 def list_workspaces() -> dict[str, Any]:
     return {"workspaces": [w.to_dict() for w in WorkspaceManager().list_all()]}
+
+
+# ============================================================================
+# 平台控制台（单页 SPA）：打开即用的网页界面，免去 curl/接口调用
+# ============================================================================
+WEB_DIR = Path(__file__).resolve().parent / "web"
+
+
+@app.get("/", include_in_schema=False)
+def console_home() -> FileResponse:
+    """平台控制台首页：返回 `service/web/index.html`（自包含 HTML/JS，调用本服务 API）。"""
+    return FileResponse(WEB_DIR / "index.html")

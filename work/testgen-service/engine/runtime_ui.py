@@ -376,11 +376,12 @@ def options_from_settings(settings: Any) -> RuntimeUiOptions:
     浏览器出口代理：内网目标经沙箱代理可达（直连常在 TCP 层之后挂起）。优先用
     `RUNTIME_UI_PROXY`，回退到通用的 `HTTPS_PROXY` / `HTTP_PROXY` 环境变量。
     """
+    # 仅当显式设置代理时才走代理（内网目标经沙箱代理可达）；
+    # 公网目标必须直连——**禁止继承本机透明代理**（如 127.0.0.1:54985），
+    # 否则浏览器会把请求发到本机代理而连不上公网地址（Page.goto 超时）。
     proxy = (
         str(getattr(settings, "runtime_ui_proxy", "") or "")
         or os.environ.get("RUNTIME_UI_PROXY")
-        or os.environ.get("HTTPS_PROXY")
-        or os.environ.get("HTTP_PROXY")
         or ""
     )
     return RuntimeUiOptions(
@@ -2213,8 +2214,14 @@ def launch_browser(playwright: Any, options: RuntimeUiOptions) -> Any:
     if options.proxy:
         kwargs["proxy"] = {"server": options.proxy}
     sandbox_flag = str(os.environ.get("PLAYWRIGHT_CHROMIUM_SANDBOX", "")).strip().lower()
+    args: list[str] = []
     if sandbox_flag in ("0", "false", "off", "no"):
-        kwargs["args"] = ["--no-sandbox", "--disable-dev-shm-usage"]
+        args += ["--no-sandbox", "--disable-dev-shm-usage"]
+    # 无显式代理时强制直连：避免 Chromium 继承本机透明代理而连不上公网目标
+    if not options.proxy:
+        args.append("--no-proxy-server")
+    if args:
+        kwargs["args"] = args
     try:
         return playwright.chromium.launch(**kwargs)
     except Exception as exc:  # 启动失败要带上环境信息提示用户
